@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
@@ -1207,10 +1207,10 @@ function syncFmtStateFromDom(id){
   const d=fmtInputInRoot(root,'d_',id);
   const i=fmtInputInRoot(root,'i_',id);
   const prog=root?root.querySelector('#prog_'+id):null;
-  if(p) s.precio=+p.value||0;
+  if(p) s.precio=parseMiles(p.value);
   if(q) s.qty=+q.value||1;
   if(d) s.dto=+d.value||0;
-  if(i) s.imp=+i.value||0;
+  if(i) s.imp=parseMiles(i.value);
   if(prog!=null) s.progNombre=prog.value||'';
   // Guardar también el textarea de descripción si está siendo editado
   const ta=root?root.querySelector('#desc_input_'+id):null;
@@ -1455,6 +1455,26 @@ const allFmts=()=>CATS.flatMap(c=>c.fmts);
 const gv=id=>document.getElementById(id)?.value||'';
 const f0=n=>{const s=Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');return Math.round(n)<0?'-'+s:s;};
 const fM=n=>{const v=MONEDA==='USD'?n/USD_CLP:n;return(MONEDA==='USD'?'USD ':'$')+f0(v);}
+function parseMiles(s){if(typeof s==='number')return s;return +(String(s).replace(/\./g,''))||0;}
+function fmtMiles(n){const v=+n||0;return v?v.toLocaleString('es-CL'):'';}
+document.addEventListener('input',function(e){
+  const el=e.target;
+  if(!el.dataset||!el.dataset.m)return;
+  const pos=el.selectionStart;
+  const beforeCursor=el.value.substring(0,pos).replace(/\./g,'');
+  const raw=el.value.replace(/\./g,'');
+  if(!raw){el.value='';return;}
+  const n=+raw;
+  if(isNaN(n)){el.value=raw;return;}
+  el.value=n.toLocaleString('es-CL');
+  let digitsSeen=0,newPos=0;
+  for(let i=0;i<el.value.length;i++){
+    if(el.value[i]!=='.')digitsSeen++;
+    if(digitsSeen===beforeCursor.length){newPos=i+1;break;}
+  }
+  if(beforeCursor.length===0)newPos=0;
+  el.setSelectionRange(newPos,newPos);
+});
 // Inversión neta: decena más cercana (2.000.004 → 2.000.000, 2.000.006 → 2.000.010)
 function roundInv(n){return Math.round((+n||0)/10)*10;}
 function netoDesdeBruto(bruto,dtoPct){
@@ -1581,13 +1601,13 @@ function renderRadioGrid(f,s){
         +'<select onchange="updRadioStation(\''+id+'\','+idx+',this.value)">'+radOpts+'</select></div></div>'
       +'<div class="rad-entry-metrics">'
         +'<div><label>'+(f.tipo==='cpm'?'CPM (CLP)':'Precio unit. (CLP)')+'</label>'
-        +'<input type="number" min="0" value="'+(+re.precio||0)+'" '+oi+'precio\',+this.value)" style="'+inp+'"/></div>'
+        +'<input type="text" data-m="1" value="'+fmtMiles(+re.precio||0)+'" '+oi+'precio\',parseMiles(this.value))" style="'+inp+'"/></div>'
         +'<div><label>Cantidad</label>'
         +'<input type="number" min="1" max="200" value="'+(+re.qty||1)+'" '+oi+'qty\',+this.value)" style="'+inp+'"/></div>'
         +'<div><label>Dto. unitario %</label>'
         +'<input type="number" min="0" max="50" value="'+(+re.dto||0)+'" '+oi+'dto\',+this.value)" style="'+inp+'"/></div>'
         +'<div><label>Impresiones est.</label>'
-        +'<input type="number" min="0" value="'+(+re.imp||0)+'" '+oi+'imp\',+this.value)" style="'+inp+'"/></div>'
+        +'<input type="text" data-m="1" value="'+fmtMiles(+re.imp||0)+'" '+oi+'imp\',parseMiles(this.value))" style="'+inp+'"/></div>'
       +'</div>'
       +'<div class="rad-entry-mini" id="rmini_'+id+'_'+idx+'">'+dtoHtml
         +' · Alcance: <strong>'+f0(tot.alc)+'</strong> usuarios</div>'
@@ -1726,16 +1746,16 @@ function renderWebPlatGrid(f,s){
         +'<select onchange="updWebPlat(\''+id+'\','+idx+',this.value)">'+platOpts+'</select></div></div>'
       +'<div class="web-plat-metrics">'
         +'<div><label>'+(f.tipo==='cpm'?'CPM (CLP)':'Precio unit. (CLP)')+'</label>'
-        +'<input type="number" min="0" value="'+(+wp.precio||0)+'" '+oi+'precio\',+this.value)" style="'+inp+'"/></div>'
+        +'<input type="text" data-m="1" value="'+fmtMiles(+wp.precio||0)+'" '+oi+'precio\',parseMiles(this.value))" style="'+inp+'"/></div>'
         +'<div><label>Cantidad</label>'
         +'<input type="number" min="1" max="200" value="'+(+wp.qty||1)+'" '+oi+'qty\',+this.value)" style="'+inp+'"/></div>'
         +'<div><label>Dto. unitario %</label>'
         +'<input type="number" min="0" max="50" value="'+(+wp.dto||0)+'" '+oi+'dto\',+this.value)" style="'+inp+'"/></div>'
         +'<div><label>Impresiones est.</label>'
-        +'<input type="number" min="0" value="'+(+wp.imp||0)+'" '+oi+'imp\',+this.value)" style="'+inp+'"/></div>'
+        +'<input type="text" data-m="1" value="'+fmtMiles(+wp.imp||0)+'" '+oi+'imp\',parseMiles(this.value))" style="'+inp+'"/></div>'
         +(f.tipo==='cpm'
           ? '<div class="full"><label style="color:var(--cy)">💰 Inversión objetivo (CLP) → recalcula impresiones</label>'
-            +'<input type="number" id="winv_'+id+'_'+idx+'" placeholder="Ej: 500000" min="0" style="'+inpCy+'"'
+            +'<input type="text" data-m="1" id="winv_'+id+'_'+idx+'" placeholder="Ej: 500.000" style="'+inpCy+'"'
             +' oninput="updWebPlatInv(\''+id+'\','+idx+')"/></div>'
           : '')
       +'</div>'
@@ -1797,7 +1817,7 @@ function updWebPlatInv(id,idx){
   const s=STATE[id];
   if(!f||!s||f.tipo!=='cpm'||!s.webPlats||!s.webPlats[idx]) return;
   const wp=s.webPlats[idx];
-  const invObj=+document.getElementById('winv_'+id+'_'+idx)?.value||0;
+  const invObj=parseMiles(document.getElementById('winv_'+id+'_'+idx)?.value||0);
   if(invObj<=0) return;
   const qty=+wp.qty||1;
   const dto=+wp.dto||0;
@@ -1806,7 +1826,7 @@ function updWebPlatInv(id,idx){
   wp.imp=Math.round(invObj/factor);
   const block=document.getElementById('web_plat_'+id+'_'+idx);
   const impInp=block&&block.querySelector('input[oninput*="imp"]');
-  if(impInp) impInp.value=wp.imp;
+  if(impInp) impInp.value=fmtMiles(wp.imp);
   updWebPlatField(id,idx,'imp',wp.imp);
 }
 function updWebFmt(id){
@@ -1893,12 +1913,12 @@ function renderInfluencerGrid(f, s){
         +'<div><label>Plataforma</label>'
           +'<select onchange="updInfluencerField(\''+id+'\','+idx+',\'plat\',this.value)">'+platOpts+'</select></div>'
         +'<div><label>Alcance (manual)</label>'
-          +'<input type="number" min="0" value="'+(+inf.reach||0)+'"'
-          +' oninput="updInfluencerField(\''+id+'\','+idx+',\'reach\',+this.value)"/></div>'
+          +'<input type="text" data-m="1" value="'+fmtMiles(+inf.reach||0)+'"'
+          +' oninput="updInfluencerField(\''+id+'\','+idx+',\'reach\',parseMiles(this.value))"/></div>'
         +(!s.paqueteMode
           ? '<div class="full"><label>Inversión (CLP)</label>'
-            +'<input type="number" min="0" value="'+(+inf.precio||0)+'"'
-            +' oninput="updInfluencerField(\''+id+'\','+idx+',\'precio\',+this.value)"/></div>'
+            +'<input type="text" data-m="1" value="'+fmtMiles(+inf.precio||0)+'"'
+            +' oninput="updInfluencerField(\''+id+'\','+idx+',\'precio\',parseMiles(this.value))"/></div>'
           : '')
       +'</div>'
     +'</div>';
@@ -1921,9 +1941,9 @@ function renderInfluencerGrid(f, s){
       +(s.paqueteMode
         ? '<div class="inf-paquete">'
           +'<label>💰 TOTAL INFLUENCERS (CLP)</label>'
-          +'<input type="number" min="0" value="'+(+s.paqueteTotal||0)+'"'
-          +' placeholder="Ej: 5000000 — inversión total del bloque influencers"'
-          +' oninput="updPaqueteTotal(\''+id+'\',+this.value)"/>'
+          +'<input type="text" data-m="1" value="'+fmtMiles(+s.paqueteTotal||0)+'"'
+          +' placeholder="Ej: 5.000.000 — inversión total del bloque influencers"'
+          +' oninput="updPaqueteTotal(\''+id+'\',parseMiles(this.value))"/>'
         +'</div>'
         : '')
       +'<div class="inf-summary">'
@@ -2031,7 +2051,7 @@ function fmtGrid(f,s){
   if(isProduccionFmt(f)){
     s.imp=0;
     return '<div><label>Precio unit. (CLP)</label>'
-      +'<input type="number" id="p_'+id+'" value="'+(s.precio||0)+'" min="0" '+oi+' style="'+inp+'"/></div>'
+      +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio||0)+'" '+oi+' style="'+inp+'"/></div>'
       +'<div><label>Cantidad</label>'
       +'<input type="number" id="q_'+id+'" value="'+(s.qty||1)+'" min="1" max="200" '+oi+' style="'+inp+'"/></div>'
       +'<div><label>Dto. unitario %</label>'
@@ -2039,16 +2059,16 @@ function fmtGrid(f,s){
       +'<div style="display:none"><input type="number" id="i_'+id+'" value="0"/></div>';
   }
   let g=progField+'<div><label>'+(f.tipo==='cpm'?'CPM (CLP)':'Precio unit. (CLP)')+'</label>'
-    +'<input type="number" id="p_'+id+'" value="'+s.precio+'" min="0" '+oi+' style="'+inp+'"/></div>'
+    +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio)+'" '+oi+' style="'+inp+'"/></div>'
     +'<div><label>Cantidad</label>'
     +'<input type="number" id="q_'+id+'" value="'+s.qty+'" min="1" max="200" '+oi+' style="'+inp+'"/></div>'
     +'<div><label>Dto. unitario %</label>'
     +'<input type="number" id="d_'+id+'" value="'+s.dto+'" min="0" max="50" '+oi+' style="'+inp+'"/></div>'
     +'<div><label>Impresiones est.</label>'
-    +'<input type="number" id="i_'+id+'" value="'+s.imp+'" min="0" '+oi+' style="'+inp+'"/></div>';
+    +'<input type="text" data-m="1" id="i_'+id+'" value="'+fmtMiles(s.imp)+'" '+oi+' style="'+inp+'"/></div>';
   if(f.tipo==='cpm'){
     g+='<div style="grid-column:1/-1"><label style="color:var(--cy)">💰 Inversión objetivo (CLP) → recalcula impresiones</label>'
-      +'<input type="number" id="inv_'+id+'" placeholder="Ej: 2000000" min="0" style="'+inpCy+'" '+oiInv+'/></div>';
+      +'<input type="text" data-m="1" id="inv_'+id+'" placeholder="Ej: 2.000.000" style="'+inpCy+'" '+oiInv+'/></div>';
   }
   return g;
 }
@@ -2253,7 +2273,7 @@ function updInv(id){
   if(!f||f.tipo!=='cpm') return;
   const s=syncFmtStateFromDom(id);
   const root=visibleFmtRoot(id);
-  const invObj=+(fmtInputInRoot(root,'inv_',id)||document.getElementById('inv_'+id))?.value||0;
+  const invObj=parseMiles((fmtInputInRoot(root,'inv_',id)||document.getElementById('inv_'+id))?.value||0);
   if(invObj<=0) return;
   // inv_objetivo = (CPM/1000) * imp * qty * (1 - dto/100)
   // despejando imp: imp = invObj / ((CPM/1000) * qty * (1 - dto/100))
@@ -2264,7 +2284,7 @@ function updInv(id){
   const newImp=Math.round(invObj/factor);
   s.imp=newImp;
   const impEl=fmtInputInRoot(root,'i_',id)||document.getElementById('i_'+id);
-  if(impEl) impEl.value=newImp;
+  if(impEl) impEl.value=fmtMiles(newImp);
   upd(id);
 }
 
