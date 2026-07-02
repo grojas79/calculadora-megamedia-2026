@@ -1,0 +1,6 @@
+.npm_global/
+.vercel/
+node_modules/
+*.xlsx
+(CSV)*.csv
+package/
