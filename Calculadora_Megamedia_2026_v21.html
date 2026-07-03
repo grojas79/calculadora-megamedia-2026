@@ -136,6 +136,9 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
 .fmt-grid input{width:100%;background:var(--dk);border:1px solid var(--bd2);
   border-radius:var(--r3);padding:5px 7px;color:var(--tx);font-size:12px;outline:none;transition:.15s}
 .fmt-grid input:focus{border-color:var(--cy)}
+.fmt-rostro-input{width:100%;background:var(--dk);border:1px solid var(--bd2);border-radius:4px;padding:5px 7px;color:var(--tx);font-size:12px;outline:none;transition:.15s;font-family:inherit}
+.fmt-rostro-input:focus{border-color:var(--cy)}
+.fmt-rostro-input:invalid{box-shadow:none;border-color:var(--bd2)}
 .fmt-price-preview{margin-top:7px;padding:5px 8px;background:var(--dk);border-radius:var(--r3);border:1px solid var(--bd2)}
 .fmt-alc{margin-top:6px;font-size:10.5px;color:var(--tx2)}
 .fmt-alc span{color:var(--cy);font-weight:600}
@@ -385,7 +388,7 @@ td.inv{color:var(--cy);font-weight:700}
 
 .pauta-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:none;align-items:center;justify-content:center;padding:16px}
 .pauta-overlay.show{display:flex}
-.pauta-modal{background:var(--dk2);border:1px solid var(--bd2);border-radius:var(--r);max-width:560px;width:100%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.pauta-modal{background:var(--dk2);border:1px solid var(--bd2);border-radius:var(--r);max-width:640px;width:100%;max-height:85vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .pauta-modal-hdr{padding:16px 18px;border-bottom:1px solid var(--bd);font-weight:700;font-size:15px}
 .pauta-modal-body{padding:14px 18px;overflow-y:auto;flex:1;font-size:13px;line-height:1.55}
 .pauta-modal-body ul{margin:8px 0 0 18px;padding:0}
@@ -395,6 +398,22 @@ td.inv{color:var(--cy);font-weight:700}
 .pauta-tag-ok{background:rgba(0,200,150,.15);color:var(--gr)}
 .pauta-tag-new{background:rgba(245,158,11,.15);color:var(--am)}
 .pauta-tag-warn{background:rgba(230,126,34,.15);color:var(--or)}
+.pauta-tag-pick{background:rgba(105,174,236,.15);color:var(--cy)}
+.pauta-pick-card{border:1px solid var(--bd2);border-radius:var(--r2);padding:12px 14px;margin:10px 0;background:var(--dk)}
+.pauta-pick-src{font-size:13px;margin-bottom:4px}
+.pauta-pick-meta{font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.45}
+.pauta-pick-hint{font-size:11.5px;color:var(--tx2);margin:0 0 8px}
+.pauta-pick-opts{display:flex;flex-direction:column;gap:5px}
+.pauta-pick-opt{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border:1px solid var(--bd);border-radius:6px;cursor:pointer;font-size:12.5px;line-height:1.35;transition:border-color .15s,background .15s}
+.pauta-pick-opt:hover{border-color:var(--cy);background:rgba(105,174,236,.06)}
+.pauta-pick-opt:has(input:checked){border-color:var(--cy);background:rgba(105,174,236,.1)}
+.pauta-pick-opt input{margin-top:2px;flex-shrink:0;accent-color:var(--cy)}
+.pauta-pick-opt-body{flex:1;min-width:0}
+.pauta-pick-opt-name{font-weight:600;color:var(--tx)}
+.pauta-pick-opt-sub{font-size:10.5px;color:var(--tx2);margin-top:2px}
+.pauta-pick-pct{font-size:10px;font-weight:700;color:var(--cy);flex-shrink:0;margin-top:1px}
+.pauta-pick-custom{border-style:dashed}
+.pauta-pick-custom .pauta-pick-opt-name{color:var(--am)}
 .custom-fmt-name{width:100%;background:var(--dk);border:1px solid var(--am);border-radius:4px;padding:4px 8px;color:var(--tx);font-size:13px;font-weight:700;outline:none}
 
 @media print{
@@ -651,12 +670,12 @@ const CATS=[
        marca:'Logo + mención',
        desc:'Desafío interactivo protagonizado por rostros del canal con integración de marca.',
        ref:'', tipo:'fijo', precio:1600000, imp:50000},
-      {id:'dinamicas',       name:'Dinámicas RRSS',                     tag:'Precio fijo', tagCls:'tag-fijo',
-       plat:'Instagram · TikTok · Facebook del programa',
+      {id:'dinamicas',       name:'Dinámica de RRSS con Rostro',        tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Instagram · TikTok · Facebook Mega',
        marca:'Mención + presencia de rostro',
-       desc:'Contenido colaborativo con rostros del programa: trends, situaciones cómicas, desafíos de marca.',
+       desc:'Contenido colaborativo con rostro del canal: trends, situaciones cómicas, desafíos de marca.',
        ref:'https://www.instagram.com/reel/DLXzpk-AQuM/?hl=es-la',
-       tipo:'fijo', precio:2500000, imp:250000, progType:'programa'},
+       tipo:'fijo', precio:2500000, imp:250000, rostroField:true, costoProdOpcional:true},
       {id:'docureality',     name:'Docureality TikTok (Meganoticias)',  tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'TikTok Meganoticias',
        marca:'Logo + mención',
@@ -1233,7 +1252,12 @@ function loadCustomFormats(){
       cat={id:'personalizado',label:'Formatos personalizados',cls:'rrss',fmts:[]};
       CATS.push(cat);
     }
-    saved.forEach(f=>{
+    const clean=saved.filter(f=>{
+      const n=String(f&&f.name||'').trim();
+      return n&&n!=='[object Object]'&&!/^\[object\s/i.test(n);
+    });
+    if(clean.length!==saved.length) localStorage.setItem(CUSTOM_FMT_KEY,JSON.stringify(clean));
+    clean.forEach(f=>{
       if(!cat.fmts.find(x=>x.id===f.id)) cat.fmts.push(f);
     });
   }catch(e){}
@@ -1248,7 +1272,7 @@ function initFmtState(f){
   const r=isRadio?RADIO_DEFAULT:null;
   const precio=isRadio&&f.precios?f.precios[r]:f.precio;
   const imp=isRadio&&f.imps?f.imps[r]:f.imp;
-  const base={active:false,qty:1,dto:0,precio,imp,descCustom:null,radio:r,progNombre:''};
+  const base={active:false,qty:1,dto:0,precio,imp,descCustom:null,radio:r,progNombre:'',rostroNombre:'',costoProd:0};
   if(isRadio) base.radioEntries=[newRadioEntry(f,RADIO_DEFAULT)];
   if(f.infType==='influencer'){
     base.influencers=[{name:'',plat:'Instagram',reach:0,precio:0}];
@@ -1285,13 +1309,22 @@ function excelSectionLabel(cat){
   if(cat.id==='programas') return 'Programa o Rostro';
   return cat.label;
 }
+function fmtCostoProdExtra(f,s){
+  return f.costoProdOpcional?(+(s.costoProd)||0):0;
+}
+function getFmtMetaTag(f,id){
+  const s=STATE[id];
+  if(f.progType==='programa') return (s?.progNombre||document.getElementById('prog_'+id)?.value||'').trim();
+  if(f.rostroField) return (s?.rostroNombre||document.getElementById('rostro_'+id)?.value||'').trim();
+  return '';
+}
 function calcFmtNeto(f,s){
   if(f.infType==='influencer') return calcInfluencerTotals(s).neto;
   if(esTipoWeb(f)){ migrateWebPlats(s,f); return calcWebFmtTotals(f,s).neto; }
   if(f.radioType==='radio'){ migrateRadioEntries(s,f); return calcRadioFmtTotals(f,s).neto; }
   const imp=s.imp*s.qty;
   const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
-  return netoDesdeBruto(bruto,s.dto||0).neto;
+  return netoDesdeBruto(bruto,s.dto||0).neto+fmtCostoProdExtra(f,s);
 }
 function visibleFmtRoot(id){
   const sr=document.getElementById('sr_'+id);
@@ -1311,11 +1344,15 @@ function syncFmtStateFromDom(id){
   const d=fmtInputInRoot(root,'d_',id);
   const i=fmtInputInRoot(root,'i_',id);
   const prog=root?root.querySelector('#prog_'+id):null;
+  const rostro=root?root.querySelector('#rostro_'+id):null;
+  const cprod=root?root.querySelector('#cprod_'+id):null;
   if(p) s.precio=parseMiles(p.value);
   if(q) s.qty=+q.value||1;
   if(d) s.dto=+d.value||0;
   if(i) s.imp=parseMiles(i.value);
   if(prog!=null) s.progNombre=prog.value||'';
+  if(rostro!=null) s.rostroNombre=rostro.value||'';
+  if(cprod!=null) s.costoProd=parseMiles(cprod.value);
   // Guardar también el textarea de descripción si está siendo editado
   const ta=root?root.querySelector('#desc_input_'+id):null;
   const tema=root?root.querySelector('#tema_'+id):null;
@@ -1360,10 +1397,12 @@ function setFmtPricePreview(id,f,s){
   const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
   const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(pautaM?pautaM.imp:s.imp*s.qty);
   const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
+  const costoExtra=fmtCostoProdExtra(f,s);
   const {neto,desc}=netoDesdeBruto(bruto,s.dto||0);
-  const html=s.dto>0
-    ?`<span style="color:var(--tx2);font-size:10.5px">Bruto: <s style="color:var(--tx3)">$${f0(bruto)}</s> &nbsp;·&nbsp; Dto: <span style="color:var(--or)">-$${f0(desc)}</span> &nbsp;·&nbsp; </span><span style="color:var(--cy);font-weight:700;font-size:11px">Neto: $${f0(neto)}</span>`
-    :`<span style="color:var(--cy);font-weight:700;font-size:11px">Inversión: $${f0(neto)}</span>`;
+  const netoFinal=neto+costoExtra;
+  const html=s.dto>0||costoExtra>0
+    ?`<span style="color:var(--tx2);font-size:10.5px">Bruto: <s style="color:var(--tx3)">$${f0(bruto+costoExtra)}</s> &nbsp;·&nbsp; Dto: <span style="color:var(--or)">-$${f0(desc)}</span>${costoExtra>0?` &nbsp;·&nbsp; Prod.: <span style="color:var(--or)">+$${f0(costoExtra)}</span>`:''} &nbsp;·&nbsp; </span><span style="color:var(--cy);font-weight:700;font-size:11px">Neto: $${f0(netoFinal)}</span>`
+    :`<span style="color:var(--cy);font-weight:700;font-size:11px">Inversión: $${f0(netoFinal)}</span>`;
   const el=document.getElementById('price_'+id);
   const srEl=document.getElementById('srprice_'+id);
   if(el) el.innerHTML=html;
@@ -2172,9 +2211,26 @@ function fmtGrid(f,s){
       +' style="width:100%;background:var(--dk);border:1px solid var(--mg);border-radius:4px;padding:5px 7px;color:var(--tx);font-size:12px;outline:none"'
       +' '+oi+'/></div>';
   }
+  let rostroField='';
+  if(f.rostroField){
+    rostroField='<div style="grid-column:1/-1">'
+      +'<label>👤 Rostro <span style="font-weight:400;color:var(--tx3);font-size:10.5px">(opcional)</span></label>'
+      +'<input type="text" class="fmt-rostro-input" id="rostro_'+id+'" autocomplete="off" spellcheck="false"'
+      +' placeholder="Ej: Karen Doggenweiler, TVA, varios rostros…"'
+      +' value="'+escHtml(s&&s.rostroNombre?s.rostroNombre:'')+'"'
+      +' '+oi+'/></div>';
+  }
+  let costoProdField='';
+  if(f.costoProdOpcional){
+    costoProdField='<div style="grid-column:1/-1">'
+      +'<label style="color:var(--or)">🎬 Costos de Producción (opcional)</label>'
+      +'<input type="text" data-m="1" id="cprod_'+id+'" placeholder="Ej: 500.000"'
+      +' value="'+fmtMiles(s.costoProd||0)+'"'
+      +' style="'+inpGr+'" '+oi+'/></div>';
+  }
   if(esTipoWeb(f)){
     migrateWebPlats(s,f);
-    return renderWebPlatGrid(f,s)+progField
+    return renderWebPlatGrid(f,s)+progField+rostroField+costoProdField
       +'<div style="display:none"><input type="number" id="p_'+id+'" value="'+(s.precio||0)+'"/>'
       +'<input type="number" id="q_'+id+'" value="'+(s.qty||1)+'"/>'
       +'<input type="number" id="d_'+id+'" value="'+(s.dto||0)+'"/>'
@@ -2182,7 +2238,7 @@ function fmtGrid(f,s){
   }
   if(f.radioType==='radio'){
     migrateRadioEntries(s,f);
-    return renderRadioGrid(f,s)+progField
+    return renderRadioGrid(f,s)+progField+rostroField+costoProdField
       +'<div style="display:none"><input type="number" id="p_'+id+'" value="'+(s.precio||0)+'"/>'
       +'<input type="number" id="q_'+id+'" value="'+(s.qty||1)+'"/>'
       +'<input type="number" id="d_'+id+'" value="'+(s.dto||0)+'"/>'
@@ -2198,7 +2254,7 @@ function fmtGrid(f,s){
       +'<input type="number" id="d_'+id+'" value="'+(s.dto||0)+'" min="0" max="50" '+oi+' style="'+inp+'"/></div>'
       +'<div style="display:none"><input type="number" id="i_'+id+'" value="0"/></div>';
   }
-  let g=progField+'<div><label>'+(f.tipo==='cpm'?'CPM (CLP)':'Precio unit. (CLP)')+'</label>'
+  let g=progField+rostroField+'<div><label>'+(f.tipo==='cpm'?'CPM (CLP)':'Precio unit. (CLP)')+'</label>'
     +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio)+'" '+oi+' style="'+inp+'"/></div>'
     +'<div><label>Cantidad</label>'
     +'<input type="number" id="q_'+id+'" value="'+s.qty+'" min="1" max="200" '+oi+' style="'+inp+'"/></div>'
@@ -2210,7 +2266,7 @@ function fmtGrid(f,s){
     g+='<div style="grid-column:1/-1"><label style="color:var(--cy)">💰 Inversión objetivo (CLP) → recalcula impresiones</label>'
       +'<input type="text" data-m="1" id="inv_'+id+'" placeholder="Ej: 2.000.000" style="'+inpCy+'" '+oiInv+'/></div>';
   }
-  return g;
+  return g+costoProdField;
 }
 
 // ── Scroll suave a sección ───────────────────────────────────────────────
@@ -2547,10 +2603,11 @@ function getRows(){
     const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
     const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(s.imp*s.qty);
     const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
+    const costoExtra=fmtCostoProdExtra(f,s);
     const {neto,desc}=netoDesdeBruto(bruto,s.dto||0);
     const alc=esTipoRRSS(f)?calcRRSSFmtAlc(f,s):(pautaM?pautaM.alc:calcAlcNeto(f,imp,s.qty));
     const cpm=imp>0?(neto/imp)*1000:0;
-    const row={f,s,bruto,desc,neto,imp,alc,cpm};
+    const row={f,s,bruto:bruto+costoExtra,desc,neto:neto+costoExtra,imp,alc,cpm:imp>0?((neto+costoExtra)/imp)*1000:0};
     if(s.pautaMedio) row.pautaMedio=s.pautaMedio;
     if(s.pautaPlats&&s.pautaPlats.length){
       row.pautaPlats=s.pautaPlats;
@@ -2688,7 +2745,7 @@ function render(){
       tbody+=`<tr${(r.webPlatRadio||r.radioStation)?' style="background:rgba(230,126,34,.04)"':''}>
         <td><strong>${r.f.name}</strong>${platSub}</td>
         <td style="font-size:10px;color:var(--tx2)">${webPlatCellHtml(r)}</td>
-        <td class="desc-cell">${r.f.progType==='programa'&&(STATE[r.f.id]?.progNombre||document.getElementById('prog_'+r.f.id)?.value)?'['+(STATE[r.f.id]?.progNombre||document.getElementById('prog_'+r.f.id)?.value)+'] '+getDesc(r.f):getDesc(r.f)}</td>
+        <td class="desc-cell">${(()=>{const tag=getFmtMetaTag(r.f,r.f.id);return tag?'['+tag+'] '+getDesc(r.f):getDesc(r.f);})()}</td>
         <td>${r.f.tipo==='cpm'?'CPM':'Precio fijo'}</td>
         <td class="num">${pu}</td>
         <td class="num">${r.s.qty}</td>
@@ -3103,8 +3160,8 @@ async function exportarExcel(){
         const bg=row.infTotalRow?'FFE8F4FC':(row.webPlatRadio?'FFFFF3E8':stripes[idx%2]);
         const bgS=row.infDetailRow?'FFF5F5F5':(row.webPlatRadio?'FFFFF8F0':subs[idx%2]);
         const _desc=getDescExcel(row.f);
-        const progNombre=row.f.progType==='programa'?(STATE[row.f.id]?.progNombre||document.getElementById('prog_'+row.f.id)?.value||''):'';
-        const descFull=progNombre?('['+progNombre+'] '+_desc):_desc;
+        const metaTag=getFmtMetaTag(row.f,row.f.id);
+        const descFull=metaTag?('['+metaTag+'] '+_desc):_desc;
         let platVal=(!row.infDetailRow&&!row.infTotalRow)?webPlatExcelDetail(row):'';
         if(row.pautaPlatVal) platVal=row.pautaPlatVal;
         else if(row.pautaPlats&&row.pautaPlats.length) platVal=pautaPlatsLabel(row.pautaPlats);
@@ -3119,7 +3176,9 @@ async function exportarExcel(){
               : row.f.radioType==='radio'
               ? ('Radio '+radioCap(row.s.radio))
               : (row.f.progType==='programa'
-                ? (progNombre||'Programa o Rostro')
+                ? (metaTag||'Programa o Rostro')
+                : row.f.rostroField
+                ? (metaTag||'Rostro')
                 : (row.webPlat
                   ? 'Web Mega / Meganoticias'
                   : sectionLabel.replace(' & Contenido Digital','').replace(', Display & Señal en Vivo','')))
@@ -3445,6 +3504,8 @@ function showToast(msg){
 // ── Importar Pauta editorial ─────────────────────────────────────────────
 const PAUTA_ALIASES={
   'grafica del evento':'grafica_mn_mega',
+  'grafica o carrusel':'__grafica_feed__',
+  'grafica carrusel':'__grafica_feed__',
   'live organico con vocero de la organizacion':'live_organico',
   'live organico con vocero de marca auspiciadora':'live_organico',
   'nota web':'nota_mn_mega',
@@ -3453,8 +3514,28 @@ const PAUTA_ALIASES={
   'follow meganoticias':'follow_mn',
   'desafio de marca':'desafio_mega',
   'corte de pantalla react digital':'prog_corte_mg_mega',
-  'presencia en react digital':'prog_corte_mg_mega'
+  'presencia en react digital':'prog_corte_mg_mega',
+  'dinamica digital con rostro':'dinamicas',
+  'dinamica con rostro':'dinamicas',
+  'dinamicas con rostro':'dinamicas'
 };
+const PAUTA_GRAFICA_FEED_IDS=['grafica_mega','grafica_mn','grafica_mn_mega'];
+function pautaCellStr(v){
+  if(v==null||v==='') return '';
+  if(typeof v==='object'){
+    if(Array.isArray(v.richText)) return v.richText.map(rt=>rt.text||'').join('').trim();
+    if(v.text!=null) return String(v.text).trim();
+    if(v.hyperlink) return String(v.hyperlink).trim();
+    if(v.result!=null) return pautaCellStr(v.result);
+    if(Array.isArray(v)) return v.map(pautaCellStr).join('').trim();
+  }
+  const s=String(v).trim();
+  return s==='[object Object]'?'':s;
+}
+function isPautaNoiseCell(s){
+  const t=pautaCellStr(s);
+  return !t||t==='[object Object]'||/^\[object\s/i.test(t);
+}
 function normPauta(s){
   return String(s||'').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -3477,19 +3558,19 @@ function isPautaSectionRow(row){
 }
 function isPautaPlatContinuation(cells,pending){
   if(!pending) return false;
-  const platDetail=(cells[7]||'').trim();
+  const platDetail=pautaCellStr(cells[7]);
   if(!platDetail) return false;
-  const c1=(cells[1]||'').trim();
-  if(!c1) return true;
+  const c1=pautaCellStr(cells[1]);
+  if(isPautaNoiseCell(c1)) return true;
   if(normPauta(c1)!==normPauta(pending.tipoContenido)) return false;
   if(!pending.plats.length) return false;
-  const tematica=(cells[4]||'').trim();
+  const tematica=pautaCellStr(cells[4]);
   const sameOrEmptyTema=!tematica||tematica===pending.tematica;
   const isNewPlat=!pending.plats.some(p=>normPauta(p.plat)===normPauta(platDetail));
   return sameOrEmptyTema&&(isNewPlat||pending.plats.some(p=>normPauta(p.plat)===normPauta(platDetail)));
 }
 function appendPautaPlat(pending,cells){
-  const plat=(cells[7]||'').trim();
+  const plat=pautaCellStr(cells[7]);
   if(!plat) return;
   const alc=parsePautaNum(cells[8]);
   if(!pending.plats.some(p=>normPauta(p.plat)===normPauta(plat))){
@@ -3520,7 +3601,7 @@ function parsePautaRows(rawRows){
   let pending=null;
   let headerFound=false;
   rawRows.forEach((row,idx)=>{
-    const cells=row.map(c=>String(c==null?'':c).trim());
+    const cells=row.map(c=>pautaCellStr(c));
     while(cells.length<9) cells.push('');
     const c0=cells[0],c1=cells[1];
     if(normPauta(c0)==='cliente'){
@@ -3543,9 +3624,9 @@ function parsePautaRows(rawRows){
       appendPautaPlat(pending,cells);
       return;
     }
-    if(c1){
+    if(c1&&!isPautaNoiseCell(c1)){
       const plats=[];
-      const p0=(cells[7]||'').trim();
+      const p0=pautaCellStr(cells[7]);
       const a0=parsePautaNum(cells[8]);
       if(p0) plats.push({plat:p0,alc:a0});
       pending={
@@ -3569,7 +3650,7 @@ function parsePautaRows(rawRows){
     e.totalAlc=e.plats.reduce((a,p)=>a+(+p.alc||0),0);
     return e;
   });
-  result.entries=consolidatePautaEntries(entries);
+  result.entries=consolidatePautaEntries(entries).filter(e=>!isPautaNoiseCell(e.tipoContenido));
   return result;
 }
 function parsePautaCSV(text){
@@ -3587,12 +3668,7 @@ async function parsePautaXLSX(buffer){
     for(let i=1;i<=9;i++){
       const cell=row.getCell(i);
       let v=cell.value;
-      if(v&&typeof v==='object'){
-        if(v.text) v=v.text;
-        else if(v.hyperlink) v=v.hyperlink;
-        else if(v.result!=null) v=v.result;
-      }
-      cells.push(String(v==null?'':v).trim());
+      cells.push(pautaCellStr(v));
     }
     if(cells.some(c=>c)) rows.push(cells);
   });
@@ -3606,36 +3682,292 @@ function matchScore(a,b){
   wa.forEach(w=>{ if(wb.some(x=>x.includes(w)||w.includes(x))) hits++; });
   return hits/Math.max(wa.length,wb.length);
 }
-function matchFormato(tipoContenido){
-  const n=normPauta(tipoContenido);
-  if(!n) return null;
+const PAUTA_MATCH_CONFIDENT=.8;
+const PAUTA_ALTERNATIVES_MAX=3;
+function pautaFmtCandidates(){
+  return allFmts().filter(x=>!x.customType&&!x.infType&&x.prodType!=='produccion');
+}
+function pautaEntrySignals(entry){
+  const plats=[];
+  (entry.plats||[]).forEach(p=>{const v=normPauta(p.plat);if(v)plats.push(v);});
+  if(!plats.length&&entry.plataforma) plats.push(normPauta(entry.plataforma));
+  return{
+    name:normPauta(entry.tipoContenido),
+    desc:normPauta(entry.tematica||''),
+    plats,
+    alc:+(entry.totalAlc||0)
+  };
+}
+function pautaPlatTokens(s){
+  return normPauta(s).split(/[\s·]+/).filter(w=>w.length>2);
+}
+function pautaPlatOverlapScore(entryPlats,fmtPlat){
+  const ep=new Set();
+  entryPlats.forEach(p=>pautaPlatTokens(p).forEach(t=>ep.add(t)));
+  const ft=pautaPlatTokens(fmtPlat||'');
+  if(!ep.size||!ft.length) return 0;
+  let hits=0;
+  ft.forEach(t=>{
+    if([...ep].some(e=>e.includes(t)||t.includes(e))) hits++;
+  });
+  return hits/Math.max(ft.length,1);
+}
+function pautaAlcSimilarity(entryAlc,fmtImp){
+  const a=+entryAlc||0,b=+fmtImp||0;
+  if(!a&&!b) return .5;
+  if(!a||!b) return 0;
+  const ratio=Math.min(a,b)/Math.max(a,b);
+  if(ratio>=.9) return 1;
+  if(ratio>=.7) return .8;
+  if(ratio>=.5) return .6;
+  if(ratio>=.3) return .4;
+  return .2;
+}
+function scorePautaEntryVsFormat(entry,fmt){
+  const sig=pautaEntrySignals(entry);
+  const fn=normPauta(fmt.name);
+  const nameScore=fn===sig.name?1:(()=>{
+    let s=matchScore(sig.name,fn);
+    if(sig.name&&fn&&(sig.name.includes(fn)||fn.includes(sig.name))) s=Math.max(s,.85);
+    return s;
+  })();
+  const descScore=sig.desc?matchScore(sig.desc,normPauta(fmt.desc||'')):0;
+  const platScore=pautaPlatOverlapScore(sig.plats,fmt.plat||'');
+  const alcScore=pautaAlcSimilarity(sig.alc,fmt.imp);
+  const score=nameScore*.4+descScore*.2+platScore*.25+alcScore*.15;
+  return{score,breakdown:{name:nameScore,desc:descScore,plat:platScore,alc:alcScore}};
+}
+function pautaRankAlternatives(entry,limit){
+  const n=normPauta(entry.tipoContenido);
+  const candidates=[];
+  pautaFmtCandidates().forEach(fmt=>{
+    if((n.includes('grafica')||n.includes('carrusel'))&&fmt.id==='grafica_dto'&&!/descuento|dto|oferta/.test(n)) return;
+    const r=scorePautaEntryVsFormat(entry,fmt);
+    candidates.push({fmt,...r,method:'multi'});
+  });
+  candidates.sort((a,b)=>b.score-a.score);
+  const seen=new Set();
+  const out=[];
+  for(const c of candidates){
+    if(seen.has(c.fmt.id)) continue;
+    seen.add(c.fmt.id);
+    out.push(c);
+    if(out.length>=(limit||PAUTA_ALTERNATIVES_MAX)) break;
+  }
+  return out;
+}
+function pautaAliasMatch(n,entry){
   if(PAUTA_ALIASES[n]){
-    const f=allFmts().find(x=>x.id===PAUTA_ALIASES[n]);
+    const id=PAUTA_ALIASES[n];
+    if(id==='__grafica_feed__') return resolveGraficaFeedMatch(entry,n);
+    const f=allFmts().find(x=>x.id===id);
     if(f) return{fmt:f,score:1,method:'alias'};
   }
   for(const key of Object.keys(PAUTA_ALIASES)){
     if(n.includes(key)||key.includes(n)){
-      const f=allFmts().find(x=>x.id===PAUTA_ALIASES[key]);
+      const id=PAUTA_ALIASES[key];
+      if(id==='__grafica_feed__'){
+        const g=resolveGraficaFeedMatch(entry,n);
+        if(g) return g;
+        continue;
+      }
+      const f=allFmts().find(x=>x.id===id);
       if(f) return{fmt:f,score:.95,method:'alias-partial'};
     }
   }
-  let f=allFmts().find(x=>normPauta(x.name)===n);
-  if(f) return{fmt:f,score:1,method:'exact'};
-  f=allFmts().find(x=>{const fn=normPauta(x.name);return n.includes(fn)||fn.includes(n);});
-  if(f) return{fmt:f,score:.85,method:'contains'};
-  let best=null,bestScore=0;
-  allFmts().filter(x=>!x.customType&&!x.infType).forEach(x=>{
-    const s=matchScore(n,normPauta(x.name));
-    if(s>bestScore&&s>=.45){bestScore=s;best=x;}
-  });
-  if(best) return{fmt:best,score:bestScore,method:'fuzzy'};
+  if(/dinamica/.test(n)&&/rostro/.test(n)){
+    const f=allFmts().find(x=>x.id==='dinamicas');
+    if(f) return{fmt:f,score:.95,method:'dinamica-rostro'};
+  }
+  if((/grafica/.test(n)||/carrusel/.test(n))&&!/descuento|dto|oferta|anuncio/.test(n)){
+    const g=resolveGraficaFeedMatch(entry,n);
+    if(g) return g;
+  }
   return null;
+}
+function pautaEntryPlatText(entry){
+  const bits=[];
+  (entry.plats||[]).forEach(p=>{if(p.plat)bits.push(p.plat);});
+  if(entry.plataforma) bits.push(entry.plataforma);
+  return normPauta(bits.join(' '));
+}
+function platLineHasMega(p){
+  const s=normPauta(p);
+  if(/meganoticias/.test(s)) return false;
+  return /mega/.test(s);
+}
+function platLineHasMn(p){
+  return /meganoticias/.test(normPauta(p));
+}
+function pautaPlatHasBrand(entry,brand){
+  const parts=[];
+  (entry.plats||[]).forEach(p=>{if(p.plat)parts.push(p.plat);});
+  if(entry.plataforma) parts.push(entry.plataforma);
+  if(!parts.length) return false;
+  if(brand==='meganoticias') return parts.some(platLineHasMn);
+  if(brand==='mega') return parts.some(platLineHasMega);
+  return parts.some(p=>normPauta(p).includes(normPauta(brand)));
+}
+function pickGraficaFeedId(entry){
+  const mega=pautaPlatHasBrand(entry,'mega');
+  const mn=pautaPlatHasBrand(entry,'meganoticias');
+  if(mega&&mn) return'grafica_mn_mega';
+  if(mn) return'grafica_mn';
+  if(mega) return'grafica_mega';
+  const p=normPauta(entry.plataforma||'');
+  if(/meganoticias/.test(p)&&/mega/.test(p.replace(/meganoticias/g,''))) return'grafica_mn_mega';
+  if(/meganoticias/.test(p)) return'grafica_mn';
+  return'grafica_mega';
+}
+function graficaFeedAlternatives(entry,selectedId){
+  return PAUTA_GRAFICA_FEED_IDS.map(id=>{
+    const f=allFmts().find(x=>x.id===id);
+    if(!f) return null;
+    const r=scorePautaEntryVsFormat(entry,f);
+    return{fmt:f,score:id===selectedId?Math.max(r.score,.92):r.score,method:'grafica-feed',breakdown:r.breakdown};
+  }).filter(Boolean).sort((a,b)=>b.score-a.score);
+}
+function resolveGraficaFeedMatch(entry,n){
+  const selectedId=pickGraficaFeedId(entry);
+  const f=allFmts().find(x=>x.id===selectedId);
+  if(!f) return null;
+  const alternatives=graficaFeedAlternatives(entry,selectedId);
+  const best=alternatives.find(a=>a.fmt.id===selectedId)||{fmt:f,score:.95,method:'grafica-feed'};
+  return{fmt:best.fmt,score:best.score,method:'grafica-feed',breakdown:best.breakdown};
+}
+function matchFormatoEntry(entry){
+  const n=normPauta(entry.tipoContenido);
+  if(!n) return{matchInfo:null,alternatives:pautaRankAlternatives(entry),needsReview:true};
+  const alias=pautaAliasMatch(n,entry);
+  if(alias){
+    const alts=alias.method==='grafica-feed'
+      ?graficaFeedAlternatives(entry,alias.fmt.id)
+      :[alias];
+    return{matchInfo:alias,alternatives:alts,needsReview:false};
+  }
+  let f=pautaFmtCandidates().find(x=>normPauta(x.name)===n);
+  if(f) return{matchInfo:{fmt:f,score:1,method:'exact'},alternatives:[{fmt:f,score:1,method:'exact'}],needsReview:false};
+  f=pautaFmtCandidates().find(x=>{
+    const fn=normPauta(x.name);
+    if(!fn||fn.length<5) return false;
+    return n.includes(fn)||fn.includes(n);
+  });
+  if(f){
+    const hit={fmt:f,score:.85,method:'contains'};
+    if(hit.score<PAUTA_MATCH_CONFIDENT){
+      const alternatives=pautaRankAlternatives(entry);
+      return{matchInfo:hit,alternatives,needsReview:true};
+    }
+    return{matchInfo:hit,alternatives:[hit],needsReview:false};
+  }
+  const alternatives=pautaRankAlternatives(entry);
+  const best=alternatives[0]||null;
+  const matchInfo=best?{fmt:best.fmt,score:best.score,method:best.method,breakdown:best.breakdown}:null;
+  return{matchInfo,alternatives,needsReview:!matchInfo||matchInfo.score<PAUTA_MATCH_CONFIDENT};
+}
+function matchFormato(tipoContenido){
+  return matchFormatoEntry({tipoContenido,plats:[],tematica:'',totalAlc:0}).matchInfo;
+}
+function pautaFmtHint(fmt,breakdown){
+  const bits=[];
+  if(fmt.plat&&fmt.plat!=='—') bits.push(fmt.plat);
+  if(fmt.imp>0) bits.push(f0(fmt.imp)+' imp. ref.');
+  if(breakdown){
+    const hints=[];
+    if(breakdown.name>=.5) hints.push('nombre');
+    if(breakdown.desc>=.35) hints.push('descripción');
+    if(breakdown.plat>=.35) hints.push('plataformas');
+    if(breakdown.alc>=.5) hints.push('alcance');
+    if(hints.length) bits.push('coincide en: '+hints.join(', '));
+  }
+  return bits.join(' · ');
+}
+function pautaEntryMetaLine(entry){
+  const bits=[];
+  if(entry.tematica) bits.push(escHtml(entry.tematica.length>90?entry.tematica.slice(0,87)+'…':entry.tematica));
+  const pl=(entry.plats||[]).map(p=>p.plat).filter(Boolean);
+  if(pl.length) bits.push(escHtml(pl.join(' · ')));
+  if(entry.totalAlc>0) bits.push(f0(entry.totalAlc)+' imp.');
+  return bits.join(' · ');
+}
+function buildPautaPickCard(idx,m){
+  const e=m.entry;
+  const opts=(m.alternatives||[]).slice(0,PAUTA_ALTERNATIVES_MAX);
+  let radios='';
+  opts.forEach((c,i)=>{
+    const pct=Math.round((c.score||0)*100);
+    const hint=pautaFmtHint(c.fmt,c.breakdown);
+    radios+=`<label class="pauta-pick-opt">
+      <input type="radio" name="pautaPick_${idx}" value="${escHtml(c.fmt.id)}" data-score="${c.score||0}"${i===0?' checked':''}>
+      <span class="pauta-pick-opt-body">
+        <div class="pauta-pick-opt-name">${escHtml(c.fmt.name)}</div>
+        ${hint?`<div class="pauta-pick-opt-sub">${escHtml(hint)}</div>`:''}
+      </span>
+      <span class="pauta-pick-pct">${pct}%</span>
+    </label>`;
+  });
+  radios+=`<label class="pauta-pick-opt pauta-pick-custom">
+    <input type="radio" name="pautaPick_${idx}" value="__custom__"${!opts.length?' checked':''}>
+    <span class="pauta-pick-opt-body">
+      <div class="pauta-pick-opt-name">Formato personalizado</div>
+      <div class="pauta-pick-opt-sub">Crear «${escHtml(pautaCellStr(e.tipoContenido)||'Formato personalizado')}» en Formatos personalizados</div>
+    </span>
+  </label>`;
+  const meta=pautaEntryMetaLine(e);
+  const altHint=opts.length
+    ?'Elige una de las <strong>3 alternativas</strong> más similares del catálogo (nombre, plataformas, descripción y alcance), o crea un formato personalizado:'
+    :'No se encontraron alternativas cercanas en el catálogo. Puedes crear un formato personalizado:';
+  return`<div class="pauta-pick-card" data-pauta-idx="${idx}">
+    <div class="pauta-pick-src"><strong>${escHtml(pautaCellStr(e.tipoContenido)||'(sin nombre)')}</strong>
+      <span class="pauta-tag pauta-tag-pick">Revisar</span></div>
+    ${meta?`<div class="pauta-pick-meta">${meta}</div>`:''}
+    <p class="pauta-pick-hint">${altHint}</p>
+    <div class="pauta-pick-opts">${radios}</div>
+  </div>`;
+}
+function buildPautaPreviewHtml(parsed,matches){
+  const auto=matches.filter(m=>!m.needsReview);
+  const review=matches.filter(m=>m.needsReview);
+  let html='<p>Se detectaron <strong>'+parsed.entries.length+'</strong> formatos'
+    +(parsed.etapas.length?' en <strong>'+parsed.etapas.length+'</strong> etapas':'')+'.</p>';
+  if(review.length){
+    html+='<p style="color:var(--or);font-size:12px;margin-top:6px"><strong>'+review.length+'</strong> formato'+(review.length!==1?'s requieren':' requiere')+' que confirmes la asignación.</p>';
+  }
+  if(auto.length){
+    html+='<p style="margin-top:10px;font-size:12px;color:var(--tx2)">Coincidencias automáticas ('+auto.length+'):</p><ul>';
+    auto.forEach(m=>{
+      const e=m.entry;
+      const tipoLabel=pautaCellStr(e.tipoContenido)||'(sin nombre)';
+      const destName=m.matchInfo&&m.matchInfo.fmt?m.matchInfo.fmt.name:tipoLabel;
+      const tag=m.matchInfo&&m.matchInfo.score>=PAUTA_MATCH_CONFIDENT
+        ?'<span class="pauta-tag pauta-tag-ok">Coincidencia</span>'
+        :'<span class="pauta-tag pauta-tag-warn">Aproximado</span>';
+      html+='<li><strong>'+escHtml(tipoLabel)+'</strong> → '+escHtml(destName)+tag+'</li>';
+    });
+    html+='</ul>';
+  }
+  if(review.length){
+    html+='<div style="margin-top:12px">';
+    matches.forEach((m,idx)=>{if(m.needsReview) html+=buildPautaPickCard(idx,m);});
+    html+='</div>';
+  }
+  html+='<p style="margin-top:10px;color:var(--tx2);font-size:12px">Los formatos personalizados se guardan en «Formatos personalizados». El precio unitario queda en $0 para completarlo manualmente.</p>';
+  return html;
+}
+function getPautaSelectedMatchInfo(idx,m){
+  if(!m.needsReview) return m.matchInfo;
+  const pick=document.querySelector('input[name="pautaPick_'+idx+'"]:checked');
+  if(!pick) return m.matchInfo;
+  if(pick.value==='__custom__') return null;
+  const fmt=allFmts().find(f=>f.id===pick.value);
+  if(!fmt) return m.matchInfo;
+  return{fmt,score:+(pick.dataset.score||0),method:'user-selected'};
 }
 function createCustomFromEntry(entry){
   const id='custom_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
   return addCustomFormat({
     id,customType:true,
-    name:entry.tipoContenido,
+    name:pautaCellStr(entry.tipoContenido)||'Formato personalizado',
     tag:'Personalizado',tagCls:'tag-fijo',
     plat:entry.plataforma||entry.plats.map(p=>p.plat).join(' · '),
     marca:entry.marca||'A definir',
@@ -3686,20 +4018,6 @@ function applyPautaEntry(entry,matchInfo){
   if(entry.referencia&&f.customType) f.ref=entry.referencia;
   return{fmt:f,created,matchInfo};
 }
-function buildPautaPreviewHtml(parsed,matches){
-  let html='<p>Se detectaron <strong>'+parsed.entries.length+'</strong> formatos'
-    +(parsed.etapas.length?' en <strong>'+parsed.etapas.length+'</strong> etapas':'')+'.</p><ul>';
-  matches.forEach(m=>{
-    const e=m.entry;
-    let tag,destName;
-    if(!m.matchInfo){tag='<span class="pauta-tag pauta-tag-new">Nuevo personalizado</span>';destName=e.tipoContenido;}
-    else if(m.matchInfo.score>=.8){tag='<span class="pauta-tag pauta-tag-ok">Coincidencia</span>';destName=m.matchInfo.fmt.name;}
-    else{tag='<span class="pauta-tag pauta-tag-warn">Aproximado</span>';destName=m.matchInfo.fmt.name;}
-    html+='<li><strong>'+escHtml(e.tipoContenido)+'</strong> → '+escHtml(destName)+tag+'</li>';
-  });
-  html+='</ul><p style="margin-top:10px;color:var(--tx2);font-size:12px">Los formatos nuevos se guardan en «Formatos personalizados». El precio unitario queda en $0 para completarlo manualmente.</p>';
-  return html;
-}
 function cerrarPautaModal(){
   document.getElementById('pautaOverlay').classList.remove('show');
   PAUTA_PENDING_IMPORT=null;
@@ -3719,12 +4037,15 @@ function confirmarImportPauta(){
     hasPautaSections:parsed.etapas.length>0,
     etapas:parsed.etapas.slice()
   };
-  matches.forEach(m=>applyPautaEntry(m.entry,m.matchInfo));
+  matches.forEach((m,idx)=>applyPautaEntry(m.entry,getPautaSelectedMatchInfo(idx,m)));
   cerrarPautaModal();
   buildFmts();
   render();
-  const nuevos=matches.filter(m=>!m.matchInfo).length;
-  showToast('✓ Pauta importada: '+parsed.entries.length+' formatos'+(nuevos?' ('+nuevos+' nuevos)':''));
+  const nuevos=matches.filter((m,idx)=>!getPautaSelectedMatchInfo(idx,m)).length;
+  const revisados=matches.filter(m=>m.needsReview).length;
+  showToast('✓ Pauta importada: '+parsed.entries.length+' formatos'
+    +(nuevos?' ('+nuevos+' personalizados)':'')
+    +(revisados?' · '+revisados+' asignados manualmente':''));
 }
 async function importarPautaEditorial(input){
   const file=input.files&&input.files[0];
@@ -3753,8 +4074,8 @@ async function importarPautaEditorial(input){
       return;
     }
     const matches=parsed.entries.map(entry=>{
-      const matchInfo=matchFormato(entry.tipoContenido);
-      return{entry,matchInfo};
+      const r=matchFormatoEntry(entry);
+      return{entry,matchInfo:r.matchInfo,alternatives:r.alternatives,needsReview:r.needsReview};
     });
     PAUTA_PENDING_IMPORT={parsed,matches};
     document.getElementById('pautaModalBody').innerHTML=buildPautaPreviewHtml(parsed,matches);
