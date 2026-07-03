@@ -1358,7 +1358,7 @@ function updateFmtAlcNeto(id,f,s){
 function setFmtPricePreview(id,f,s){
   if(!f) return;
   const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
-  const imp=pautaM?pautaM.imp:s.imp*s.qty;
+  const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(pautaM?pautaM.imp:s.imp*s.qty);
   const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
   const {neto,desc}=netoDesdeBruto(bruto,s.dto||0);
   const html=s.dto>0
@@ -1381,12 +1381,43 @@ function esTipoWeb(f){
   return catObj && catObj.id === 'web';
 }
 function isProduccionFmt(f){return !!(f&&f.prodType==='produccion');}
+function esTipoRRSS(f){
+  if(!f||esTipoWeb(f)||f.radioType==='radio'||f.infType==='influencer'||isProduccionFmt(f)) return false;
+  return true;
+}
+const RRSS_FREQ=1.2;
 
-// Paso 1: alcance neto por formato (deduplicación interna por plataforma)
-// Web → frecuencia 1.3 | RRSS → frecuencia 1.2
-// Si qty > 1, se aplica penalización adicional del 20% por repetición de formato
+// Paso 1: alcance neto por plataforma / repetición (imp ÷ frecuencia)
+// Paso 2: Sainsbury sobre todos los alcances netos del formato (incl. qty y multi-plataforma)
+function splitPlatImpsRRSS(f,s){
+  const qty=Math.max(1,+s.qty||1);
+  if(s.pautaPlats&&s.pautaPlats.length){
+    const imps=[];
+    for(let q=0;q<qty;q++)
+      s.pautaPlats.forEach(p=>{const v=+p.alc||0;if(v>0)imps.push(v);});
+    return imps;
+  }
+  const parts=(f.plat||'').split('·').map(p=>p.trim()).filter(p=>p&&p!=='—');
+  const n=Math.max(1,parts.length);
+  const impUnit=+s.imp||0;
+  const imps=[];
+  for(let q=0;q<qty;q++)
+    for(let i=0;i<n;i++) imps.push(impUnit/n);
+  return imps;
+}
+function calcRRSSFmtImp(f,s){
+  return splitPlatImpsRRSS(f,s).reduce((a,v)=>a+v,0);
+}
+function calcRRSSFmtAlc(f,s){
+  const imps=splitPlatImpsRRSS(f,s);
+  if(!imps.length) return 0;
+  const netAlcs=imps.map(imp=>Math.round(imp/RRSS_FREQ));
+  return calcAlcSainsburyFromValues(netAlcs);
+}
+
+// Paso 1 legacy (Web y casos puntuales)
 function calcAlcNeto(f, imp, qty){
-  const freq = esTipoWeb(f) ? 1.3 : 1.2;
+  const freq = esTipoWeb(f) ? 1.3 : RRSS_FREQ;
   let alc = Math.round(imp / freq);
   if(qty && qty > 1) alc = Math.round(alc * 0.8);
   return alc;
@@ -1410,11 +1441,11 @@ function pautaPlatsLabel(plats){
 function calcPautaPlatsMetrics(f,s){
   const plats=s.pautaPlats||[];
   if(!plats.length) return null;
-  const qty=Math.max(1,+s.qty||1);
-  const imp=plats.reduce((a,p)=>a+(+p.alc||0),0)*qty;
-  let alc=calcAlcSainsburyFromValues(plats.map(p=>+p.alc||0));
-  if(qty>1) alc=Math.round(alc*0.8);
-  return{imp,alc,platVal:pautaPlatsLabel(plats)};
+  return{
+    imp:calcRRSSFmtImp(f,s),
+    alc:calcRRSSFmtAlc(f,s),
+    platVal:pautaPlatsLabel(plats)
+  };
 }
 function fmtAlcFromState(f,s){
   if(s.pautaPlats&&s.pautaPlats.length){
@@ -1423,35 +1454,24 @@ function fmtAlcFromState(f,s){
   }
   if(esTipoWeb(f)) return calcWebFmtAlcPreview(f,s);
   if(f.radioType==='radio') return calcRadioFmtAlcPreview(f,s);
+  if(esTipoRRSS(f)) return calcRRSSFmtAlc(f,s);
   return calcAlcNeto(f,s.imp,s.qty);
 }
 
-// Paso 2: alcance neto total multiplataforma (Fórmula de Sainsbury)
-// A_total = U × [1 - ∏(1 - Aᵢ/U)]
+// Alcance total pauta: Sainsbury sobre el alcance neto de cada línea activa
 function calcAlcSainsbury(rows){
   if(!rows||!rows.length) return 0;
-  // En rows, r.imp ya es s.imp * s.qty. r.alc ya es calcAlcNeto(f, r.imp).
-  // Agrupamos por canal y sumamos alcances netos
-  let alcRRSS = 0;
-  const plataformas = [];
-  rows.forEach(r=>{
-    if(esTipoWeb(r.f)) plataformas.push(r.alc);
-    else alcRRSS += r.alc;
-  });
-  if(alcRRSS > 0) plataformas.push(alcRRSS);
-  if(!plataformas.length) return 0;
-  let producto = 1;
-  plataformas.forEach(a => { producto *= (1 - a / U_SAINSBURY); });
-  return Math.min(Math.round(U_SAINSBURY * (1 - producto)), U_SAINSBURY);
+  const netAlcs=rows.filter(r=>!r.infDetailRow&&r.alc>0).map(r=>r.alc);
+  return calcAlcSainsburyFromValues(netAlcs);
 }
 
-// Variante por tipo para Excel/guardar (recibe rows)
+// Variante por tipo (RRSS = todo lo que no es web)
 function calcAlcSainsburyByTipo(rows, tipo){
-  const subset = rows.filter(r => tipo==='web' ? esTipoWeb(r.f) : !esTipoWeb(r.f));
-  if(!subset.length) return 0;
-  let alc = 0;
-  subset.forEach(r => { alc += r.alc; });
-  return Math.min(alc, U_SAINSBURY); // alcance neto del canal (sin Sainsbury inter-canal)
+  const subset=rows.filter(r=>{
+    if(r.infDetailRow) return false;
+    return tipo==='web'?esTipoWeb(r.f):!esTipoWeb(r.f);
+  });
+  return calcAlcSainsburyFromValues(subset.map(r=>r.alc).filter(a=>a>0));
 }
 
 // ── Estado ────────────────────────────────────────────────────────────────
@@ -2525,10 +2545,10 @@ function getRows(){
       return;
     }
     const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
-    const imp=pautaM?pautaM.imp:s.imp*s.qty;
+    const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(s.imp*s.qty);
     const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
     const {neto,desc}=netoDesdeBruto(bruto,s.dto||0);
-    const alc=pautaM?pautaM.alc:calcAlcNeto(f,imp,s.qty);
+    const alc=esTipoRRSS(f)?calcRRSSFmtAlc(f,s):(pautaM?pautaM.alc:calcAlcNeto(f,imp,s.qty));
     const cpm=imp>0?(neto/imp)*1000:0;
     const row={f,s,bruto,desc,neto,imp,alc,cpm};
     if(s.pautaMedio) row.pautaMedio=s.pautaMedio;
@@ -3378,7 +3398,7 @@ async function exportarExcel(){
     // ── Nota metodológica
     secTitle('NOTA METODOLÓGICA — CÁLCULO DE ALCANCE',C.grayDark,C.white,10);
     [`El alcance neto total (~${f0(tAlc)} usuarios únicos · ${pctAlc(tAlc)} del universo digital) se calcula mediante el modelo de alcance neto multiplataforma de Megamedia.`,
-     `Paso 1: alcance neto por plataforma aplicando deduplicación interna (frecuencia 1.2 para RRSS; 1.3 para Web). Cuando un formato se contrata en cantidad mayor a 1, se aplica una penalización adicional del 20% sobre el alcance neto por repetición. Paso 2: alcance total con Fórmula de Sainsbury sobre los alcances netos por canal (universo de referencia: ${f0(U_SAINSBURY)} personas mayores de 18 años con acceso a Internet en Chile).`,
+     `Paso 1: alcance neto por plataforma y por repetición del formato (impresiones ÷ frecuencia 1.2 en RRSS; 1.3 en Web). Paso 2: Fórmula de Sainsbury sobre los alcances netos de cada plataforma/repetición dentro del formato, y sobre el total de la pauta entre todos los formatos activos (universo de referencia: ${f0(U_SAINSBURY)} personas mayores de 18 años con acceso a Internet en Chile).`,
      'El alcance real puede variar según la fecha de publicación, el comportamiento algorítmico y el nivel de interacción orgánica de la audiencia.',
     ].forEach((line,i)=>{
       const r=ws.addRow([]); r.height=14;
