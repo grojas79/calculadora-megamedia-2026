@@ -317,7 +317,15 @@ td.inv{color:var(--cy);font-weight:700}
 .sum-row{display:flex;justify-content:space-between;align-items:baseline;
   padding:6px 0;border-bottom:1px solid var(--bd);gap:8px}
 .sum-row:last-child{border-bottom:none}
-.sum-label{font-size:11.5px;color:var(--tx2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sum-label{font-size:11.5px;color:var(--tx2);flex:1;min-width:0}
+.sum-fmt-link{color:var(--cy);text-decoration:none;cursor:pointer;display:inline;word-break:break-word}
+.sum-fmt-link:hover{text-decoration:underline;color:var(--tx)}
+.fmt-highlight{animation:fmtPulse 2.2s ease-out}
+@keyframes fmtPulse{
+  0%,100%{box-shadow:0 0 0 1px rgba(0,200,232,.15)}
+  20%{box-shadow:0 0 0 3px rgba(0,200,232,.5)}
+  40%{box-shadow:0 0 0 1px rgba(0,200,232,.2)}
+}
 .sum-val{font-size:12.5px;font-weight:600;color:var(--tx);flex-shrink:0}
 .sum-dto-row{display:flex;justify-content:space-between;padding:6px 0;font-size:11.5px}
 .sum-dto-label{color:var(--or)}
@@ -1350,7 +1358,7 @@ function updateFmtAlcNeto(id,f,s){
 function setFmtPricePreview(id,f,s){
   if(!f) return;
   const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
-  const imp=pautaM?pautaM.imp:s.imp*s.qty;
+  const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(pautaM?pautaM.imp:s.imp*s.qty);
   const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
   const {neto,desc}=netoDesdeBruto(bruto,s.dto||0);
   const html=s.dto>0
@@ -1373,12 +1381,43 @@ function esTipoWeb(f){
   return catObj && catObj.id === 'web';
 }
 function isProduccionFmt(f){return !!(f&&f.prodType==='produccion');}
+function esTipoRRSS(f){
+  if(!f||esTipoWeb(f)||f.radioType==='radio'||f.infType==='influencer'||isProduccionFmt(f)) return false;
+  return true;
+}
+const RRSS_FREQ=1.2;
 
-// Paso 1: alcance neto por formato (deduplicación interna por plataforma)
-// Web → frecuencia 1.3 | RRSS → frecuencia 1.2
-// Si qty > 1, se aplica penalización adicional del 20% por repetición de formato
+// Paso 1: alcance neto por plataforma / repetición (imp ÷ frecuencia)
+// Paso 2: Sainsbury sobre todos los alcances netos del formato (incl. qty y multi-plataforma)
+function splitPlatImpsRRSS(f,s){
+  const qty=Math.max(1,+s.qty||1);
+  if(s.pautaPlats&&s.pautaPlats.length){
+    const imps=[];
+    for(let q=0;q<qty;q++)
+      s.pautaPlats.forEach(p=>{const v=+p.alc||0;if(v>0)imps.push(v);});
+    return imps;
+  }
+  const parts=(f.plat||'').split('·').map(p=>p.trim()).filter(p=>p&&p!=='—');
+  const n=Math.max(1,parts.length);
+  const impUnit=+s.imp||0;
+  const imps=[];
+  for(let q=0;q<qty;q++)
+    for(let i=0;i<n;i++) imps.push(impUnit/n);
+  return imps;
+}
+function calcRRSSFmtImp(f,s){
+  return splitPlatImpsRRSS(f,s).reduce((a,v)=>a+v,0);
+}
+function calcRRSSFmtAlc(f,s){
+  const imps=splitPlatImpsRRSS(f,s);
+  if(!imps.length) return 0;
+  const netAlcs=imps.map(imp=>Math.round(imp/RRSS_FREQ));
+  return calcAlcSainsburyFromValues(netAlcs);
+}
+
+// Paso 1 legacy (Web y casos puntuales)
 function calcAlcNeto(f, imp, qty){
-  const freq = esTipoWeb(f) ? 1.3 : 1.2;
+  const freq = esTipoWeb(f) ? 1.3 : RRSS_FREQ;
   let alc = Math.round(imp / freq);
   if(qty && qty > 1) alc = Math.round(alc * 0.8);
   return alc;
@@ -1402,11 +1441,11 @@ function pautaPlatsLabel(plats){
 function calcPautaPlatsMetrics(f,s){
   const plats=s.pautaPlats||[];
   if(!plats.length) return null;
-  const qty=Math.max(1,+s.qty||1);
-  const imp=plats.reduce((a,p)=>a+(+p.alc||0),0)*qty;
-  let alc=calcAlcSainsburyFromValues(plats.map(p=>+p.alc||0));
-  if(qty>1) alc=Math.round(alc*0.8);
-  return{imp,alc,platVal:pautaPlatsLabel(plats)};
+  return{
+    imp:calcRRSSFmtImp(f,s),
+    alc:calcRRSSFmtAlc(f,s),
+    platVal:pautaPlatsLabel(plats)
+  };
 }
 function fmtAlcFromState(f,s){
   if(s.pautaPlats&&s.pautaPlats.length){
@@ -1415,35 +1454,24 @@ function fmtAlcFromState(f,s){
   }
   if(esTipoWeb(f)) return calcWebFmtAlcPreview(f,s);
   if(f.radioType==='radio') return calcRadioFmtAlcPreview(f,s);
+  if(esTipoRRSS(f)) return calcRRSSFmtAlc(f,s);
   return calcAlcNeto(f,s.imp,s.qty);
 }
 
-// Paso 2: alcance neto total multiplataforma (Fórmula de Sainsbury)
-// A_total = U × [1 - ∏(1 - Aᵢ/U)]
+// Alcance total pauta: Sainsbury sobre el alcance neto de cada línea activa
 function calcAlcSainsbury(rows){
   if(!rows||!rows.length) return 0;
-  // En rows, r.imp ya es s.imp * s.qty. r.alc ya es calcAlcNeto(f, r.imp).
-  // Agrupamos por canal y sumamos alcances netos
-  let alcRRSS = 0;
-  const plataformas = [];
-  rows.forEach(r=>{
-    if(esTipoWeb(r.f)) plataformas.push(r.alc);
-    else alcRRSS += r.alc;
-  });
-  if(alcRRSS > 0) plataformas.push(alcRRSS);
-  if(!plataformas.length) return 0;
-  let producto = 1;
-  plataformas.forEach(a => { producto *= (1 - a / U_SAINSBURY); });
-  return Math.min(Math.round(U_SAINSBURY * (1 - producto)), U_SAINSBURY);
+  const netAlcs=rows.filter(r=>!r.infDetailRow&&r.alc>0).map(r=>r.alc);
+  return calcAlcSainsburyFromValues(netAlcs);
 }
 
-// Variante por tipo para Excel/guardar (recibe rows)
+// Variante por tipo (RRSS = todo lo que no es web)
 function calcAlcSainsburyByTipo(rows, tipo){
-  const subset = rows.filter(r => tipo==='web' ? esTipoWeb(r.f) : !esTipoWeb(r.f));
-  if(!subset.length) return 0;
-  let alc = 0;
-  subset.forEach(r => { alc += r.alc; });
-  return Math.min(alc, U_SAINSBURY); // alcance neto del canal (sin Sainsbury inter-canal)
+  const subset=rows.filter(r=>{
+    if(r.infDetailRow) return false;
+    return tipo==='web'?esTipoWeb(r.f):!esTipoWeb(r.f);
+  });
+  return calcAlcSainsburyFromValues(subset.map(r=>r.alc).filter(a=>a>0));
 }
 
 // ── Estado ────────────────────────────────────────────────────────────────
@@ -2192,6 +2220,36 @@ function scrollToCat(id){
     if(el) el.scrollIntoView({behavior:"smooth",block:"start"});
   },50);
 }
+function sumFmtLabel(r){
+  let t=r.infTotalRow?'TOTAL INFLUENCERS':r.f.name;
+  if(r.webPlat) t+=' · '+webPlatLabel(r.webPlat);
+  if(!r.infTotalRow&&r.s.qty>1) t+=' ×'+r.s.qty;
+  return t;
+}
+function sumFmtLink(r){
+  const id=r.f.id;
+  return '<a class="sum-fmt-link" href="#fi_'+id+'" onclick="scrollToFmt(\''+id+'\');return false;" title="Ir al detalle del formato">'
+    +escHtml(sumFmtLabel(r))+'</a>';
+}
+function scrollToFmt(id){
+  const q=document.getElementById('fmtSearch');
+  if(q&&q.value.trim()) filtrarFormatos('');
+  const cat=CATS.find(c=>c.fmts.some(x=>x.id===id));
+  if(cat){
+    const catEl=document.getElementById('cat_'+cat.id);
+    if(catEl) catEl.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  setTimeout(()=>{
+    if(!STATE[id]?.active) toggle(id);
+    const el=document.getElementById('fi_'+id);
+    if(!el) return;
+    const body=el.querySelector('.fmt-body');
+    if(body) body.style.display='block';
+    el.scrollIntoView({behavior:'smooth',block:'center'});
+    el.classList.add('fmt-highlight');
+    setTimeout(()=>el.classList.remove('fmt-highlight'),2200);
+  },cat?300:0);
+}
 
 // ── Buscador de formatos ─────────────────────────────────────────────────
 function filtrarFormatos(q){
@@ -2487,10 +2545,10 @@ function getRows(){
       return;
     }
     const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
-    const imp=pautaM?pautaM.imp:s.imp*s.qty;
+    const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(s.imp*s.qty);
     const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
     const {neto,desc}=netoDesdeBruto(bruto,s.dto||0);
-    const alc=pautaM?pautaM.alc:calcAlcNeto(f,imp,s.qty);
+    const alc=esTipoRRSS(f)?calcRRSSFmtAlc(f,s):(pautaM?pautaM.alc:calcAlcNeto(f,imp,s.qty));
     const cpm=imp>0?(neto/imp)*1000:0;
     const row={f,s,bruto,desc,neto,imp,alc,cpm};
     if(s.pautaMedio) row.pautaMedio=s.pautaMedio;
@@ -2706,7 +2764,7 @@ function render(){
   const tBrutoTotal=rows.reduce((a,r)=>a+r.bruto,0);
   document.getElementById('sumRows').innerHTML=
     rows.filter(r=>!r.infDetailRow).map(r=>`<div class="sum-row">
-      <span class="sum-label">${r.infTotalRow?'TOTAL INFLUENCERS':r.f.name}${r.webPlat?' · '+webPlatLabel(r.webPlat):''}${!r.infTotalRow&&r.s.qty>1?' ×'+r.s.qty:''}</span>
+      <span class="sum-label">${sumFmtLink(r)}</span>
       <span class="sum-val" style="color:var(--tx)">${fM(r.bruto)}</span>
     </div>`).join('')
     +(tDescUnit>0?`<div class="sum-dto-row">
@@ -3340,7 +3398,7 @@ async function exportarExcel(){
     // ── Nota metodológica
     secTitle('NOTA METODOLÓGICA — CÁLCULO DE ALCANCE',C.grayDark,C.white,10);
     [`El alcance neto total (~${f0(tAlc)} usuarios únicos · ${pctAlc(tAlc)} del universo digital) se calcula mediante el modelo de alcance neto multiplataforma de Megamedia.`,
-     `Paso 1: alcance neto por plataforma aplicando deduplicación interna (frecuencia 1.2 para RRSS; 1.3 para Web). Cuando un formato se contrata en cantidad mayor a 1, se aplica una penalización adicional del 20% sobre el alcance neto por repetición. Paso 2: alcance total con Fórmula de Sainsbury sobre los alcances netos por canal (universo de referencia: ${f0(U_SAINSBURY)} personas mayores de 18 años con acceso a Internet en Chile).`,
+     `Paso 1: alcance neto por plataforma y por repetición del formato (impresiones ÷ frecuencia 1.2 en RRSS; 1.3 en Web). Paso 2: Fórmula de Sainsbury sobre los alcances netos de cada plataforma/repetición dentro del formato, y sobre el total de la pauta entre todos los formatos activos (universo de referencia: ${f0(U_SAINSBURY)} personas mayores de 18 años con acceso a Internet en Chile).`,
      'El alcance real puede variar según la fecha de publicación, el comportamiento algorítmico y el nivel de interacción orgánica de la audiencia.',
     ].forEach((line,i)=>{
       const r=ws.addRow([]); r.height=14;
