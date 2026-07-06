@@ -3376,6 +3376,18 @@ async function exportarExcel(){
       ws.addRow([]); dataRowN++;
     }
 
+    // ── Descuento por volumen (antes de métricas)
+    if(dtoG>0){
+      secTitle('DESCUENTO POR VOLUMEN SOBRE EL TOTAL DE LA PAUTA',C.orange);
+      ws.addRow([]); dataRowN++;
+      const dtoSpans=[[1,4],[5,9],[10,NCOLS]];
+      drawCards([
+        ['SUBTOTAL NETO (formatos)',`$${f0(tNeto)}`,C.blue,'Tras descuentos individuales por formato'],
+        [`DTO. VOLUMEN (${dtoG}%)`,`-$${f0(dtoGM)}`,C.orange,'Descuento extra por contratar el paquete completo'],
+        ['INVERSIÓN FINAL',`$${f0(tFinal)}`,C.green,'Total con dto. volumen aplicado'],
+      ],dtoSpans);
+    }
+
     // ── KPI Cards
     ws.addRow([]); dataRowN++;
     secTitle('MÉTRICAS DE LA CAMPAÑA',C.blue);
