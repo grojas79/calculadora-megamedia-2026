@@ -660,6 +660,18 @@ const CATS=[
        marca:'Logo + mención',
        desc:'Publicación de comunicado de prensa patrocinado en sitio web de Mega o Meganoticias.',
        ref:'', tipo:'fijo', precio:600000, imp:150},
+      {id:'capsula_info_mn', name:'Cápsula Informativa Meganoticias',   tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'TikTok Meganoticias · Instagram Meganoticias · Shorts Meganoticias · Facebook Meganoticias',
+       marca:'Caluga con logos + mención',
+       desc:'Cápsula informativa que presentará el fondo concursable, sus principales características y cómo participar, invitando a la audiencia a postular.',
+       ref:'https://www.facebook.com/reel/1819856582733982/',
+       tipo:'fijo', precio:2000000, imp:223000,
+       pautaPlats:[
+         {plat:'Instagram Meganoticias',alc:180000},
+         {plat:'Shorts Meganoticias',alc:3000},
+         {plat:'Facebook Meganoticias',alc:20000},
+         {plat:'TikTok Meganoticias',alc:20000}
+       ]},
       {id:'cosas_saber',     name:'Cosas que Deberías Saber',           tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · YouTube Shorts · TikTok · Facebook Mega',
        marca:'Logo + mención',
@@ -1279,6 +1291,7 @@ function initFmtState(f){
     base.paqueteMode=false;base.paqueteTotal=0;
   }
   if(esTipoWeb(f)) base.webPlats=[newWebPlatEntry(f,WEB_PLAT_DEFAULT)];
+  if(f.pautaPlats&&f.pautaPlats.length) base.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:p.alc}));
   STATE[f.id]=base;
 }
 function addCustomFormat(fmt){
@@ -3512,6 +3525,8 @@ const PAUTA_ALIASES={
   'vivencial de marca':'vivencial',
   'vivencial en terreno':'vivencial',
   'follow meganoticias':'follow_mn',
+  'capsula informativa meganoticias':'capsula_info_mn',
+  'informativo meganoticias':'capsula_info_mn',
   'desafio de marca':'desafio_mega',
   'corte de pantalla react digital':'prog_corte_mg_mega',
   'presencia en react digital':'prog_corte_mg_mega',
