@@ -3521,7 +3521,7 @@ const PAUTA_ALIASES={
   'grafica carrusel':'__grafica_feed__',
   'live organico con vocero de la organizacion':'live_organico',
   'live organico con vocero de marca auspiciadora':'live_organico',
-  'nota web':'nota_mn_mega',
+  'nota web':'__nota_web__',
   'vivencial de marca':'vivencial',
   'vivencial en terreno':'vivencial',
   'follow meganoticias':'follow_mn',
@@ -3535,6 +3535,7 @@ const PAUTA_ALIASES={
   'dinamicas con rostro':'dinamicas'
 };
 const PAUTA_GRAFICA_FEED_IDS=['grafica_mega','grafica_mn','grafica_mn_mega'];
+const PAUTA_NOTA_WEB_IDS=['nota_mega','nota_mn','nota_mn_mega'];
 function pautaCellStr(v){
   if(v==null||v==='') return '';
   if(typeof v==='object'){
@@ -3699,6 +3700,9 @@ function matchScore(a,b){
 }
 const PAUTA_MATCH_CONFIDENT=.8;
 const PAUTA_ALTERNATIVES_MAX=3;
+const PAUTA_NAME_MIN_CONFIDENT=.85;
+const PAUTA_NAME_GAP=.12;
+const PAUTA_NAME_TIE_BAND=.2;
 function pautaFmtCandidates(){
   return allFmts().filter(x=>!x.customType&&!x.infType&&x.prodType!=='produccion');
 }
@@ -3716,6 +3720,53 @@ function pautaEntrySignals(entry){
 function pautaPlatTokens(s){
   return normPauta(s).split(/[\s·]+/).filter(w=>w.length>2);
 }
+function pautaPlatLinesFromText(s){
+  return String(s||'').split(/[·•|]/).map(x=>normPauta(x)).filter(Boolean);
+}
+function pautaEntryPlatLines(entry){
+  const lines=[];
+  (entry.plats||[]).forEach(p=>{const v=normPauta(p.plat);if(v)lines.push(v);});
+  if(!lines.length&&entry.plataforma) lines.push(normPauta(entry.plataforma));
+  return[...new Set(lines)];
+}
+function pautaPlatKeysFromText(s){
+  const n=normPauta(s);
+  const keys=new Set();
+  const brands=[
+    ['meganoticias','meganoticias'],['mega cl','mega_cl'],['mega','mega'],
+    ['instagram','instagram'],['tiktok','tiktok'],['facebook','facebook'],
+    ['youtube','youtube'],['linkedin','linkedin'],['twitter','twitter'],['twitch','twitch']
+  ];
+  brands.forEach(([pat,key])=>{
+    if(key==='mega'&&/meganoticias/.test(n)) return;
+    if(new RegExp(pat).test(n)) keys.add(key);
+  });
+  return[...keys];
+}
+function pautaPlatLineMatches(fmtLine,entryLine){
+  const a=normPauta(fmtLine),b=normPauta(entryLine);
+  if(!a||!b) return false;
+  if(a===b||a.includes(b)||b.includes(a)) return true;
+  const fk=pautaPlatKeysFromText(fmtLine),ek=pautaPlatKeysFromText(entryLine);
+  if(ek.length&&fk.length) return ek.every(k=>fk.includes(k));
+  return false;
+}
+function pautaPlatMatchAnalysis(entry,fmt){
+  const entryLines=pautaEntryPlatLines(entry);
+  const fmtLines=pautaPlatLinesFromText(fmt.plat||'');
+  if(!entryLines.length) return{fullMatch:false,entryCoverage:0,fmtCoverage:0,score:0,matched:0,total:0};
+  if(!fmtLines.length) return{fullMatch:false,entryCoverage:0,fmtCoverage:0,score:0,matched:0,total:entryLines.length};
+  let matched=0;
+  entryLines.forEach(el=>{
+    if(fmtLines.some(fl=>pautaPlatLineMatches(fl,el))) matched++;
+  });
+  const entryCoverage=matched/entryLines.length;
+  const fmtMatched=fmtLines.filter(fl=>entryLines.some(el=>pautaPlatLineMatches(fl,el))).length;
+  const fmtCoverage=fmtMatched/fmtLines.length;
+  const fullMatch=entryCoverage===1&&fmtCoverage===1;
+  const score=fullMatch?1:entryCoverage*.65+fmtCoverage*.35;
+  return{fullMatch,entryCoverage,fmtCoverage,score,matched,total:entryLines.length};
+}
 function pautaPlatOverlapScore(entryPlats,fmtPlat){
   const ep=new Set();
   entryPlats.forEach(p=>pautaPlatTokens(p).forEach(t=>ep.add(t)));
@@ -3726,6 +3777,81 @@ function pautaPlatOverlapScore(entryPlats,fmtPlat){
     if([...ep].some(e=>e.includes(t)||t.includes(e))) hits++;
   });
   return hits/Math.max(ft.length,1);
+}
+function pautaScoreName(entry,fmt){
+  const sig=pautaEntrySignals(entry);
+  const fn=normPauta(fmt.name);
+  if(fn===sig.name) return 1;
+  let s=matchScore(sig.name,fn);
+  if(sig.name&&fn&&(sig.name.includes(fn)||fn.includes(sig.name))) s=Math.max(s,.85);
+  return s;
+}
+function pautaNameConfident(best,second){
+  if(!best) return false;
+  if(best.nameScore>=1) return true;
+  if(best.nameScore<PAUTA_NAME_MIN_CONFIDENT) return false;
+  if(!second) return best.nameScore>=PAUTA_MATCH_CONFIDENT;
+  return best.nameScore-second.nameScore>=PAUTA_NAME_GAP;
+}
+function pautaCandidatesByName(entry){
+  const n=normPauta(entry.tipoContenido);
+  return pautaFmtCandidates()
+    .filter(fmt=>{
+      if((n.includes('grafica')||n.includes('carrusel'))&&fmt.id==='grafica_dto'&&!/descuento|dto|oferta/.test(n)) return false;
+      return true;
+    })
+    .map(fmt=>{
+      const nameScore=pautaScoreName(entry,fmt);
+      const plat=pautaPlatMatchAnalysis(entry,fmt);
+      const sig=pautaEntrySignals(entry);
+      const descScore=sig.desc?matchScore(sig.desc,normPauta(fmt.desc||'')):0;
+      const alcScore=pautaAlcSimilarity(sig.alc,fmt.imp);
+      return{fmt,nameScore,plat,descScore,alcScore,breakdown:{name:nameScore,desc:descScore,plat:plat.score,alc:alcScore,platFull:plat.fullMatch}};
+    })
+    .filter(c=>c.nameScore>0)
+    .sort((a,b)=>{
+      if(b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
+      if(b.plat.fullMatch!==a.plat.fullMatch) return(b.plat.fullMatch?1:0)-(a.plat.fullMatch?1:0);
+      if(b.plat.entryCoverage!==a.plat.entryCoverage) return b.plat.entryCoverage-a.plat.entryCoverage;
+      return b.plat.fmtCoverage-a.plat.fmtCoverage;
+    });
+}
+function pautaResolveMatch(entry){
+  const candidates=pautaCandidatesByName(entry);
+  const best=candidates[0];
+  if(!best) return null;
+  const second=candidates[1];
+  if(pautaNameConfident(best,second)){
+    return{fmt:best.fmt,score:best.nameScore,method:'name',breakdown:best.breakdown};
+  }
+  const nameBand=candidates.filter(c=>best.nameScore-c.nameScore<=PAUTA_NAME_TIE_BAND);
+  const platWinners=nameBand.filter(c=>c.plat.fullMatch);
+  if(platWinners.length===1){
+    const w=platWinners[0];
+    return{fmt:w.fmt,score:Math.max(w.nameScore,.9),method:'name+plat-full',breakdown:w.breakdown};
+  }
+  if(platWinners.length>1){
+    platWinners.sort((a,b)=>b.nameScore-a.nameScore);
+    const w=platWinners[0];
+    return{fmt:w.fmt,score:w.nameScore,method:'name+plat-full',breakdown:w.breakdown,ambiguous:true};
+  }
+  const byPlat=[...nameBand].sort((a,b)=>{
+    if(b.plat.entryCoverage!==a.plat.entryCoverage) return b.plat.entryCoverage-a.plat.entryCoverage;
+    if(b.plat.fmtCoverage!==a.plat.fmtCoverage) return b.plat.fmtCoverage-a.plat.fmtCoverage;
+    return b.nameScore-a.nameScore;
+  });
+  const pick=byPlat[0];
+  return{fmt:pick.fmt,score:pick.nameScore*.55+pick.plat.score*.45,method:'name+plat',breakdown:pick.breakdown};
+}
+function pautaIsConfidentMatch(matchInfo,alternatives){
+  if(!matchInfo) return false;
+  if(matchInfo.method==='exact'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web') return true;
+  if(matchInfo.ambiguous) return false;
+  if(matchInfo.method==='name+plat-full'&&matchInfo.score>=.85) return true;
+  if(matchInfo.method==='name'&&matchInfo.score>=PAUTA_MATCH_CONFIDENT) return true;
+  const second=alternatives[1];
+  if(!second) return(matchInfo.score||0)>=PAUTA_MATCH_CONFIDENT;
+  return(matchInfo.score||0)>=PAUTA_MATCH_CONFIDENT&&((matchInfo.score||0)-(second.score||0))>=.1;
 }
 function pautaAlcSimilarity(entryAlc,fmtImp){
   const a=+entryAlc||0,b=+fmtImp||0;
@@ -3739,18 +3865,15 @@ function pautaAlcSimilarity(entryAlc,fmtImp){
   return .2;
 }
 function scorePautaEntryVsFormat(entry,fmt){
+  const nameScore=pautaScoreName(entry,fmt);
+  const plat=pautaPlatMatchAnalysis(entry,fmt);
   const sig=pautaEntrySignals(entry);
-  const fn=normPauta(fmt.name);
-  const nameScore=fn===sig.name?1:(()=>{
-    let s=matchScore(sig.name,fn);
-    if(sig.name&&fn&&(sig.name.includes(fn)||fn.includes(sig.name))) s=Math.max(s,.85);
-    return s;
-  })();
   const descScore=sig.desc?matchScore(sig.desc,normPauta(fmt.desc||'')):0;
-  const platScore=pautaPlatOverlapScore(sig.plats,fmt.plat||'');
   const alcScore=pautaAlcSimilarity(sig.alc,fmt.imp);
-  const score=nameScore*.4+descScore*.2+platScore*.25+alcScore*.15;
-  return{score,breakdown:{name:nameScore,desc:descScore,plat:platScore,alc:alcScore}};
+  const score=nameScore>=PAUTA_NAME_MIN_CONFIDENT
+    ?nameScore*.82+plat.score*.12+descScore*.04+alcScore*.02
+    :nameScore*.45+plat.score*.4+descScore*.1+alcScore*.05;
+  return{score,breakdown:{name:nameScore,desc:descScore,plat:plat.score,alc:alcScore,platFull:plat.fullMatch}};
 }
 function pautaRankAlternatives(entry,limit){
   const n=normPauta(entry.tipoContenido);
@@ -3760,7 +3883,11 @@ function pautaRankAlternatives(entry,limit){
     const r=scorePautaEntryVsFormat(entry,fmt);
     candidates.push({fmt,...r,method:'multi'});
   });
-  candidates.sort((a,b)=>b.score-a.score);
+  candidates.sort((a,b)=>{
+    if(b.breakdown.name!==a.breakdown.name) return b.breakdown.name-a.breakdown.name;
+    if(b.breakdown.platFull!==a.breakdown.platFull) return(b.breakdown.platFull?1:0)-(a.breakdown.platFull?1:0);
+    return b.score-a.score;
+  });
   const seen=new Set();
   const out=[];
   for(const c of candidates){
@@ -3775,6 +3902,7 @@ function pautaAliasMatch(n,entry){
   if(PAUTA_ALIASES[n]){
     const id=PAUTA_ALIASES[n];
     if(id==='__grafica_feed__') return resolveGraficaFeedMatch(entry,n);
+    if(id==='__nota_web__') return resolveNotaWebMatch(entry,n);
     const f=allFmts().find(x=>x.id===id);
     if(f) return{fmt:f,score:1,method:'alias'};
   }
@@ -3784,6 +3912,11 @@ function pautaAliasMatch(n,entry){
       if(id==='__grafica_feed__'){
         const g=resolveGraficaFeedMatch(entry,n);
         if(g) return g;
+        continue;
+      }
+      if(id==='__nota_web__'){
+        const nw=resolveNotaWebMatch(entry,n);
+        if(nw) return nw;
         continue;
       }
       const f=allFmts().find(x=>x.id===id);
@@ -3834,6 +3967,30 @@ function pickGraficaFeedId(entry){
   if(/meganoticias/.test(p)) return'grafica_mn';
   return'grafica_mega';
 }
+function pickNotaWebId(entry){
+  const mega=pautaPlatHasBrand(entry,'mega');
+  const mn=pautaPlatHasBrand(entry,'meganoticias');
+  if(mega&&mn) return'nota_mn_mega';
+  if(mn) return'nota_mn';
+  if(mega) return'nota_mega';
+  return'nota_mn_mega';
+}
+function notaWebAlternatives(entry,selectedId){
+  return PAUTA_NOTA_WEB_IDS.map(id=>{
+    const f=allFmts().find(x=>x.id===id);
+    if(!f) return null;
+    const r=scorePautaEntryVsFormat(entry,f);
+    return{fmt:f,score:id===selectedId?Math.max(r.score,.92):r.score,method:'nota-web',breakdown:r.breakdown};
+  }).filter(Boolean).sort((a,b)=>b.score-a.score);
+}
+function resolveNotaWebMatch(entry,n){
+  const selectedId=pickNotaWebId(entry);
+  const f=allFmts().find(x=>x.id===selectedId);
+  if(!f) return null;
+  const alternatives=notaWebAlternatives(entry,selectedId);
+  const best=alternatives.find(a=>a.fmt.id===selectedId)||{fmt:f,score:.95,method:'nota-web'};
+  return{fmt:best.fmt,score:best.score,method:'nota-web',breakdown:best.breakdown};
+}
 function graficaFeedAlternatives(entry,selectedId){
   return PAUTA_GRAFICA_FEED_IDS.map(id=>{
     const f=allFmts().find(x=>x.id===id);
@@ -3857,28 +4014,18 @@ function matchFormatoEntry(entry){
   if(alias){
     const alts=alias.method==='grafica-feed'
       ?graficaFeedAlternatives(entry,alias.fmt.id)
+      :alias.method==='nota-web'
+      ?notaWebAlternatives(entry,alias.fmt.id)
       :[alias];
     return{matchInfo:alias,alternatives:alts,needsReview:false};
   }
-  let f=pautaFmtCandidates().find(x=>normPauta(x.name)===n);
-  if(f) return{matchInfo:{fmt:f,score:1,method:'exact'},alternatives:[{fmt:f,score:1,method:'exact'}],needsReview:false};
-  f=pautaFmtCandidates().find(x=>{
-    const fn=normPauta(x.name);
-    if(!fn||fn.length<5) return false;
-    return n.includes(fn)||fn.includes(n);
-  });
-  if(f){
-    const hit={fmt:f,score:.85,method:'contains'};
-    if(hit.score<PAUTA_MATCH_CONFIDENT){
-      const alternatives=pautaRankAlternatives(entry);
-      return{matchInfo:hit,alternatives,needsReview:true};
-    }
-    return{matchInfo:hit,alternatives:[hit],needsReview:false};
-  }
+  const exact=pautaFmtCandidates().find(x=>normPauta(x.name)===n);
+  if(exact) return{matchInfo:{fmt:exact,score:1,method:'exact'},alternatives:[{fmt:exact,score:1,method:'exact'}],needsReview:false};
+  const resolved=pautaResolveMatch(entry);
   const alternatives=pautaRankAlternatives(entry);
-  const best=alternatives[0]||null;
-  const matchInfo=best?{fmt:best.fmt,score:best.score,method:best.method,breakdown:best.breakdown}:null;
-  return{matchInfo,alternatives,needsReview:!matchInfo||matchInfo.score<PAUTA_MATCH_CONFIDENT};
+  if(!resolved) return{matchInfo:null,alternatives,needsReview:true};
+  const matchInfo=resolved;
+  return{matchInfo,alternatives,needsReview:!pautaIsConfidentMatch(matchInfo,alternatives)};
 }
 function matchFormato(tipoContenido){
   return matchFormatoEntry({tipoContenido,plats:[],tematica:'',totalAlc:0}).matchInfo;
@@ -3890,8 +4037,9 @@ function pautaFmtHint(fmt,breakdown){
   if(breakdown){
     const hints=[];
     if(breakdown.name>=.5) hints.push('nombre');
+    if(breakdown.platFull) hints.push('plataformas ✓');
+    else if(breakdown.plat>=.5) hints.push('plataformas');
     if(breakdown.desc>=.35) hints.push('descripción');
-    if(breakdown.plat>=.35) hints.push('plataformas');
     if(breakdown.alc>=.5) hints.push('alcance');
     if(hints.length) bits.push('coincide en: '+hints.join(', '));
   }
