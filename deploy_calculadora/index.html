@@ -3525,6 +3525,8 @@ const PAUTA_ALIASES={
   'vivencial de marca':'vivencial',
   'vivencial en terreno':'vivencial',
   'follow meganoticias':'follow_mn',
+  'informativo previo':'__capsula_mn__',
+  'capsula informativa':'__capsula_mn__',
   'capsula informativa meganoticias':'capsula_info_mn',
   'informativo meganoticias':'capsula_info_mn',
   'desafio de marca':'desafio_mega',
@@ -3536,6 +3538,7 @@ const PAUTA_ALIASES={
 };
 const PAUTA_GRAFICA_FEED_IDS=['grafica_mega','grafica_mn','grafica_mn_mega'];
 const PAUTA_NOTA_WEB_IDS=['nota_mega','nota_mn','nota_mn_mega'];
+const PAUTA_CAPSULA_MN_ID='capsula_info_mn';
 function pautaCellStr(v){
   if(v==null||v==='') return '';
   if(typeof v==='object'){
@@ -3743,19 +3746,74 @@ function pautaPlatKeysFromText(s){
   });
   return[...keys];
 }
+function pautaFmtPlatLines(fmt){
+  if(fmt.pautaPlats&&fmt.pautaPlats.length)
+    return fmt.pautaPlats.map(p=>normPauta(p.plat)).filter(Boolean);
+  return pautaPlatLinesFromText(fmt.plat||'');
+}
+function pautaPlatNetworks(s){
+  const n=normPauta(s);
+  const nets=[];
+  if(/instagram/.test(n)) nets.push('instagram');
+  if(/tiktok/.test(n)) nets.push('tiktok');
+  if(/facebook/.test(n)) nets.push('facebook');
+  if(/shorts/.test(n)||/youtube/.test(n)) nets.push('shorts');
+  if(/linkedin/.test(n)) nets.push('linkedin');
+  if(/twitter/.test(n)) nets.push('twitter');
+  return nets;
+}
+function pautaNetworksOverlap(a,b){
+  const an=pautaPlatNetworks(a),bn=pautaPlatNetworks(b);
+  if(!an.length||!bn.length) return false;
+  return an.some(x=>bn.includes(x));
+}
 function pautaPlatLineMatches(fmtLine,entryLine){
   const a=normPauta(fmtLine),b=normPauta(entryLine);
   if(!a||!b) return false;
-  if(a===b||a.includes(b)||b.includes(a)) return true;
-  const fk=pautaPlatKeysFromText(fmtLine),ek=pautaPlatKeysFromText(entryLine);
-  if(ek.length&&fk.length) return ek.every(k=>fk.includes(k));
-  return false;
+  if(a===b) return true;
+  const entryMn=platLineHasMn(b);
+  const entryMega=platLineHasMega(b);
+  const fmtMn=platLineHasMn(a);
+  const fmtMega=platLineHasMega(a);
+  if(entryMn&&!fmtMn) return false;
+  if(entryMega&&!entryMn&&!fmtMega) return false;
+  if(fmtMn&&!entryMn&&entryMega) return false;
+  if(fmtMega&&!entryMega&&entryMn) return false;
+  return pautaNetworksOverlap(a,b);
+}
+function pautaEntryBrandScope(entry){
+  const lines=pautaEntryPlatLines(entry);
+  if(!lines.length) return'unknown';
+  const anyMn=lines.some(platLineHasMn);
+  const anyMega=lines.some(platLineHasMega);
+  if(anyMn&&!anyMega) return'meganoticias';
+  if(anyMega&&!anyMn) return'mega';
+  if(anyMn&&anyMega) return'both';
+  return'unknown';
+}
+function pautaFmtBrandScope(fmt){
+  const lines=pautaFmtPlatLines(fmt);
+  if(!lines.length) return'unknown';
+  const anyMn=lines.some(platLineHasMn);
+  const anyMega=lines.some(platLineHasMega);
+  if(anyMn&&!anyMega) return'meganoticias';
+  if(anyMega&&!anyMn) return'mega';
+  if(anyMn&&anyMega) return'both';
+  return'unknown';
+}
+function pautaBrandScopeCompatible(entryScope,fmtScope){
+  if(entryScope==='unknown'||fmtScope==='unknown') return true;
+  if(entryScope==='both'||fmtScope==='both') return true;
+  return entryScope===fmtScope;
 }
 function pautaPlatMatchAnalysis(entry,fmt){
   const entryLines=pautaEntryPlatLines(entry);
-  const fmtLines=pautaPlatLinesFromText(fmt.plat||'');
-  if(!entryLines.length) return{fullMatch:false,entryCoverage:0,fmtCoverage:0,score:0,matched:0,total:0};
-  if(!fmtLines.length) return{fullMatch:false,entryCoverage:0,fmtCoverage:0,score:0,matched:0,total:entryLines.length};
+  const fmtLines=pautaFmtPlatLines(fmt);
+  const entryScope=pautaEntryBrandScope(entry);
+  const fmtScope=pautaFmtBrandScope(fmt);
+  const brandOk=pautaBrandScopeCompatible(entryScope,fmtScope);
+  if(!entryLines.length) return{fullMatch:false,entryCoverage:0,fmtCoverage:0,score:0,matched:0,total:0,brandOk};
+  if(!fmtLines.length||!brandOk) return{fullMatch:false,entryCoverage:0,fmtCoverage:0,score:0,matched:0,total:entryLines.length,brandOk};
   let matched=0;
   entryLines.forEach(el=>{
     if(fmtLines.some(fl=>pautaPlatLineMatches(fl,el))) matched++;
@@ -3765,7 +3823,7 @@ function pautaPlatMatchAnalysis(entry,fmt){
   const fmtCoverage=fmtMatched/fmtLines.length;
   const fullMatch=entryCoverage===1&&fmtCoverage===1;
   const score=fullMatch?1:entryCoverage*.65+fmtCoverage*.35;
-  return{fullMatch,entryCoverage,fmtCoverage,score,matched,total:entryLines.length};
+  return{fullMatch,entryCoverage,fmtCoverage,score,matched,total:entryLines.length,brandOk};
 }
 function pautaPlatOverlapScore(entryPlats,fmtPlat){
   const ep=new Set();
@@ -3781,9 +3839,12 @@ function pautaPlatOverlapScore(entryPlats,fmtPlat){
 function pautaScoreName(entry,fmt){
   const sig=pautaEntrySignals(entry);
   const fn=normPauta(fmt.name);
-  if(fn===sig.name) return 1;
-  let s=matchScore(sig.name,fn);
-  if(sig.name&&fn&&(sig.name.includes(fn)||fn.includes(sig.name))) s=Math.max(s,.85);
+  const n=sig.name;
+  if(fn===n) return 1;
+  let s=matchScore(n,fn);
+  if(n&&fn&&(n.includes(fn)||fn.includes(n))) s=Math.max(s,.85);
+  if(/informativo/.test(n)&&/previo|previa/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.88);
+  if(/capsula/.test(n)&&/informativ/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.9);
   return s;
 }
 function pautaNameConfident(best,second){
@@ -3795,9 +3856,12 @@ function pautaNameConfident(best,second){
 }
 function pautaCandidatesByName(entry){
   const n=normPauta(entry.tipoContenido);
+  const entryScope=pautaEntryBrandScope(entry);
   return pautaFmtCandidates()
     .filter(fmt=>{
       if((n.includes('grafica')||n.includes('carrusel'))&&fmt.id==='grafica_dto'&&!/descuento|dto|oferta/.test(n)) return false;
+      if(entryScope==='meganoticias'&&pautaFmtBrandScope(fmt)==='mega') return false;
+      if(entryScope==='mega'&&pautaFmtBrandScope(fmt)==='meganoticias') return false;
       return true;
     })
     .map(fmt=>{
@@ -3810,8 +3874,8 @@ function pautaCandidatesByName(entry){
     })
     .filter(c=>c.nameScore>0)
     .sort((a,b)=>{
-      if(b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
       if(b.plat.fullMatch!==a.plat.fullMatch) return(b.plat.fullMatch?1:0)-(a.plat.fullMatch?1:0);
+      if(b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
       if(b.plat.entryCoverage!==a.plat.entryCoverage) return b.plat.entryCoverage-a.plat.entryCoverage;
       return b.plat.fmtCoverage-a.plat.fmtCoverage;
     });
@@ -3845,7 +3909,7 @@ function pautaResolveMatch(entry){
 }
 function pautaIsConfidentMatch(matchInfo,alternatives){
   if(!matchInfo) return false;
-  if(matchInfo.method==='exact'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web') return true;
+  if(matchInfo.method==='exact'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn') return true;
   if(matchInfo.ambiguous) return false;
   if(matchInfo.method==='name+plat-full'&&matchInfo.score>=.85) return true;
   if(matchInfo.method==='name'&&matchInfo.score>=PAUTA_MATCH_CONFIDENT) return true;
@@ -3877,15 +3941,18 @@ function scorePautaEntryVsFormat(entry,fmt){
 }
 function pautaRankAlternatives(entry,limit){
   const n=normPauta(entry.tipoContenido);
+  const entryScope=pautaEntryBrandScope(entry);
   const candidates=[];
   pautaFmtCandidates().forEach(fmt=>{
     if((n.includes('grafica')||n.includes('carrusel'))&&fmt.id==='grafica_dto'&&!/descuento|dto|oferta/.test(n)) return;
+    if(entryScope==='meganoticias'&&pautaFmtBrandScope(fmt)==='mega') return;
+    if(entryScope==='mega'&&pautaFmtBrandScope(fmt)==='meganoticias') return;
     const r=scorePautaEntryVsFormat(entry,fmt);
     candidates.push({fmt,...r,method:'multi'});
   });
   candidates.sort((a,b)=>{
-    if(b.breakdown.name!==a.breakdown.name) return b.breakdown.name-a.breakdown.name;
     if(b.breakdown.platFull!==a.breakdown.platFull) return(b.breakdown.platFull?1:0)-(a.breakdown.platFull?1:0);
+    if(b.breakdown.name!==a.breakdown.name) return b.breakdown.name-a.breakdown.name;
     return b.score-a.score;
   });
   const seen=new Set();
@@ -3903,6 +3970,7 @@ function pautaAliasMatch(n,entry){
     const id=PAUTA_ALIASES[n];
     if(id==='__grafica_feed__') return resolveGraficaFeedMatch(entry,n);
     if(id==='__nota_web__') return resolveNotaWebMatch(entry,n);
+    if(id==='__capsula_mn__') return resolveCapsulaMnMatch(entry,n);
     const f=allFmts().find(x=>x.id===id);
     if(f) return{fmt:f,score:1,method:'alias'};
   }
@@ -3919,6 +3987,11 @@ function pautaAliasMatch(n,entry){
         if(nw) return nw;
         continue;
       }
+      if(id==='__capsula_mn__'){
+        const cm=resolveCapsulaMnMatch(entry,n);
+        if(cm) return cm;
+        continue;
+      }
       const f=allFmts().find(x=>x.id===id);
       if(f) return{fmt:f,score:.95,method:'alias-partial'};
     }
@@ -3926,6 +3999,10 @@ function pautaAliasMatch(n,entry){
   if(/dinamica/.test(n)&&/rostro/.test(n)){
     const f=allFmts().find(x=>x.id==='dinamicas');
     if(f) return{fmt:f,score:.95,method:'dinamica-rostro'};
+  }
+  if((/informativo/.test(n)||/capsula/.test(n))&&(/previo|previa|informativ/.test(n)||/capsula/.test(n))){
+    const cm=resolveCapsulaMnMatch(entry,n);
+    if(cm) return cm;
   }
   if((/grafica/.test(n)||/carrusel/.test(n))&&!/descuento|dto|oferta|anuncio/.test(n)){
     const g=resolveGraficaFeedMatch(entry,n);
@@ -3966,6 +4043,14 @@ function pickGraficaFeedId(entry){
   if(/meganoticias/.test(p)&&/mega/.test(p.replace(/meganoticias/g,''))) return'grafica_mn_mega';
   if(/meganoticias/.test(p)) return'grafica_mn';
   return'grafica_mega';
+}
+function resolveCapsulaMnMatch(entry,n){
+  const f=allFmts().find(x=>x.id===PAUTA_CAPSULA_MN_ID);
+  if(!f) return null;
+  const plat=pautaPlatMatchAnalysis(entry,f);
+  const r=scorePautaEntryVsFormat(entry,f);
+  const score=Math.max(r.score,.9,plat.fullMatch?1:.85);
+  return{fmt:f,score,method:'capsula-mn',breakdown:r.breakdown};
 }
 function pickNotaWebId(entry){
   const mega=pautaPlatHasBrand(entry,'mega');
@@ -4016,6 +4101,8 @@ function matchFormatoEntry(entry){
       ?graficaFeedAlternatives(entry,alias.fmt.id)
       :alias.method==='nota-web'
       ?notaWebAlternatives(entry,alias.fmt.id)
+      :alias.method==='capsula-mn'
+      ?[{fmt:alias.fmt,score:alias.score,method:'capsula-mn',breakdown:alias.breakdown}]
       :[alias];
     return{matchInfo:alias,alternatives:alts,needsReview:false};
   }
