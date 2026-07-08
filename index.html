@@ -423,6 +423,21 @@ td.inv{color:var(--cy);font-weight:700}
   .card{background:#fff!important;border:1px solid #ccc!important;break-inside:avoid}
   th{background:#003087!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+/* ── Export PDF (maqueta Excel, horizontal ajustada a los extremos) ── */
+#pdfExportRoot{display:none;}
+#pdfExportRoot,#pdfExportRoot *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box;}
+#pdfExportRoot table{width:100%;border-collapse:collapse;table-layout:fixed;font-family:Arial,Helvetica,sans-serif;}
+#pdfExportRoot td,#pdfExportRoot th{border:1px solid #C0C8D4;padding:2px 4px;line-height:1.15;word-wrap:break-word;overflow-wrap:anywhere;}
+#pdfExportRoot tr{break-inside:avoid;page-break-inside:avoid;}
+#pdfExportRoot tr.nba{break-after:avoid;page-break-after:avoid;}
+@media print{
+  @page{size:A4 landscape;margin:4mm;}
+  html,body{margin:0!important;padding:0!important;}
+  body.pdf-mode>.shell,body.pdf-mode>.toast,body.pdf-mode>.pauta-overlay{display:none!important;}
+  body.pdf-mode #pdfExportRoot{display:block!important;width:100%;}
+  body.pdf-mode{background:#fff!important;}
+}
 </style>
 </head>
 <body>
@@ -595,7 +610,7 @@ td.inv{color:var(--cy);font-weight:700}
     </div>
     <div class="btn-row">
       <button class="btn btn-sec" onclick="exportarExcel()">📊 Excel</button>
-      <button class="btn btn-sec" onclick="window.print()">🖨 PDF</button>
+      <button class="btn btn-sec" onclick="exportarPDF()">🖨 PDF</button>
     </div>
   </div>
   <div class="hist-card">
@@ -3517,6 +3532,375 @@ async function exportarExcel(){
     showToast('Error al generar Excel: '+e.message.slice(0,50));
   }finally{
     if(btn){btn.textContent='📊 Excel';btn.disabled=false;}
+  }
+}
+
+// ── Export PDF (misma maqueta del Excel, horizontal, ajustada a los extremos) ─
+function exportarPDF(){
+  const rows=getRows();
+  if(!rows.length){showToast('Sin formatos activos');return;}
+
+  const btn=document.querySelector('[onclick="exportarPDF()"]');
+  if(btn){btn.textContent='⏳ Generando…';btn.disabled=true;}
+
+  try{
+    const dtoG=Math.max(0,+(document.getElementById('dtoGlobal')?.value)||0);
+    const tNeto=rows.reduce((a,r)=>a+r.neto,0);
+    const tBruto=rows.reduce((a,r)=>a+r.bruto,0);
+    const {final:tFinal,dtoGM}=invFinalConDtoGlobal(tNeto,dtoG);
+    const tImp=rows.reduce((a,r)=>a+r.imp,0);
+    const tAlc=calcAlcSainsbury(rows);
+    const cpm=tImp>0?(tFinal/tImp)*1000:0;
+    const cli=gv('cliente')||'Cliente', cam=gv('campania')||'Campaña';
+    const hoy=new Date().toLocaleDateString('es-CL');
+
+    const f0=n=>{const s=Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');return Math.round(n)<0?'-'+s:s;};
+    const money=n=>'$'+f0(n);
+    const esc=escHtml;
+
+    const C={blue:'#69AEEC',lightBlue:'#4A90D9',white:'#FFFFFF',black:'#1A1A2E',
+      orange:'#E67E22',green:'#1A8F3C',grayLight:'#F2F4F7',grayDark:'#8496AF',
+      sub1:'#E8F4FB',sub2:'#D0E9F7',blue2:'#4A90D9',blue3:'#3570A0',
+      darkBlue:'#1A3A6B',money:'#5A5A5A',dto:'#CC6600',ctr:'#8B6914'};
+    const stripes=[C.white,C.grayLight];
+    const subs=[C.sub1,C.sub2];
+
+    const COL_W=[14,20,18,28,12,6,18,12,12,16,8,8,8,18];
+    const NCOLS=14;
+    const wSum=COL_W.reduce((a,b)=>a+b,0);
+    const colgroup='<colgroup>'+COL_W.map(w=>`<col style="width:${(w/wSum*100).toFixed(3)}%">`).join('')+'</colgroup>';
+
+    // Helper para una celda
+    function td(val,{cs=1,bg,fg=C.black,bold=false,align='left',italic=false,size=8,va='middle',border=true}={}){
+      let st=`color:${fg};text-align:${align};font-size:${size}px;vertical-align:${va};`;
+      if(bg) st+=`background:${bg};`;
+      if(bold) st+='font-weight:700;';
+      if(italic) st+='font-style:italic;';
+      if(!border) st+='border:none;';
+      return `<td colspan="${cs}" style="${st}">${val===''||val==null?'&nbsp;':val}</td>`;
+    }
+
+    let idx=0;
+    const bodyRows=[];
+
+    function sectionHeader(label,{bg=C.sub1,fg=C.blue,align='left',bold=true,size=8}={}){
+      bodyRows.push('<tr class="nba">'+td(esc(label),{cs:NCOLS,bg,fg,align,bold,size})+'</tr>');
+    }
+
+    function dataRow(row,sectionLabel){
+      const bg=row.infTotalRow?'#E8F4FC':(row.webPlatRadio?'#FFF3E8':stripes[idx%2]);
+      const bgS=row.infDetailRow?'#F5F5F5':(row.webPlatRadio?'#FFF8F0':subs[idx%2]);
+      const _desc=getDescExcel(row.f);
+      const metaTag=getFmtMetaTag(row.f,row.f.id);
+      const descFull=metaTag?('['+metaTag+'] '+_desc):_desc;
+      let platVal=(!row.infDetailRow&&!row.infTotalRow)?webPlatExcelDetail(row):'';
+      if(row.pautaPlatVal) platVal=row.pautaPlatVal;
+      else if(row.pautaPlats&&row.pautaPlats.length) platVal=pautaPlatsLabel(row.pautaPlats);
+
+      const medioPre=row.infDetailRow||row.infTotalRow?'':(
+        row.pautaMedio
+          ? row.pautaMedio
+          : row.webPlatRadio
+          ? 'Plataformas Radio — formato web'
+          : row.radioStation
+            ? ('Radio '+radioCap(row.radioStation))
+            : row.f.radioType==='radio'
+            ? ('Radio '+radioCap(row.s.radio))
+            : (row.f.progType==='programa'
+              ? (metaTag||'Programa o Rostro')
+              : row.f.rostroField
+              ? (metaTag||'Rostro')
+              : (row.webPlat
+                ? 'Web Mega / Meganoticias'
+                : sectionLabel.replace(' & Contenido Digital','').replace(', Display & Señal en Vivo','')))
+      );
+
+      let cells;
+      if(row.infDetailRow){
+        cells=[
+          td('Influencers',{bg,bold:true,align:'center'}),
+          td(esc(row.infName),{bg,bold:true,align:'center'}),
+          td(esc(row.f.marca||'A definir'),{bg,align:'center'}),
+          td('',{bg}),
+          td('',{bg,align:'center'}),
+          td(1,{bg,bold:true,align:'center'}),
+          td(esc(row.infPlat||'—'),{bg:bgS,align:'left'}),
+          td(row.infReach>0?f0(row.infReach):'',{bg:bgS,align:'right'}),
+          td(row.infReach>0?f0(row.infReach):'',{bg,align:'right'}),
+          td('',{bg,align:'right'}),
+          td('',{bg,align:'center'}),
+          td('',{bg,align:'center'}),
+          td('',{bg,align:'center'}),
+          td('',{bg,align:'right'}),
+        ];
+      } else if(row.infTotalRow){
+        const nInf=row.s.influencers.length;
+        cells=[
+          td('Influencers',{bg,bold:true,align:'center'}),
+          td('TOTAL INFLUENCERS',{bg,fg:C.darkBlue,bold:true,align:'center',size:9}),
+          td(esc(row.f.marca||'A definir'),{bg,align:'center'}),
+          td(esc(_desc),{bg,align:'left',italic:true}),
+          td('',{bg,align:'center'}),
+          td(1,{bg,bold:true,align:'center'}),
+          td(esc(nInf+' influencer'+(nInf!==1?'s':'')),{bg:bgS,align:'left'}),
+          td(row.alc>0?f0(row.alc):'',{bg:bgS,align:'right'}),
+          td(row.imp>0?f0(row.imp):'',{bg,align:'right'}),
+          td(money(row.bruto),{bg,fg:C.money,align:'right'}),
+          td(row.s.dto>0?row.s.dto+' %':'',{bg,fg:row.s.dto>0?C.dto:C.grayDark,align:'center'}),
+          td('',{bg,align:'center'}),
+          td('',{bg,align:'center'}),
+          td(money(row.neto),{bg,fg:C.darkBlue,bold:true,align:'right',size:9}),
+        ];
+      } else {
+        const _id=row.f.id;
+        const ctrVal=(()=>{
+          if(_id==='advideo')return'2.5%';
+          if(_id==='dai_sev')return'0.75%';
+          if(_id==='itt')return'2%';
+          if(_id==='skin_video_cpm')return'1%';
+          if(_id==='skin')return'1%';
+          if(_id==='banner_display')return'1%';
+          if(_id==='ig_social_extend')return'1%';
+          if(_id==='rich_media')return'1%';
+          return'—';
+        })();
+        const vtrVal=(()=>{
+          if(_id==='advideo')return'78%';
+          if(_id==='dai_sev')return'95%';
+          if(_id==='itt_video')return'40%';
+          if(_id==='skin_video_cpm')return'50%';
+          return'—';
+        })();
+        const refCell=row.f.ref
+          ? `<a href="${esc(row.f.ref)}" style="color:${C.lightBlue};text-decoration:underline;font-style:italic">Ver ejemplo →</a>`
+          : '';
+        const platFg=(row.webPlatRadio||row.radioStation)?C.dto:C.black;
+        cells=[
+          td(esc(medioPre),{bg,bold:true,align:'center',va:'top'}),
+          td(esc(row.f.name),{bg,bold:true,align:'center',va:'top'}),
+          td(esc(row.f.marca||''),{bg,align:'center',va:'top'}),
+          td(esc(descFull),{bg,align:'left',italic:true,va:'top'}),
+          td(refCell,{bg,align:'center'}),
+          td(row.s.qty,{bg,bold:true,align:'center'}),
+          td(esc(platVal),{bg:bgS,fg:platFg,align:'left',va:'top'}),
+          td(row.alc>0?f0(row.alc):'',{bg:bgS,align:'right'}),
+          td(row.imp>0?f0(row.imp):'',{bg,align:'right'}),
+          td(money(row.bruto),{bg,fg:C.money,align:'right'}),
+          td(row.s.dto>0?row.s.dto+' %':'',{bg,fg:row.s.dto>0?C.dto:C.grayDark,align:'center'}),
+          td(ctrVal==='—'?'':ctrVal,{bg,fg:ctrVal!=='—'?C.ctr:C.grayDark,align:'center'}),
+          td(vtrVal==='—'?'':vtrVal,{bg,fg:vtrVal!=='—'?C.blue2:C.grayDark,align:'center'}),
+          td(money(row.neto),{bg,fg:C.darkBlue,bold:true,align:'right',size:9}),
+        ];
+      }
+      bodyRows.push('<tr>'+cells.join('')+'</tr>');
+      idx++;
+    }
+
+    function appendSection(label,catRows,opts){
+      opts=opts||{};
+      if(!catRows.length) return;
+      if(!opts.skipHeader) sectionHeader(label,opts.headerStyle);
+      catRows.forEach(r=>dataRow(r,label));
+    }
+
+    // Encabezados de tabla
+    const hdrs=['MEDIO','TIPO DE CONTENIDO','PRESENCIA DE MARCA','TEMÁTICA / DESCRIPCIÓN',
+                'REFERENCIA','CANT.','PLATAFORMA DETALLE','ALCANCE NETO','IMPRESIONES',
+                'VALOR BRUTO','DTO %','CTR EST.','VTR EST.','INV. NETA FINAL'];
+    const headerRow='<tr class="nba">'+hdrs.map((h,i)=>
+      `<th style="background:${i===13?C.darkBlue:C.blue};color:#fff;font-weight:700;text-align:center;font-size:8px;vertical-align:middle">${esc(h)}</th>`
+    ).join('')+'</tr>';
+
+    // Filas de datos por secciones (misma lógica que Excel)
+    if(PAUTA_IMPORT_META.hasPautaSections&&PAUTA_IMPORT_META.etapas.length){
+      PAUTA_IMPORT_META.etapas.forEach(etapa=>{
+        const etapaRows=rows.filter(r=>(STATE[r.f.id]?.pautaEtapa||r.pautaEtapa)===etapa);
+        if(!etapaRows.length) return;
+        sectionHeader(etapa,{bg:'#000000',fg:C.white,align:'center',bold:true,size:9});
+        appendSection(etapa,etapaRows,{skipHeader:true});
+      });
+    } else {
+      catsInExportOrder().forEach(cat=>{
+        const catRows=rows.filter(r=>cat.fmts.find(f=>f.id===r.f.id));
+        if(!catRows.length) return;
+        if(cat.id==='web'){
+          appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',catRows.filter(r=>!r.webPlatRadio));
+          appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',catRows.filter(r=>r.webPlatRadio));
+          return;
+        }
+        appendSection(excelSectionLabel(cat),catRows);
+      });
+    }
+
+    // ── Secciones de totales/tarjetas ──────────────────────────────
+    const blocks=[];
+    function spacer(){blocks.push(`<tr><td colspan="${NCOLS}" style="border:none;height:8px">&nbsp;</td></tr>`);}
+    function secTitle(label,bg,fg=C.white,size=11){
+      blocks.push('<tr class="nba">'+td(esc(label),{cs:NCOLS,bg,fg,bold:true,align:'center',size})+'</tr>');
+    }
+    function cards(cardsData,spans){
+      // etiquetas
+      let r1='<tr class="nba">';
+      cardsData.forEach(([lbl,,color],i)=>{
+        const [cs,ce]=spans[i];
+        r1+=td(esc(lbl),{cs:ce-cs+1,bg:color,fg:C.white,bold:true,align:'center',size:8});
+      });
+      r1+='</tr>';
+      // valores
+      let r2='<tr class="nba">';
+      cardsData.forEach(([,val,color],i)=>{
+        const [cs,ce]=spans[i];
+        r2+=`<td colspan="${ce-cs+1}" style="background:${C.white};color:${color};font-weight:700;text-align:center;font-size:15px;border:1px solid ${color}">${esc(val)}</td>`;
+      });
+      r2+='</tr>';
+      // sub
+      let r3='<tr>';
+      cardsData.forEach(([,,,sub],i)=>{
+        const [cs,ce]=spans[i];
+        r3+=td(esc(sub||''),{cs:ce-cs+1,bg:C.grayLight,fg:C.grayDark,italic:true,align:'center',size:7});
+      });
+      r3+='</tr>';
+      blocks.push(r1,r2,r3);
+    }
+
+    spacer();
+
+    if(dtoG>0){
+      secTitle('DESCUENTO POR VOLUMEN SOBRE EL TOTAL DE LA PAUTA',C.orange);
+      spacer();
+      cards([
+        ['SUBTOTAL NETO (formatos)','$'+f0(tNeto),C.blue,'Tras descuentos individuales por formato'],
+        ['DTO. VOLUMEN ('+dtoG+'%)','-$'+f0(dtoGM),C.orange,'Descuento extra por contratar el paquete completo'],
+        ['INVERSIÓN FINAL','$'+f0(tFinal),C.green,'Total con dto. volumen aplicado'],
+      ],[[1,4],[5,9],[10,14]]);
+      spacer();
+    }
+
+    secTitle('MÉTRICAS DE LA CAMPAÑA',C.blue);
+    spacer();
+    const platsSet=new Set(rows.flatMap(r=>{
+      if(r.webPlat) return [webPlatLabel(r.webPlat)];
+      return (r.f.plat||'').split('·').map(p=>p.trim().split(' ')[0]).filter(Boolean);
+    }));
+    const platsStr=[...platsSet].slice(0,6).join(' · ');
+    cards([
+      ['IMPRESIONES TOTALES',f0(tImp),C.blue,'Suma acumulada todos los formatos'],
+      ['ALCANCE ESTIMADO','~'+f0(tAlc)+' ('+pctAlc(tAlc)+')',C.lightBlue,'Alcance neto multiplataforma · '+pctAlc(tAlc)+' del universo digital ('+f0(U_SAINSBURY)+')'],
+      ['CPM FINAL','$'+f0(cpm),C.green,'Costo por mil impresiones de la pauta'],
+    ],[[1,4],[5,8],[9,14]]);
+    cards([
+      ['PLATAFORMAS',[...platsSet].length+' canales',C.blue3,platsStr||'—'],
+      ['FORMATOS ACTIVOS',String(rows.length),C.blue,'Formatos incluidos en la pauta'],
+      ['DURACIÓN',gv('semanas')+' semana(s)',C.blue3,'Período de la campaña'],
+    ],[[1,4],[5,8],[9,14]]);
+    spacer();
+
+    // Comparativo tarifa vs inversión final
+    secTitle('COMPARATIVO TARIFA vs. INVERSIÓN FINAL',C.grayDark,C.white,10);
+    {
+      const dtoTxt=tBruto>0?((1-(tFinal/tBruto))*100).toFixed(1)+'%':'—';
+      let l='<tr class="nba">';
+      l+=td('TARIFA BRUTA',{cs:5,bg:C.blue,fg:C.white,bold:true,align:'center'});
+      l+=td('DESCUENTO TOTAL '+dtoTxt,{cs:4,bg:C.orange,fg:C.white,bold:true,align:'center'});
+      l+=td('INVERSIÓN FINAL',{cs:5,bg:C.green,fg:C.white,bold:true,align:'center'});
+      l+='</tr>';
+      let v='<tr class="nba">';
+      v+=`<td colspan="5" style="background:${C.white};color:${C.blue};font-weight:700;text-align:center;font-size:18px;border:1px solid ${C.blue}">$${f0(tBruto)}</td>`;
+      v+=`<td colspan="4" style="background:${C.white};color:${C.orange};font-weight:700;text-align:center;font-size:18px;border:1px solid ${C.orange}">${tBruto>0?'-'+((1-(tFinal/tBruto))*100).toFixed(1)+'%':'—'}</td>`;
+      v+=`<td colspan="5" style="background:${C.white};color:${C.green};font-weight:700;text-align:center;font-size:18px;border:1px solid ${C.green}">$${f0(tFinal)}</td>`;
+      v+='</tr>';
+      let s='<tr>';
+      s+=td('CPM $'+f0(tImp>0?tBruto/tImp*1000:0),{cs:5,bg:C.grayLight,fg:C.blue,italic:true,align:'center',size:8});
+      s+=td('Ahorro: $'+f0(tBruto-tFinal)+' CLP',{cs:4,bg:C.grayLight,fg:C.orange,italic:true,align:'center',size:8});
+      s+=td('CPM $'+f0(cpm),{cs:5,bg:C.grayLight,fg:C.green,italic:true,align:'center',size:8});
+      s+='</tr>';
+      blocks.push(l,v,s);
+    }
+    spacer();
+
+    // Términos y condiciones
+    secTitle('TÉRMINOS Y CONDICIONES',C.blue,C.white,10);
+    ['▸  Los valores indicados en esta propuesta no incluyen IVA.',
+     '▸  Esta propuesta tiene una validez de 15 días corridos desde la fecha de su emisión.',
+     '▸  Los costos pueden variar según requerimientos especiales: uso de rostros específicos, locaciones, producción adicional u otros elementos no contemplados en la pauta base.',
+     '▸  La ejecución de los formatos queda sujeta a disponibilidad editorial y de agenda de los equipos de Megamedia.',
+     '▸  Las fechas de publicación serán coordinadas en conjunto con el cliente una vez confirmada la pauta.',
+     '▸  Contacto comercial: '+(gv('emailEjec')||'gabriel.rojas@megamedia.cl'),
+    ].forEach((line,i)=>{
+      blocks.push('<tr>'+td(esc(line),{cs:NCOLS,bg:i%2===0?C.white:C.grayLight,align:'left',size:8})+'</tr>');
+    });
+    spacer();
+
+    // Universo digital
+    secTitle('UNIVERSO DIGITAL DE REFERENCIA',C.grayDark,C.white,10);
+    [{text:'Universo Digital: '+f0(U_SAINSBURY)+' personas',bold:true,bg:C.sub1},
+     {text:'Considera a todas las personas mayores de 18 años con acceso a redes sociales en Chile (fuente: estimación Megamedia 2026).',bold:false,bg:C.sub2},
+    ].forEach(({text,bold,bg})=>{
+      blocks.push('<tr>'+td(esc(text),{cs:NCOLS,bg,align:'left',bold,size:8})+'</tr>');
+    });
+    spacer();
+
+    // Nota metodológica
+    secTitle('NOTA METODOLÓGICA — CÁLCULO DE ALCANCE',C.grayDark,C.white,10);
+    ['El alcance neto total (~'+f0(tAlc)+' usuarios únicos · '+pctAlc(tAlc)+' del universo digital) se calcula mediante el modelo de alcance neto multiplataforma de Megamedia.',
+     'Paso 1: alcance neto por plataforma y por repetición del formato (impresiones ÷ frecuencia 1.2 en RRSS; 1.3 en Web). Paso 2: Fórmula de Sainsbury sobre los alcances netos de cada plataforma/repetición dentro del formato, y sobre el total de la pauta entre todos los formatos activos (universo de referencia: '+f0(U_SAINSBURY)+' personas mayores de 18 años con acceso a Internet en Chile).',
+     'El alcance real puede variar según la fecha de publicación, el comportamiento algorítmico y el nivel de interacción orgánica de la audiencia.',
+    ].forEach((line,i)=>{
+      blocks.push('<tr>'+td(esc(line),{cs:NCOLS,bg:i%2===0?C.sub1:C.sub2,align:'left',italic:i===2,size:8})+'</tr>');
+    });
+    spacer();
+
+    // Footer
+    blocks.push('<tr>'+td('Valores no incluyen IVA  ·  Propuesta válida 15 días  ·  '+(gv('emailEjec')||'gabriel.rojas@megamedia.cl')+'  ·  Megamedia © 2026',{cs:NCOLS,bg:C.blue,fg:C.white,italic:true,align:'center',size:8})+'</tr>');
+
+    // ── Encabezado (banda negra con logo + título + info) ──────────
+    const logoSrc=document.querySelector('.hdr-l img')?.src||'';
+    const titleBar='<tr class="nba"><td colspan="'+NCOLS+'" style="border:none;padding:0">'
+      +'<div style="background:#000;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
+        +(logoSrc?`<img src="${logoSrc}" style="height:34px;width:auto"/>`:'<span></span>')
+        +'<div style="flex:1;text-align:center;font-size:17px;font-weight:800;letter-spacing:.5px">PROPUESTA COMERCIAL DIGITAL MEGAMEDIA</div>'
+        +'<span style="width:120px"></span>'
+      +'</div></td></tr>';
+    const infoLabels='<tr class="nba">'
+      +td('CLIENTE',{cs:3,bg:C.grayLight,fg:C.grayDark,bold:true,align:'center',size:8})
+      +td('CAMPAÑA',{cs:3,bg:C.grayLight,fg:C.grayDark,bold:true,align:'center',size:8})
+      +td('DURACIÓN',{cs:2,bg:C.grayLight,fg:C.grayDark,bold:true,align:'center',size:8})
+      +td('FECHA',{cs:6,bg:C.grayLight,fg:C.grayDark,bold:true,align:'center',size:8})
+      +'</tr>';
+    const infoVals='<tr>'
+      +td(esc(cli),{cs:3,bg:C.white,bold:true,align:'center',size:11})
+      +td(esc(cam),{cs:3,bg:C.white,bold:true,align:'center',size:11})
+      +td(esc((gv('semanas')||'4')+' semana(s)'),{cs:2,bg:C.white,bold:true,align:'center',size:11})
+      +td(esc(hoy),{cs:6,bg:C.white,fg:C.grayDark,italic:true,align:'center',size:10})
+      +'</tr>';
+
+    const html='<table>'+colgroup
+      +titleBar
+      +infoLabels+infoVals
+      +`<tr><td colspan="${NCOLS}" style="border:none;height:6px">&nbsp;</td></tr>`
+      +headerRow
+      +bodyRows.join('')
+      +blocks.join('')
+      +'</table>';
+
+    let root=document.getElementById('pdfExportRoot');
+    if(!root){ root=document.createElement('div'); root.id='pdfExportRoot'; document.body.appendChild(root); }
+    root.innerHTML=html;
+
+    document.body.classList.add('pdf-mode');
+    const cleanup=()=>{
+      document.body.classList.remove('pdf-mode');
+      window.removeEventListener('afterprint',cleanup);
+    };
+    window.addEventListener('afterprint',cleanup);
+    setTimeout(()=>{ window.print(); },60);
+    showToast('✓ Abriendo impresión — elige "Guardar como PDF"');
+  }catch(e){
+    console.error(e);
+    document.body.classList.remove('pdf-mode');
+    showToast('Error al generar PDF: '+e.message.slice(0,50));
+  }finally{
+    if(btn){btn.textContent='🖨 PDF';btn.disabled=false;}
   }
 }
 
