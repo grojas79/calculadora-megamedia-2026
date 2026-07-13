@@ -15,7 +15,7 @@
 </script>
 <style>
 :root{
-  --cy:#00C8E8;--mg:#E8007D;--gr:#00C896;--am:#F59E0B;--or:#E67E22;
+  --cy:#00C8E8;--mg:#E8007D;--gr:#00C896;--am:#F59E0B;--or:#E67E22;--pu:#8844EE;
   --r:10px;--r2:6px;--r3:4px;
 }
 html[data-theme="night"]{
@@ -93,6 +93,7 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
   text-transform:uppercase;padding:5px 8px;margin-bottom:6px;
   border-left:2px solid var(--bd2);display:flex;align-items:center;gap:8px}
 .cat-label.rrss{border-color:var(--cy);color:var(--cy)}
+.cat-label.vod{border-color:var(--pu,#8844EE);color:var(--pu,#8844EE)}
 .cat-label.web{border-color:var(--am);color:var(--am)}
 .cat-label.prod{border-color:var(--mg);color:var(--mg)}
 .cat-label.inf{border-color:var(--gr);color:var(--gr)}
@@ -105,6 +106,7 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
   transition:.15s;white-space:nowrap;text-decoration:none}
 .cat-nav-btn:hover{border-color:var(--cy);color:var(--cy);background:rgba(0,200,232,.08)}
 .cat-nav-btn.rrss{border-color:rgba(0,200,232,.35);color:var(--cy)}
+.cat-nav-btn.vod{border-color:rgba(136,68,238,.4);color:var(--pu,#8844EE)}
 .cat-nav-btn.web{border-color:rgba(245,158,11,.35);color:var(--am)}
 .cat-nav-btn.prod{border-color:rgba(232,0,125,.35);color:var(--mg)}
 .cat-nav-btn.inf{border-color:rgba(0,200,150,.35);color:var(--gr)}
@@ -741,6 +743,13 @@ const CATS=[
        desc:'Imagen estática o carrusel diseñado para sintetizar información clave de un lanzamiento o hito. Publicación permanente en el perfil de IG de Meganoticias y de Mega simultáneamente.',
        ref:'https://www.instagram.com/p/DQ4a2g2DYPC/?hl=es',
        tipo:'fijo', precio:2200000, imp:730000},
+      {id:'grafica_sabias_que', name:'Gráfica informativa «¿Sabías qué?»', tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Instagram Mega · Instagram Meganoticias',
+       marca:'Logo + mención',
+       desc:'Gráfica para redes sociales en formato «¿Sabías qué?», que explica conceptos clave vinculados a la marca de forma clara y didáctica.',
+       ref:'https://www.instagram.com/p/DWy9cVRmmnd/',
+       tipo:'fijo', precio:1800000, imp:600000,
+       pautaPlats:[{plat:'Instagram Mega y Meganoticias',alc:600000}]},
       {id:'info_tienda',     name:'Informativo en Tienda',              tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · YouTube Shorts · TikTok · Facebook Mega',
        marca:'Logo + mención',
@@ -751,6 +760,22 @@ const CATS=[
        marca:'Logo + mención',
        desc:'Contenido informativo sobre eventos musicales o conciertos con integración de marca. Distribución multiplataforma Mega.',
        ref:'', tipo:'fijo', precio:1700000, imp:50000},
+      {id:'info_terreno',    name:'Informativo en terreno',             tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'TikTok · Instagram · Shorts · Facebook Mega y Meganoticias',
+       marca:'Caluga con logos + mención',
+       desc:'Informativo grabado en locación para explicar un hito, estudio o iniciativa de marca, con declaraciones de voceros. Distribución multiplataforma en Mega y Meganoticias.',
+       ref:'https://www.instagram.com/reel/DWeWZoRkq_F/',
+       tipo:'fijo', precio:2600000, imp:275000,
+       pautaPlats:[
+         {plat:'Instagram Mega',alc:30000},
+         {plat:'Instagram Meganoticias',alc:180000},
+         {plat:'Shorts Meganoticias',alc:3000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'Facebook Meganoticias',alc:20000},
+         {plat:'TikTok Meganoticias',alc:20000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
       {id:'info_vertical',   name:'Informativo Vertical',               tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · YouTube Shorts · TikTok · Facebook Mega',
        marca:'Logo + mención',
@@ -762,6 +787,18 @@ const CATS=[
        desc:'Informativo vertical que profundiza en un anuncio o hito clave de la marca. Distribución multiplataforma en Mega y Meganoticias.',
        ref:'https://www.instagram.com/reel/DZORuYSFeE9/',
        tipo:'fijo', precio:2500000, imp:245000},
+      {id:'info_vertical_vocero', name:'Informativo vertical junto a vocero', tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'TikTok · Instagram · Shorts · Facebook Meganoticias',
+       marca:'Caluga con logos + mención',
+       desc:'Cápsula informativa vertical en la que un periodista, junto a un vocero o especialista de marca, aborda conceptos clave del tema de campaña.',
+       ref:'https://www.instagram.com/reel/DWeWZoRkq_F/',
+       tipo:'fijo', precio:2000000, imp:52000,
+       pautaPlats:[
+         {plat:'Facebook Meganoticias',alc:20000},
+         {plat:'TikTok Meganoticias',alc:20000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
       {id:'live_multi',      name:'Live Multiplataforma',               tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · Facebook · YouTube · Player web Mega y Meganoticias',
        marca:'Presencia de vocero + mención',
@@ -774,6 +811,18 @@ const CATS=[
        desc:'Transmisión en vivo e interactiva desde IG, entre un periodista del medio y un vocero de marca.',
        ref:'https://www.instagram.com/reel/DM-x6IgMhZ6/',
        tipo:'fijo', precio:2000000, imp:200000},
+      {id:'live_estudio_digital', name:'Live en estudio digital',          tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Meganoticias.cl · Facebook · Instagram · YouTube Meganoticias',
+       marca:'Mención + presencia de vocero + logo',
+       desc:'Entrevista en vivo en estudio digital entre un periodista de Meganoticias y un vocero o especialista de marca. Transmisión multiplataforma web y RRSS.',
+       ref:'https://www.youtube.com/watch?v=WviBwTrZn5A',
+       tipo:'fijo', precio:2300000, imp:229200,
+       pautaPlats:[
+         {plat:'YouTube Meganoticias',alc:3000},
+         {plat:'Facebook Meganoticias',alc:26000},
+         {plat:'Instagram Meganoticias',alc:200000},
+         {plat:'Meganoticias.cl',alc:200}
+       ]},
       {id:'mejores_momentos',name:'Mejores Momentos RRSS',              tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · Facebook · YouTube Shorts del programa',
        marca:'Logo + mención',
@@ -803,6 +852,15 @@ const CATS=[
        desc:'Publicación patrocinada en sitios de Meganoticias y Mega, apoyada con tráfico desde RRSS. Incluye 1 Story IG + 1 Post FB en cuentas de Mega y Meganoticias.',
        ref:'https://www.meganoticias.cl/patrocinados/510724-programa-de-fidelidad-de-sky-cierra-el-ano-con-mas-de-15-millones-de-suscriptores-y-proyecta-superar-los-2-millones-en-2026.html',
        tipo:'fijo', precio:1700000, imp:145000},
+      {id:'retransmision',   name:'Retransmisión',                      tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Player Mega.cl · Meganoticias.cl',
+       marca:'Logo',
+       desc:'Retransmisión en el player web de Mega.cl y Meganoticias.cl a partir de un link externo entregado por el cliente.',
+       ref:'', tipo:'fijo', precio:800000, imp:350,
+       pautaPlats:[
+         {plat:'Mega.cl',alc:150},
+         {plat:'Meganoticias.cl',alc:200}
+       ]},
       {id:'review_tec',      name:'Review Tecnológico',                 tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · YouTube Shorts · TikTok · Facebook Mega y Meganoticias',
        marca:'Logo + mención',
@@ -823,6 +881,15 @@ const CATS=[
        marca:'Logo',
        desc:'Story publicada con link directo para derivar tráfico hacia la compra o landing del cliente. Mismo alcance y distribución que el Story con Link al evento.',
        ref:'', tipo:'fijo', precio:600000, imp:15000},
+      {id:'story_tx_oficial', name:'Story para derivar tráfico hacia la transmisión oficial', tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Instagram Stories Mega · Facebook Stories Mega',
+       marca:'Mención',
+       desc:'Story publicada para derivar tráfico hacia la transmisión oficial del cliente.',
+       ref:'', tipo:'fijo', precio:600000, imp:15000,
+       pautaPlats:[
+         {plat:'Story IG Mega',alc:5000},
+         {plat:'Story FB Mega',alc:10000}
+       ]},
       {id:'test_drive',      name:'Test Drive Vertical',                tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · YouTube Shorts · TikTok · Facebook Mega y Meganoticias',
        marca:'Logo + mención',
@@ -834,6 +901,78 @@ const CATS=[
        desc:'Video dinámico grabado en locación para mostrar una experiencia u ocasión real, desde la perspectiva de nuestras periodistas.',
        ref:'https://www.instagram.com/reel/DPwFfr6CTOk/?igsh=ZHhpdTJ2cDB4aDMx',
        tipo:'fijo', precio:2600000, imp:275000},
+    ]
+  },
+  {
+    id:'vodcast', label:'Vodcast Megamedia', cls:'vod',
+    fmts:[
+      {id:'vod_repositorio', name:'Repositorio vodcast',                tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'YouTube Mega · Facebook Mega',
+       marca:'Mención + logo',
+       desc:'Publicación / repositorio de capítulos del vodcast en YouTube y Facebook de Mega. Cantidad según número de capítulos.',
+       ref:'', tipo:'fijo', precio:800000, imp:12000,
+       pautaPlats:[
+         {plat:'YouTube Mega',alc:2000},
+         {plat:'Facebook Mega',alc:10000}
+       ]},
+      {id:'vod_corte_mm',    name:'Corte vertical a partir de vodcast (Mejores momentos)', tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'TikTok · Instagram · Facebook · Shorts Mega',
+       marca:'Mención',
+       desc:'Corte vertical para RRSS de Mega a partir del vodcast horizontal (mejores momentos). 1 por capítulo.',
+       ref:'https://www.instagram.com/p/DavWW1mEdOW/',
+       tipo:'fijo', precio:1000000, imp:52000,
+       pautaPlats:[
+         {plat:'Instagram Mega',alc:30000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
+      {id:'vod_grafica_feed', name:'Gráfica en feed (Vodcast)',         tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Instagram Mega · Facebook Mega',
+       marca:'Logo + mención',
+       desc:'Gráfica en feed para potenciar el lanzamiento del vodcast y el rol de la marca en la iniciativa.',
+       ref:'https://www.facebook.com/MEGACL/photos/presentado-por-lor%C3%A9al-groupe-lor%C3%A9al-groupe-presentar%C3%A1-una-nueva-edici%C3%B3n-de-megat/1569490847867528/',
+       tipo:'fijo', precio:700000, imp:110000,
+       pautaPlats:[
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'Instagram Mega',alc:100000}
+       ]},
+      {id:'vod_nota_web',    name:'Nota web (Vodcast)',                  tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Mega.cl · Instagram · Facebook Mega',
+       marca:'Logo + mención',
+       desc:'Nota web en Mega.cl que profundiza en el lanzamiento del vodcast y el rol de la marca. Incluye apoyo en Stories y Posts de RRSS. 1 por capítulo.',
+       ref:'https://www.mega.cl/patrocinados/194609-completo-desafio-ariel-puso-a-prueba-a-rostros-de-mega-para-demostrar-la-eficacia-del-detergente.html',
+       tipo:'fijo', precio:700000, imp:25150,
+       pautaPlats:[
+         {plat:'Mega.cl',alc:150},
+         {plat:'Post Facebook Mega',alc:10000},
+         {plat:'Story IG Mega',alc:5000},
+         {plat:'Story FB Mega',alc:10000}
+       ]},
+      {id:'vod_backstage',   name:'Backstage de la grabación (Vodcast)', tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'TikTok · Instagram · Facebook · Shorts Mega',
+       marca:'Mención',
+       desc:'Periodista de Mega asiste a la grabación y registra la jornada en un video dinámico vertical, interactuando con el rostro de la campaña.',
+       ref:'https://www.tiktok.com/@mega_tv/video/7371852906108095749',
+       tipo:'fijo', precio:1500000, imp:52000,
+       pautaPlats:[
+         {plat:'Instagram Mega',alc:30000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
+      {id:'vod_dinamica',    name:'Dinámica junto a rostro de la campaña (Vodcast)', tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'TikTok · Instagram · Facebook · Shorts Mega',
+       marca:'Mención',
+       desc:'Dinámica digital junto al rostro principal de la campaña para profundizar en el lanzamiento del vodcast y el rol de la marca.',
+       ref:'https://www.tiktok.com/@mega_tv/video/7371852906108095749',
+       tipo:'fijo', precio:2500000, imp:52000, rostroField:true,
+       pautaPlats:[
+         {plat:'Instagram Mega',alc:30000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
     ]
   },
   {
@@ -1329,7 +1468,7 @@ function updCustomName(id){
 loadCustomFormats();
 
 // Orden de secciones en Excel de salida
-const EXPORT_CAT_ORDER=['rrss','programas','liveshopping','megadeportes','radios','web','produccion','influencers','personalizado'];
+const EXPORT_CAT_ORDER=['rrss','vodcast','programas','liveshopping','megadeportes','radios','web','produccion','influencers','personalizado'];
 function catsInExportOrder(){
   return EXPORT_CAT_ORDER.map(id=>CATS.find(c=>c.id===id)).filter(Boolean);
 }
@@ -2440,9 +2579,10 @@ function toggleFromSearch(id){
 
 // ── Build lista formatos ──────────────────────────────────────────────────
 // Íconos por categoría
-const CAT_ICONS={rrss:'📱',web:'🖥️',prod:'🎬',inf:'⭐',rad:'📻'};
+const CAT_ICONS={rrss:'📱',web:'🖥️',prod:'🎬',inf:'⭐',rad:'📻',vod:'🎙️'};
 const CAT_LABELS_SHORT={
   'rrss':'Contenidos Editoriales',
+  'vodcast':'Vodcast Megamedia',
   'web':'Web & Display',
   'radios':'RRSS Radios',
   'programas':'Programas',
@@ -3925,6 +4065,16 @@ const PAUTA_ALIASES={
   'capsula informativa':'__capsula_mn__',
   'capsula informativa meganoticias':'capsula_info_mn',
   'informativo meganoticias':'capsula_info_mn',
+  'grafica informativa sabias que':'grafica_sabias_que',
+  'live en estudio digital':'live_estudio_digital',
+  'informativo vertical junto a vocero':'info_vertical_vocero',
+  'retransmision':'retransmision',
+  'story para derivar trafico hacia la transmision oficial':'story_tx_oficial',
+  'informativo en terreno':'info_terreno',
+  'repositorio vodcast':'vod_repositorio',
+  'corte vertical a partir de vodcast mejores momentos':'vod_corte_mm',
+  'backstage de la grabacion':'vod_backstage',
+  'dinamica junto a rostro de la campana':'vod_dinamica',
   'desafio de marca':'desafio_mega',
   'corte de pantalla react digital':'prog_corte_mg_mega',
   'presencia en react digital':'prog_corte_mg_mega',
