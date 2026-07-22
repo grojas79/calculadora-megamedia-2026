@@ -4,6 +4,10 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Creador de Propuestas — Megamedia Digital 2026</title>
+<!-- Fuente canónica: index.html — sincronizar a Calculadora_Megamedia_2026_v21.html y deploy_calculadora/index.html -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet"/>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307070E'/%3E%3Cpath d='M10 50 L10 14 L22 14 L32 34 L42 14 L54 14 L54 50 L45 50 L45 28 L34 50 L30 50 L19 28 L19 50 Z' fill='%2300C8E8'/%3E%3C/svg%3E"/>
 <script>
 (function(){
@@ -494,7 +498,7 @@ td.inv{color:var(--cy);font-weight:700}
     <div class="field"><label>Nombre de campaña</label><input id="campania" type="text" placeholder="Ej: Lanzamiento Armani"/></div>
   </div>
   <div class="g2" style="margin-bottom:10px">
-    <div class="field"><label>E-mail del ejecutivo</label><input id="emailEjec" type="email" placeholder="Ej: nombre.apellido@megamedia.cl" value="gabriel.rojas@megamedia.cl"/></div>
+    <div class="field"><label>E-mail del ejecutivo</label><input id="emailEjec" type="email" placeholder="Ej: nombre.apellido@megamedia.cl" autocomplete="email"/></div>
   </div>
   <div class="g3">
     <div class="field"><label>Duración (semanas)</label><input id="semanas" type="number" value="4" min="1" max="52"/></div>
@@ -616,15 +620,16 @@ td.inv{color:var(--cy);font-weight:700}
     </div>
     <div class="mini-kpi-grid" id="miniKpis"></div>
     <div class="btn-row">
-      <button class="btn btn-pri btn-full btn-xl" onclick="guardar()">💾 Guardar propuesta</button>
+      <button class="btn btn-pri btn-xl" onclick="guardar()">Guardar propuesta</button>
+      <button class="btn btn-sec btn-xl" onclick="nuevaPropuesta()">Nueva propuesta</button>
     </div>
     <div class="btn-row">
-      <button class="btn btn-sec btn-full" onclick="document.getElementById('pautaFileInput').click()">📥 Importar Pauta editorial</button>
+      <button class="btn btn-sec btn-full" onclick="document.getElementById('pautaFileInput').click()">Importar Pauta editorial</button>
       <input type="file" id="pautaFileInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="importarPautaEditorial(this)"/>
     </div>
     <div class="btn-row">
-      <button class="btn btn-sec" onclick="exportarExcel()">📊 Excel</button>
-      <button class="btn btn-sec" onclick="exportarPDF()">🖨 PDF</button>
+      <button class="btn btn-sec" onclick="exportarExcel()">Excel</button>
+      <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
     </div>
   </div>
   <div class="hist-card">
@@ -655,16 +660,24 @@ td.inv{color:var(--cy);font-weight:700}
 // ── Tipo de cambio ────────────────────────────────────────────────────────
 let USD_CLP=900,TC_FECHA='—',MONEDA='CLP';
 (async()=>{
+  const fallback=()=>{
+    document.getElementById('tcText').textContent='Sin conexión · usando $900 CLP/USD';
+    document.getElementById('tcPillVal').textContent='900';
+  };
   try{
-    const r=await fetch('https://api.frankfurter.app/latest?from=USD&to=CLP');
+    // Frankfurter v2 (api.frankfurter.app/latest quedó en 404)
+    const r=await fetch('https://api.frankfurter.dev/v2/rate/USD/CLP');
+    if(!r.ok) throw new Error('HTTP '+r.status);
     const d=await r.json();
-    USD_CLP=Math.round(d.rates.CLP);TC_FECHA=d.date;
+    const rate=+(d.rate);
+    if(!(rate>0)) throw new Error('rate inválido');
+    USD_CLP=Math.round(rate);TC_FECHA=d.date||'—';
     document.getElementById('tcDot').classList.add('on');
     document.getElementById('tcText').textContent=`1 USD = ${f0(USD_CLP)} CLP · ${TC_FECHA}`;
     document.getElementById('tcPillVal').textContent=f0(USD_CLP);
+    if(typeof render==='function') render();
   }catch{
-    document.getElementById('tcText').textContent='Sin conexión · usando $900 CLP/USD';
-    document.getElementById('tcPillVal').textContent='900';
+    fallback();
   }
 })();
 
@@ -1966,6 +1979,25 @@ const allFmts=()=>CATS.flatMap(c=>c.fmts);
 const gv=id=>document.getElementById(id)?.value||'';
 const f0=n=>{const s=Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');return Math.round(n)<0?'-'+s:s;};
 const fM=n=>{const v=MONEDA==='USD'?n/USD_CLP:n;return(MONEDA==='USD'?'USD ':'$')+f0(v);}
+const EMAIL_KEY='mg_email_ejec_v1';
+const DRAFT_KEY='mg_draft_v1';
+let draftTimer=null;
+function contactoEjec(){
+  const v=gv('emailEjec').trim();
+  return v||'Megamedia Digital';
+}
+function persistEmailPref(){
+  const v=gv('emailEjec').trim();
+  try{if(v) localStorage.setItem(EMAIL_KEY,v);}catch(e){}
+}
+function loadEmailPref(){
+  const el=document.getElementById('emailEjec');
+  if(!el||el.value.trim()) return;
+  try{
+    const v=localStorage.getItem(EMAIL_KEY);
+    if(v) el.value=v;
+  }catch(e){}
+}
 function parseMiles(s){if(typeof s==='number')return s;return +(String(s).replace(/\./g,''))||0;}
 function fmtMiles(n){const v=+n||0;return v?v.toLocaleString('es-CL'):'';}
 document.addEventListener('input',function(e){
@@ -3224,12 +3256,70 @@ function render(){
   } else {
     psStrip.style.display='none';
   }
+  scheduleDraftSave();
 }
 
-// ── Historia ──────────────────────────────────────────────────────────────
+// ── Historia + borrador ───────────────────────────────────────────────────
 const HKEY='mg_hist_v3';
 let HIST=[];
 try{HIST=JSON.parse(localStorage.getItem(HKEY)||'[]')}catch{}
+
+function campaignSnapshot(){
+  return{
+    cliente:gv('cliente'),campania:gv('campania'),
+    semanas:gv('semanas'),objetivo:gv('objetivo'),
+    emailEjec:gv('emailEjec').trim(),
+    dtoG:getDtoGlobalPct(),moneda:MONEDA
+  };
+}
+function applyCampaignSnapshot(h){
+  document.getElementById('cliente').value=h.cliente||'';
+  document.getElementById('campania').value=h.campania||'';
+  document.getElementById('semanas').value=h.semanas||4;
+  document.getElementById('objetivo').value=h.objetivo||'Awareness / Alcance';
+  if(h.emailEjec) document.getElementById('emailEjec').value=h.emailEjec;
+  document.getElementById('dtoGlobal').value=h.dtoG||0;
+  const side=document.getElementById('dtoGlobalSide');
+  if(side) side.value=h.dtoG||0;
+  MONEDA=h.moneda||'CLP';
+  document.getElementById('btnCLP').classList.toggle('on',MONEDA==='CLP');
+  document.getElementById('btnUSD').classList.toggle('on',MONEDA==='USD');
+}
+function scheduleDraftSave(){
+  clearTimeout(draftTimer);
+  draftTimer=setTimeout(saveDraft,450);
+}
+function saveDraft(){
+  try{
+    const payload={
+      ...campaignSnapshot(),
+      state:STATE,
+      pautaMeta:PAUTA_IMPORT_META,
+      savedAt:Date.now()
+    };
+    localStorage.setItem(DRAFT_KEY,JSON.stringify(payload));
+  }catch(e){}
+}
+function clearDraft(){
+  try{localStorage.removeItem(DRAFT_KEY);}catch(e){}
+}
+function loadDraft(){
+  try{
+    const raw=localStorage.getItem(DRAFT_KEY);
+    if(!raw) return false;
+    const d=JSON.parse(raw);
+    if(!d||!d.state) return false;
+    const hasActive=Object.values(d.state).some(s=>s&&s.active);
+    const hasCam=!!((d.cliente||'').trim()||(d.campania||'').trim());
+    if(!hasActive&&!hasCam) return false;
+    Object.keys(STATE).forEach(k=>delete STATE[k]);
+    Object.assign(STATE,JSON.parse(JSON.stringify(d.state)));
+    allFmts().forEach(f=>{if(!STATE[f.id]) initFmtState(f);});
+    applyCampaignSnapshot(d);
+    if(d.pautaMeta) PAUTA_IMPORT_META=d.pautaMeta;
+    return true;
+  }catch(e){return false;}
+}
 
 function guardar(){
   const rows=getRows();
@@ -3237,34 +3327,49 @@ function guardar(){
   const dtoG=getDtoGlobalPct();
   const tN=rows.reduce((a,r)=>a+r.neto,0);
   const tF=invFinalConDtoGlobal(tN,dtoG).final;
+  const snap=campaignSnapshot();
   HIST.unshift({
     id:Date.now(),
-    cli:gv('cliente')||'—',cam:gv('campania')||'—',
+    cli:snap.cliente||'—',cam:snap.campania||'—',
     tN:tF,dtoG,moneda:MONEDA,
     fecha:new Date().toLocaleDateString('es-CL'),
     state:JSON.parse(JSON.stringify(STATE)),
-    cliente:gv('cliente'),campania:gv('campania'),
-    semanas:gv('semanas'),objetivo:gv('objetivo'),
+    ...snap
   });
   if(HIST.length>15) HIST=HIST.slice(0,15);
   try{localStorage.setItem(HKEY,JSON.stringify(HIST))}catch{}
+  persistEmailPref();
   renderHist();showToast('✓ Propuesta guardada');
 }
 
 function cargar(id){
   const h=HIST.find(x=>x.id===id);if(!h)return;
+  Object.keys(STATE).forEach(k=>delete STATE[k]);
   Object.assign(STATE,JSON.parse(JSON.stringify(h.state)));
-  document.getElementById('cliente').value=h.cliente||'';
-  document.getElementById('campania').value=h.campania||'';
-  document.getElementById('semanas').value=h.semanas||4;
-  document.getElementById('objetivo').value=h.objetivo||'';
-  document.getElementById('dtoGlobal').value=h.dtoG||0;
-  const side=document.getElementById('dtoGlobalSide');
-  if(side) side.value=h.dtoG||0;
-  MONEDA=h.moneda||'CLP';
-  document.getElementById('btnCLP').classList.toggle('on',MONEDA==='CLP');
-  document.getElementById('btnUSD').classList.toggle('on',MONEDA==='USD');
-  buildFmts();render();showToast('✓ Propuesta cargada');
+  allFmts().forEach(f=>{if(!STATE[f.id]) initFmtState(f);});
+  applyCampaignSnapshot(h);
+  if(!gv('emailEjec')) loadEmailPref();
+  persistEmailPref();
+  buildFmts();render();scheduleDraftSave();
+  showToast('✓ Propuesta cargada');
+}
+
+function nuevaPropuesta(){
+  const hasActive=allFmts().some(f=>STATE[f.id]?.active);
+  const hasData=!!(gv('cliente').trim()||gv('campania').trim());
+  if((hasActive||hasData)&&!confirm('¿Empezar una propuesta nueva?\nSe limpian formatos activos y datos de campaña. El historial se mantiene.')) return;
+  const email=gv('emailEjec').trim();
+  Object.keys(STATE).forEach(k=>delete STATE[k]);
+  allFmts().forEach(f=>initFmtState(f));
+  PAUTA_IMPORT_META={hasPautaSections:false,etapas:[]};
+  applyCampaignSnapshot({
+    cliente:'',campania:'',semanas:4,
+    objetivo:'Awareness / Alcance',
+    emailEjec:email,dtoG:0,moneda:'CLP'
+  });
+  clearDraft();
+  buildFmts();render();
+  showToast('✓ Propuesta nueva');
 }
 
 function borrar(id,ev){
@@ -3287,8 +3392,8 @@ function renderHist(){
   el.innerHTML=HIST.map(h=>`
     <div class="hist-item" onclick="cargar(${h.id})">
       <div class="hist-info">
-        <div class="hist-name">${h.cli} · ${h.cam}</div>
-        <div class="hist-meta">${h.fecha} · ${h.moneda}</div>
+        <div class="hist-name">${escHtml(h.cli)} · ${escHtml(h.cam)}</div>
+        <div class="hist-meta">${escHtml(h.fecha)} · ${escHtml(h.moneda)}${h.emailEjec?' · '+escHtml(h.emailEjec):''}</div>
       </div>
       <div class="hist-neto">${h.moneda==='USD'?'US$'+f0(h.tN/USD_CLP):'$'+f0(h.tN)}</div>
       <button class="hist-del" onclick="borrar(${h.id},event)">✕</button>
@@ -3786,7 +3891,7 @@ async function exportarExcel(){
      '▸  Los costos pueden variar según requerimientos especiales: uso de rostros específicos, locaciones, producción adicional u otros elementos no contemplados en la pauta base.',
      '▸  La ejecución de los formatos queda sujeta a disponibilidad editorial y de agenda de los equipos de Megamedia.',
      '▸  Las fechas de publicación serán coordinadas en conjunto con el cliente una vez confirmada la pauta.',
-     '▸  Contacto comercial: '+(gv('emailEjec')||'gabriel.rojas@megamedia.cl'),
+     '▸  Contacto comercial: '+contactoEjec(),
     ].forEach((line,i)=>{
       const r=ws.addRow([]); r.height=14;
       merge(ws,dataRowN,1,dataRowN,NCOLS);
@@ -3826,7 +3931,7 @@ async function exportarExcel(){
     // ── Footer
     {const r=ws.addRow([]); r.height=20;
       merge(ws,dataRowN,1,dataRowN,NCOLS);
-      sc(r,1,'Valores no incluyen IVA  ·  Propuesta válida 15 días  ·  '+(gv('emailEjec')||'gabriel.rojas@megamedia.cl')+'  ·  Megamedia © 2026',
+      sc(r,1,'Valores no incluyen IVA  ·  Propuesta válida 15 días  ·  '+contactoEjec()+'  ·  Megamedia © 2026',
         {bg:C.blue,fg:C.white,sz:8,italic:true,ha:'center'});}
 
     ws.views=[{state:'frozen',ySplit:7,activeCell:'A8',showGridLines:false}];
@@ -4126,7 +4231,7 @@ function exportarPDF(){
      '▸  Los costos pueden variar según requerimientos especiales: uso de rostros específicos, locaciones, producción adicional u otros elementos no contemplados en la pauta base.',
      '▸  La ejecución de los formatos queda sujeta a disponibilidad editorial y de agenda de los equipos de Megamedia.',
      '▸  Las fechas de publicación serán coordinadas en conjunto con el cliente una vez confirmada la pauta.',
-     '▸  Contacto comercial: '+(gv('emailEjec')||'gabriel.rojas@megamedia.cl'),
+     '▸  Contacto comercial: '+contactoEjec(),
     ].forEach((line,i)=>{
       blocks.push('<tr>'+td(esc(line),{cs:NCOLS,bg:i%2===0?C.white:C.grayLight,align:'left',size:8})+'</tr>');
     });
@@ -4152,7 +4257,7 @@ function exportarPDF(){
     spacer();
 
     // Footer
-    blocks.push('<tr>'+td('Valores no incluyen IVA  ·  Propuesta válida 15 días  ·  '+(gv('emailEjec')||'gabriel.rojas@megamedia.cl')+'  ·  Megamedia © 2026',{cs:NCOLS,bg:C.blue,fg:C.white,italic:true,align:'center',size:8})+'</tr>');
+    blocks.push('<tr>'+td('Valores no incluyen IVA  ·  Propuesta válida 15 días  ·  '+contactoEjec()+'  ·  Megamedia © 2026',{cs:NCOLS,bg:C.blue,fg:C.white,italic:true,align:'center',size:8})+'</tr>');
 
     // ── Encabezado (banda negra con logo + título + info) ──────────
     const logoSrc=document.querySelector('.hdr-l img')?.src||'';
@@ -5263,9 +5368,15 @@ function initTheme(){
 
 // ── Init ──────────────────────────────────────────────────────────────────
 initTheme();
+loadEmailPref();
+const restoredDraft=loadDraft();
 buildFmts();render();renderHist();
+if(restoredDraft) showToast('✓ Borrador restaurado');
 ['cliente','campania','semanas','objetivo','emailEjec'].forEach(id=>{
-  document.getElementById(id)?.addEventListener('input',render);
+  document.getElementById(id)?.addEventListener('input',()=>{
+    if(id==='emailEjec') persistEmailPref();
+    render();
+  });
 });
 </script>
 </body>
