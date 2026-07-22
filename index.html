@@ -1649,7 +1649,12 @@ function syncFmtStateFromDom(id){
   if(p) s.precio=parseMiles(p.value);
   if(q) s.qty=+q.value||1;
   if(d) s.dto=+d.value||0;
-  if(i) s.imp=parseMiles(i.value);
+  if(i){
+    s.imp=parseMiles(i.value);
+    // Mantener pautaPlats alineadas al total editado (patrocinio / boost)
+    if(s.pautaPlats&&s.pautaPlats.length)
+      s.pautaPlats=scalePautaPlatsToImp(s.pautaPlats,s.imp);
+  }
   if(prog!=null) s.progNombre=prog.value||'';
   if(rostro!=null) s.rostroNombre=rostro.value||'';
   if(cprod!=null) s.costoProd=parseMiles(cprod.value);
@@ -1726,14 +1731,40 @@ function esTipoRRSS(f){
 }
 const RRSS_FREQ=1.2;
 
+// Escala alcances por plataforma para que sumen el total de impresiones editado (patrocinio / boost)
+function scalePautaPlatsToImp(plats,target){
+  const list=(plats||[]).map(p=>({plat:p.plat,alc:Math.max(0,+p.alc||0)}));
+  if(!list.length) return list;
+  const sum=list.reduce((a,p)=>a+p.alc,0);
+  const t=Math.max(0,Math.round(+target||0));
+  if(sum<=0){
+    if(t<=0) return list.map(p=>({plat:p.plat,alc:0}));
+    const base=Math.floor(t/list.length);
+    let rem=t-base*list.length;
+    return list.map((p,i)=>({plat:p.plat,alc:base+(rem-->0?1:0)}));
+  }
+  if(Math.abs(sum-t)<1) return list;
+  const scaled=list.map(p=>({plat:p.plat,alc:Math.round(p.alc*t/sum)}));
+  let scaledSum=scaled.reduce((a,p)=>a+p.alc,0);
+  let diff=t-scaledSum;
+  if(diff!==0){
+    let idx=0;
+    for(let i=1;i<scaled.length;i++) if(scaled[i].alc>scaled[idx].alc) idx=i;
+    scaled[idx].alc=Math.max(0,scaled[idx].alc+diff);
+  }
+  return scaled;
+}
+
 // Paso 1: alcance neto por plataforma / repetición (imp ÷ frecuencia)
 // Paso 2: Sainsbury sobre todos los alcances netos del formato (incl. qty y multi-plataforma)
 function splitPlatImpsRRSS(f,s){
   const qty=Math.max(1,+s.qty||1);
   if(s.pautaPlats&&s.pautaPlats.length){
+    // Usa s.imp (editable) como total; redistribuye por proporción de pautaPlats
+    const scaled=scalePautaPlatsToImp(s.pautaPlats,+s.imp||0);
     const imps=[];
     for(let q=0;q<qty;q++)
-      s.pautaPlats.forEach(p=>{const v=+p.alc||0;if(v>0)imps.push(v);});
+      scaled.forEach(p=>{const v=+p.alc||0;if(v>0)imps.push(v);});
     return imps;
   }
   const parts=(f.plat||'').split('·').map(p=>p.trim()).filter(p=>p&&p!=='—');
