@@ -1571,6 +1571,44 @@ function excelSectionLabel(cat){
   if(cat.id==='rrss') return 'Contenido Editorial';
   return cat.label;
 }
+function excelRowKey(r){
+  return [
+    r.f&&r.f.id,
+    r.webPlat||'',
+    r.webPlatIdx||0,
+    r.radioStation||'',
+    r.infDetailRow?'d':'',
+    r.infTotalRow?'t':''
+  ].join('|');
+}
+function partitionExportRows(rows){
+  const etapas=(PAUTA_IMPORT_META.hasPautaSections&&PAUTA_IMPORT_META.etapas.length)
+    ?PAUTA_IMPORT_META.etapas.slice():[];
+  const byEtapa=[];
+  const used=new Set();
+  etapas.forEach(etapa=>{
+    const etapaRows=rows.filter(r=>(STATE[r.f.id]?.pautaEtapa||r.pautaEtapa||'')===etapa);
+    if(!etapaRows.length) return;
+    etapaRows.forEach(r=>used.add(excelRowKey(r)));
+    byEtapa.push({etapa,rows:etapaRows});
+  });
+  const leftover=rows.filter(r=>!used.has(excelRowKey(r)));
+  return{byEtapa,leftover};
+}
+function appendExportByCategory(catRowsSource,appendWeb,appendCat){
+  catsInExportOrder().forEach(cat=>{
+    const catRows=catRowsSource.filter(r=>cat.fmts.find(f=>f.id===r.f.id));
+    if(!catRows.length) return;
+    if(cat.id==='web'){
+      appendWeb(
+        catRows.filter(r=>!r.webPlatRadio),
+        catRows.filter(r=>r.webPlatRadio)
+      );
+      return;
+    }
+    appendCat(excelSectionLabel(cat),catRows);
+  });
+}
 function fmtCostoProdExtra(f,s){
   return f.costoProdOpcional?(+(s.costoProd)||0):0;
 }
@@ -3261,7 +3299,7 @@ async function exportarExcel(){
   if(btn){btn.textContent='⏳ Generando…';btn.disabled=true;}
 
   try{
-    const dtoG=Math.max(0,+(document.getElementById('dtoGlobal')?.value)||0);
+    const dtoG=getDtoGlobalPct();
     const tNeto=rows.reduce((a,r)=>a+r.neto,0);
     const tBruto=rows.reduce((a,r)=>a+r.bruto,0);
     const {final:tFinal,dtoGM}=invFinalConDtoGlobal(tNeto,dtoG);
@@ -3589,10 +3627,9 @@ async function exportarExcel(){
         dataRowN++; idx++;
       });
     }
-    if(PAUTA_IMPORT_META.hasPautaSections&&PAUTA_IMPORT_META.etapas.length){
-      PAUTA_IMPORT_META.etapas.forEach(etapa=>{
-        const etapaRows=rows.filter(r=>(STATE[r.f.id]?.pautaEtapa||r.pautaEtapa)===etapa);
-        if(!etapaRows.length) return;
+    {
+      const{byEtapa,leftover}=partitionExportRows(rows);
+      byEtapa.forEach(({etapa,rows:etapaRows})=>{
         {const r=ws.addRow([]); r.height=22;
           merge(ws,dataRowN,1,dataRowN,NCOLS);
           sc(r,1,etapa,{bg:'FF000000',fg:C.white,bold:true,sz:10,ha:'center'});
@@ -3600,17 +3637,16 @@ async function exportarExcel(){
           dataRowN++;}
         excelAppendRows(etapa,etapaRows,{skipSectionHeader:true});
       });
-    } else {
-    catsInExportOrder().forEach(cat=>{
-      const catRows=rows.filter(r=>cat.fmts.find(f=>f.id===r.f.id));
-      if(!catRows.length) return;
-      if(cat.id==='web'){
-        excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',catRows.filter(r=>!r.webPlatRadio));
-        excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',catRows.filter(r=>r.webPlatRadio));
-        return;
-      }
-      excelAppendRows(excelSectionLabel(cat),catRows);
-    });
+      // Formatos agregados fuera de etapas (p.ej. CPM web) o pauta sin secciones
+      const pool=byEtapa.length?leftover:rows;
+      appendExportByCategory(
+        pool,
+        (mega,radio)=>{
+          excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
+          excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
+        },
+        (label,catRows)=>excelAppendRows(label,catRows)
+      );
     }
 
     // gap tras tabla
@@ -3658,20 +3694,40 @@ async function exportarExcel(){
       ws.addRow([]); dataRowN++;
     }
 
-    // ── Descuento por volumen (antes de métricas)
-    if(dtoG>0){
-      secTitle('DESCUENTO POR VOLUMEN SOBRE EL TOTAL DE LA PAUTA',C.orange);
-      ws.addRow([]); dataRowN++;
-      const dtoSpans=[[1,4],[5,9],[10,NCOLS]];
-      drawCards([
-        ['SUBTOTAL NETO (formatos)',`$${f0(tNeto)}`,C.blue,'Tras descuentos individuales por formato'],
-        [`DTO. VOLUMEN (${dtoG}%)`,`-$${f0(dtoGM)}`,C.orange,'Descuento extra por contratar el paquete completo'],
-        ['INVERSIÓN FINAL',`$${f0(tFinal)}`,C.green,'Total con dto. volumen aplicado'],
-      ],dtoSpans);
-    }
+    // ── Resumen financiero claro (siempre visible)
+    const dtoFmt=Math.max(0,tBruto-tNeto);
+    const dtoFmtPct=tBruto>0?(dtoFmt/tBruto*100):0;
+    const dtoVolPctLabel=dtoG>0?` (${dtoG}%)`:'';
+    const dtoTotalPct=tBruto>0?((tBruto-tFinal)/tBruto*100):0;
+    secTitle('RESUMEN DE INVERSIÓN',C.blue);
+    ws.addRow([]); dataRowN++;
+    const resumenRows=[
+      ['Total Tarifa',`$${f0(tBruto)}`,C.blue,'Tarifa bruta sin descuentos',false],
+      ['Descuentos por formatos',dtoFmt>0?`-$${f0(dtoFmt)}`:'$0',C.orange,dtoFmt>0?`Ahorro unitario por formato (${dtoFmtPct.toFixed(1)}%)`:'Sin descuentos unitarios por formato',false],
+      ['Descuento por Volumen',dtoGM>0?`-$${f0(dtoGM)}`:'$0',C.orange,dtoG>0?`Descuento por volumen${dtoVolPctLabel} sobre subtotal neto $${f0(tNeto)}`:'Sin descuento por volumen',false],
+      ['Total Final',`$${f0(tFinal)}`,C.green,dtoTotalPct>0?`Inversión final · ahorro total ${dtoTotalPct.toFixed(1)}%`:'Inversión final de la pauta',true],
+    ];
+    resumenRows.forEach(([label,val,color,sub,isFinal])=>{
+      const rl=ws.addRow([]); rl.height=18;
+      merge(ws,dataRowN,1,dataRowN,8);
+      sc(rl,1,label,{bg:isFinal?color:C.white,fg:isFinal?C.white:color,bold:true,sz:11,ha:'left'});
+      merge(ws,dataRowN,9,dataRowN,NCOLS);
+      sc(rl,9,val,{bg:isFinal?color:C.white,fg:isFinal?C.white:color,bold:true,sz:14,ha:'right'});
+      for(let c=1;c<=NCOLS;c++){
+        const cell=rl.getCell(c);
+        cell.border={top:{style:'thin',color:{argb:color}},bottom:{style:isFinal?'medium':'thin',color:{argb:color}},left:{style:'thin',color:{argb:color}},right:{style:'thin',color:{argb:color}}};
+        if(isFinal){ cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:color}}; cell.font={...(cell.font||{}),color:{argb:C.white},bold:true}; }
+      }
+      dataRowN++;
+      const rs=ws.addRow([]); rs.height=13;
+      merge(ws,dataRowN,1,dataRowN,NCOLS);
+      sc(rs,1,sub,{bg:C.grayLight,fg:C.grayDark,italic:true,sz:8,ha:'left'});
+      borderRange(ws,dataRowN,1,dataRowN,NCOLS);
+      dataRowN++;
+    });
+    ws.addRow([]); dataRowN++;
 
     // ── KPI Cards
-    ws.addRow([]); dataRowN++;
     secTitle('MÉTRICAS DE LA CAMPAÑA',C.blue);
     ws.addRow([]); dataRowN++;
     const spans=[[1,4],[5,8],[9,NCOLS]];
@@ -3690,45 +3746,6 @@ async function exportarExcel(){
       ['FORMATOS ACTIVOS',String(rows.length),C.blue,'Formatos incluidos en la pauta'],
       ['DURACIÓN',gv('semanas')+' semana(s)',C.blue3,'Período de la campaña'],
     ],spans);
-
-    // ── CPM Comparativo
-    secTitle('COMPARATIVO TARIFA vs. INVERSIÓN FINAL',C.grayDark,C.white,10);
-    // Fila 1: etiquetas de cabecera (pequeñas)
-    {const r=ws.addRow([]); r.height=16;
-      const pairs=[
-        ['TARIFA BRUTA', [1,5], C.blue],
-        [`DESCUENTO TOTAL ${tBruto>0?((1-(tFinal/tBruto))*100).toFixed(1)+'%':'—'}`, [6,9], C.orange],
-        ['INVERSIÓN FINAL', [10,NCOLS], C.green],
-      ];
-      pairs.forEach(([text,[cs,ce],color])=>{
-        merge(ws,dataRowN,cs,dataRowN,ce);
-        sc(r,cs,text,{bg:color,fg:C.white,bold:true,sz:9,ha:'center'});
-        borderRange(ws,dataRowN,cs,dataRowN,ce,color);
-      }); dataRowN++;}
-    // Fila 2: montos grandes (protagonistas)
-    {const r=ws.addRow([]); r.height=36;
-      [
-        [`$${f0(tBruto)}`,[1,5],C.blue],
-        [tBruto>0?`-${((1-(tFinal/tBruto))*100).toFixed(1)}%`:'—',[6,9],C.orange],
-        [`$${f0(tFinal)}`,[10,NCOLS],C.green],
-      ].forEach(([text,[cs,ce],color])=>{
-        merge(ws,dataRowN,cs,dataRowN,ce);
-        sc(r,cs,text,{bg:C.white,fg:color,bold:true,sz:18,ha:'center'});
-        const s={style:'thin',color:{argb:color}},m={style:'medium',color:{argb:color}};
-        for(let c=cs;c<=ce;c++) r.getCell(c).border={top:{style:'none'},bottom:m,left:s,right:s};
-      }); dataRowN++;}
-    // Fila 3: CPMs pequeños (secundarios)
-    {const r=ws.addRow([]); r.height=14;
-      [
-        [`CPM $${f0(tImp>0?tBruto/tImp*1000:0)}`,[1,5],C.blue],
-        [`Ahorro: $${f0(tBruto-tFinal)} CLP`,[6,9],C.orange],
-        [`CPM $${f0(cpm)}`,[10,NCOLS],C.green],
-      ].forEach(([text,[cs,ce],color])=>{
-        merge(ws,dataRowN,cs,dataRowN,ce);
-        sc(r,cs,text,{bg:C.grayLight,fg:color,italic:true,sz:8,ha:'center'});
-        borderRange(ws,dataRowN,cs,dataRowN,ce);
-      }); dataRowN++;
-    }
     ws.addRow([]); dataRowN++;
 
     // ── T&C
@@ -3811,7 +3828,7 @@ function exportarPDF(){
   if(btn){btn.textContent='⏳ Generando…';btn.disabled=true;}
 
   try{
-    const dtoG=Math.max(0,+(document.getElementById('dtoGlobal')?.value)||0);
+    const dtoG=getDtoGlobalPct();
     const tNeto=rows.reduce((a,r)=>a+r.neto,0);
     const tBruto=rows.reduce((a,r)=>a+r.bruto,0);
     const {final:tFinal,dtoGM}=invFinalConDtoGlobal(tNeto,dtoG);
@@ -3979,24 +3996,21 @@ function exportarPDF(){
     ).join('')+'</tr>';
 
     // Filas de datos por secciones (misma lógica que Excel)
-    if(PAUTA_IMPORT_META.hasPautaSections&&PAUTA_IMPORT_META.etapas.length){
-      PAUTA_IMPORT_META.etapas.forEach(etapa=>{
-        const etapaRows=rows.filter(r=>(STATE[r.f.id]?.pautaEtapa||r.pautaEtapa)===etapa);
-        if(!etapaRows.length) return;
+    {
+      const{byEtapa,leftover}=partitionExportRows(rows);
+      byEtapa.forEach(({etapa,rows:etapaRows})=>{
         sectionHeader(etapa,{bg:'#000000',fg:C.white,align:'center',bold:true,size:9});
         appendSection(etapa,etapaRows,{skipHeader:true});
       });
-    } else {
-      catsInExportOrder().forEach(cat=>{
-        const catRows=rows.filter(r=>cat.fmts.find(f=>f.id===r.f.id));
-        if(!catRows.length) return;
-        if(cat.id==='web'){
-          appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',catRows.filter(r=>!r.webPlatRadio));
-          appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',catRows.filter(r=>r.webPlatRadio));
-          return;
-        }
-        appendSection(excelSectionLabel(cat),catRows);
-      });
+      const pool=byEtapa.length?leftover:rows;
+      appendExportByCategory(
+        pool,
+        (mega,radio)=>{
+          appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
+          appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
+        },
+        (label,catRows)=>appendSection(label,catRows)
+      );
     }
 
     // ── Secciones de totales/tarjetas ──────────────────────────────
@@ -4032,14 +4046,26 @@ function exportarPDF(){
 
     spacer();
 
-    if(dtoG>0){
-      secTitle('DESCUENTO POR VOLUMEN SOBRE EL TOTAL DE LA PAUTA',C.orange);
+    {
+      const dtoFmt=Math.max(0,tBruto-tNeto);
+      const dtoFmtPct=tBruto>0?(dtoFmt/tBruto*100):0;
+      const dtoTotalPct=tBruto>0?((tBruto-tFinal)/tBruto*100):0;
+      secTitle('RESUMEN DE INVERSIÓN',C.blue);
       spacer();
-      cards([
-        ['SUBTOTAL NETO (formatos)','$'+f0(tNeto),C.blue,'Tras descuentos individuales por formato'],
-        ['DTO. VOLUMEN ('+dtoG+'%)','-$'+f0(dtoGM),C.orange,'Descuento extra por contratar el paquete completo'],
-        ['INVERSIÓN FINAL','$'+f0(tFinal),C.green,'Total con dto. volumen aplicado'],
-      ],[[1,4],[5,9],[10,14]]);
+      const resumenRows=[
+        ['Total Tarifa','$'+f0(tBruto),C.blue,'Tarifa bruta sin descuentos',false],
+        ['Descuentos por formatos',dtoFmt>0?'-$'+f0(dtoFmt):'$0',C.orange,dtoFmt>0?'Ahorro unitario por formato ('+dtoFmtPct.toFixed(1)+'%)':'Sin descuentos unitarios por formato',false],
+        ['Descuento por Volumen',dtoGM>0?'-$'+f0(dtoGM):'$0',C.orange,dtoG>0?'Descuento por volumen ('+dtoG+'%) sobre subtotal neto $'+f0(tNeto):'Sin descuento por volumen',false],
+        ['Total Final','$'+f0(tFinal),C.green,dtoTotalPct>0?'Inversión final · ahorro total '+dtoTotalPct.toFixed(1)+'%':'Inversión final de la pauta',true],
+      ];
+      resumenRows.forEach(([label,val,color,sub,isFinal])=>{
+        let r1='<tr class="nba">';
+        r1+=td(esc(label),{cs:8,bg:isFinal?color:C.white,fg:isFinal?C.white:color,bold:true,align:'left',size:11});
+        r1+=td(esc(val),{cs:NCOLS-8,bg:isFinal?color:C.white,fg:isFinal?C.white:color,bold:true,align:'right',size:14});
+        r1+='</tr>';
+        blocks.push(r1);
+        blocks.push('<tr>'+td(esc(sub),{cs:NCOLS,bg:C.grayLight,fg:C.grayDark,italic:true,align:'left',size:8})+'</tr>');
+      });
       spacer();
     }
 
@@ -4060,29 +4086,6 @@ function exportarPDF(){
       ['FORMATOS ACTIVOS',String(rows.length),C.blue,'Formatos incluidos en la pauta'],
       ['DURACIÓN',gv('semanas')+' semana(s)',C.blue3,'Período de la campaña'],
     ],[[1,4],[5,8],[9,14]]);
-    spacer();
-
-    // Comparativo tarifa vs inversión final
-    secTitle('COMPARATIVO TARIFA vs. INVERSIÓN FINAL',C.grayDark,C.white,10);
-    {
-      const dtoTxt=tBruto>0?((1-(tFinal/tBruto))*100).toFixed(1)+'%':'—';
-      let l='<tr class="nba">';
-      l+=td('TARIFA BRUTA',{cs:5,bg:C.blue,fg:C.white,bold:true,align:'center'});
-      l+=td('DESCUENTO TOTAL '+dtoTxt,{cs:4,bg:C.orange,fg:C.white,bold:true,align:'center'});
-      l+=td('INVERSIÓN FINAL',{cs:5,bg:C.green,fg:C.white,bold:true,align:'center'});
-      l+='</tr>';
-      let v='<tr class="nba">';
-      v+=`<td colspan="5" style="background:${C.white};color:${C.blue};font-weight:700;text-align:center;font-size:18px;border:1px solid ${C.blue}">$${f0(tBruto)}</td>`;
-      v+=`<td colspan="4" style="background:${C.white};color:${C.orange};font-weight:700;text-align:center;font-size:18px;border:1px solid ${C.orange}">${tBruto>0?'-'+((1-(tFinal/tBruto))*100).toFixed(1)+'%':'—'}</td>`;
-      v+=`<td colspan="5" style="background:${C.white};color:${C.green};font-weight:700;text-align:center;font-size:18px;border:1px solid ${C.green}">$${f0(tFinal)}</td>`;
-      v+='</tr>';
-      let s='<tr>';
-      s+=td('CPM $'+f0(tImp>0?tBruto/tImp*1000:0),{cs:5,bg:C.grayLight,fg:C.blue,italic:true,align:'center',size:8});
-      s+=td('Ahorro: $'+f0(tBruto-tFinal)+' CLP',{cs:4,bg:C.grayLight,fg:C.orange,italic:true,align:'center',size:8});
-      s+=td('CPM $'+f0(cpm),{cs:5,bg:C.grayLight,fg:C.green,italic:true,align:'center',size:8});
-      s+='</tr>';
-      blocks.push(l,v,s);
-    }
     spacer();
 
     // Términos y condiciones
