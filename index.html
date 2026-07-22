@@ -284,6 +284,10 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
 .dto-global input:focus{border-color:var(--cy)}
 .dto-preview{font-size:12px;color:var(--tx2);margin-left:auto}
 .dto-preview strong{color:var(--or)}
+.dto-global.dto-side{margin:12px 0 4px;padding:10px 12px}
+.dto-global.dto-side .dto-global-row{gap:8px}
+.dto-global.dto-side input{width:72px}
+.dto-global.dto-side .dto-preview{margin-left:0;width:100%;font-size:11px}
 
 hr{border:none;border-top:1px solid var(--bd);margin:14px 0}
 .empty{text-align:center;padding:24px;color:var(--tx2);font-size:13px;
@@ -405,7 +409,7 @@ td.inv{color:var(--cy);font-weight:700}
 .pauta-pick-src{font-size:13px;margin-bottom:4px}
 .pauta-pick-meta{font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.45}
 .pauta-pick-hint{font-size:11.5px;color:var(--tx2);margin:0 0 8px}
-.pauta-pick-opts{display:flex;flex-direction:column;gap:5px}
+.pauta-pick-opts{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto}
 .pauta-pick-opt{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border:1px solid var(--bd);border-radius:6px;cursor:pointer;font-size:12.5px;line-height:1.35;transition:border-color .15s,background .15s}
 .pauta-pick-opt:hover{border-color:var(--cy);background:rgba(105,174,236,.06)}
 .pauta-pick-opt:has(input:checked){border-color:var(--cy);background:rgba(105,174,236,.1)}
@@ -544,7 +548,7 @@ td.inv{color:var(--cy);font-weight:700}
     <div class="dto-global-title">Descuento por volumen sobre el total de la pauta</div>
     <div class="dto-global-row">
       <label>Descuento global %</label>
-      <input type="number" id="dtoGlobal" value="0" min="0" max="50" step="1" oninput="render()"/>
+      <input type="number" id="dtoGlobal" value="0" min="0" max="50" step="1" oninput="onDtoGlobalInput(this)"/>
       <div class="dto-preview" id="dtoPreview">Sin descuento aplicado</div>
     </div>
   </div>
@@ -583,6 +587,14 @@ td.inv{color:var(--cy);font-weight:700}
       </div>
       <!-- Ahorro: oculto permanentemente -->
       <div id="sumAhorro" style="display:none"><span id="sumOrig"></span><span id="sumPct"></span></div>
+    </div>
+    <div class="dto-global dto-side">
+      <div class="dto-global-title">Descuento por volumen</div>
+      <div class="dto-global-row">
+        <label>Descuento %</label>
+        <input type="number" id="dtoGlobalSide" value="0" min="0" max="50" step="1" oninput="onDtoGlobalInput(this)"/>
+      </div>
+      <div class="dto-preview" id="dtoPreviewSide">Sin descuento aplicado</div>
     </div>
     <!-- ── Strip 3 valores ─────────────────────────────────────────── -->
     <div class="pricing-strip" id="pricingStrip" style="display:none">
@@ -660,7 +672,7 @@ let USD_CLP=900,TC_FECHA='—',MONEDA='CLP';
 // Solo los formatos definidos y aprobados por Gabriel
 const CATS=[
   {
-    id:'rrss', label:'Contenidos Editoriales', cls:'rrss',
+    id:'rrss', label:'Contenido Editorial', cls:'rrss',
     fmts:[
       {id:'cinco_tips',      name:'5 Tips',                             tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · YouTube Shorts · TikTok · Facebook Mega',
@@ -700,11 +712,17 @@ const CATS=[
        desc:'Desafío interactivo protagonizado por rostros del canal con integración de marca.',
        ref:'', tipo:'fijo', precio:1600000, imp:50000},
       {id:'dinamicas',       name:'Dinámica de RRSS con Rostro',        tag:'Precio fijo', tagCls:'tag-fijo',
-       plat:'Instagram · TikTok · Facebook Mega',
-       marca:'Mención + presencia de rostro',
-       desc:'Contenido colaborativo con rostro del canal: trends, situaciones cómicas, desafíos de marca.',
+       plat:'Instagram Mega · Facebook Mega · Shorts Mega · TikTok Mega',
+       marca:'Mención + producto',
+       desc:'Repositorio de cápsulas verticales con rostro del canal. Distribución multiplataforma Mega.',
        ref:'https://www.instagram.com/reel/DLXzpk-AQuM/?hl=es-la',
-       tipo:'fijo', precio:2500000, imp:250000, rostroField:true, costoProdOpcional:true},
+       tipo:'fijo', precio:2500000, imp:52000, rostroField:true, costoProdOpcional:true,
+       pautaPlats:[
+         {plat:'Instagram Mega',alc:30000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
       {id:'docureality',     name:'Docureality TikTok (Meganoticias)',  tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'TikTok Meganoticias',
        marca:'Logo + mención',
@@ -901,6 +919,36 @@ const CATS=[
        desc:'Video dinámico grabado en locación para mostrar una experiencia u ocasión real, desde la perspectiva de nuestras periodistas.',
        ref:'https://www.instagram.com/reel/DPwFfr6CTOk/?igsh=ZHhpdTJ2cDB4aDMx',
        tipo:'fijo', precio:2600000, imp:275000},
+      {id:'spots_licenciados', name:'Spot Licenciado',                 tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Facebook Mega · YouTube Mega',
+       marca:'Mención',
+       desc:'Repositorio de spots licenciados.',
+       ref:'', tipo:'fijo', precio:800000, imp:12000,
+       pautaPlats:[
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'YouTube Mega',alc:2000}
+       ]},
+      {id:'carrusel_productos', name:'Carrusel con productos',         tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Instagram Mega · Facebook Mega',
+       marca:'Mención',
+       desc:'Carrusel para potenciar productos destacados de la campaña.',
+       ref:'https://www.instagram.com/p/DbEXjZSDv78/?img_index=1',
+       tipo:'fijo', precio:700000, imp:110000,
+       pautaPlats:[
+         {plat:'Instagram Mega',alc:100000},
+         {plat:'Facebook Mega',alc:10000}
+       ]},
+      {id:'nota_dato_oferta', name:'Nota Dato-Oferta',                 tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Meganoticias.cl · Facebook Meganoticias · Instagram Stories Meganoticias',
+       marca:'Logo + mención',
+       desc:'Nota web que dará a conocer las principales ofertas y/o productos de la campaña, con difusión en RRSS de Meganoticias.',
+       ref:'https://www.meganoticias.cl/dato-oferta/441669-mercado-libre-lanza-campana-que-ofrece-hasta-40-de-descuento-en-productos-de-escritorio-conoce-los-5-mas-destacados.html',
+       tipo:'fijo', precio:1000000, imp:131200,
+       pautaPlats:[
+         {plat:'Facebook Meganoticias',alc:26000},
+         {plat:'Instagram Stories Meganoticias',alc:105000},
+         {plat:'Meganoticias.cl',alc:200}
+       ]},
     ]
   },
   {
@@ -1151,7 +1199,25 @@ const CATS=[
     ]
   },
   {
-    id:'megadeportes', label:'Mega Deportes', cls:'rrss',
+    id:'teleseries', label:'Teleseries', cls:'rrss',
+    fmts:[
+      {id:'corte_pantalla_ts', name:'Corte de Pantalla Teleseries',    tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'TikTok Mega · TikTok Teleseries Mega · Instagram Mega · Instagram Teleseries Mega · Facebook Mega · Shorts Mega',
+       marca:'Mención',
+       desc:'Corte de pantalla a partir de momentos en donde se mencione a la marca en medio de la teleserie.',
+       ref:'https://www.instagram.com/p/DbCczVnkbke/',
+       tipo:'fijo', precio:1000000, imp:82000,
+       pautaPlats:[
+         {plat:'Instagram Mega + Teleseries Mega',alc:50000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'TikTok Teleseries Mega',alc:10000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
+    ]
+  },
+  {
+    id:'megadeportes', label:'Megadeportes', cls:'rrss',
     fmts:[
       {id:'md_5tips',       name:'5 Tips — Megadeportes',             tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · YouTube Shorts · TikTok · Megadeportes',
@@ -1188,6 +1254,18 @@ const CATS=[
        marca:'Logo + mención',
        desc:'Video dinámico desde locación deportiva con integración de marca, grabado desde la perspectiva del equipo periodístico.',
        ref:'', tipo:'fijo', precio:2200000, imp:250000},
+      {id:'md_content_rrss', name:'Content redes sociales — Megadeportes', tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'TikTok Mega · TikTok Megadeportes · Instagram Mega · Instagram Megadeportes · Facebook Mega · Shorts Mega',
+       marca:'Mención',
+       desc:'Repositorio de cápsulas digitales en redes de Mega y Megadeportes.',
+       ref:'', tipo:'fijo', precio:1400000, imp:57000,
+       pautaPlats:[
+         {plat:'Instagram Mega + Megadeportes',alc:30000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'TikTok Megadeportes',alc:5000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
     ]
   },
   {
@@ -1448,6 +1526,20 @@ function initFmtState(f){
   if(f.pautaPlats&&f.pautaPlats.length) base.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:p.alc}));
   STATE[f.id]=base;
 }
+function syncStatePautaPlatsFromCatalog(forceIds){
+  const force=new Set(forceIds||['spots_licenciados']);
+  CATS.flatMap(c=>c.fmts).forEach(f=>{
+    if(!f.pautaPlats||!f.pautaPlats.length) return;
+    const s=STATE[f.id];
+    if(!s) return;
+    const missing=!s.pautaPlats||!s.pautaPlats.length;
+    const mustForce=force.has(f.id);
+    if(!missing&&!mustForce) return;
+    s.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:+p.alc||0}));
+    const total=s.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
+    if(total>0) s.imp=total;
+  });
+}
 function addCustomFormat(fmt){
   let cat=CATS.find(c=>c.id==='personalizado');
   if(!cat){
@@ -1468,12 +1560,15 @@ function updCustomName(id){
 loadCustomFormats();
 
 // Orden de secciones en Excel de salida
-const EXPORT_CAT_ORDER=['rrss','vodcast','programas','liveshopping','megadeportes','radios','web','produccion','influencers','personalizado'];
+const EXPORT_CAT_ORDER=['rrss','vodcast','programas','teleseries','liveshopping','megadeportes','radios','web','produccion','influencers','personalizado'];
 function catsInExportOrder(){
   return EXPORT_CAT_ORDER.map(id=>CATS.find(c=>c.id===id)).filter(Boolean);
 }
 function excelSectionLabel(cat){
   if(cat.id==='programas') return 'Programa o Rostro';
+  if(cat.id==='teleseries') return 'Teleseries';
+  if(cat.id==='megadeportes') return 'Megadeportes';
+  if(cat.id==='rrss') return 'Contenido Editorial';
   return cat.label;
 }
 function fmtCostoProdExtra(f,s){
@@ -1795,6 +1890,7 @@ function displayRadioStations(s){
   return s.radioEntries.map(re=>'Radio '+radioCap(re.radio)).join(' · ');
 }
 CATS.forEach(cat=>cat.fmts.forEach(f=>{ if(!STATE[f.id]) initFmtState(f); }));
+syncStatePautaPlatsFromCatalog(['spots_licenciados']);
 const allFmts=()=>CATS.flatMap(c=>c.fmts);
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -2644,6 +2740,10 @@ function buildFmts(){
 
 function toggle(id){
   STATE[id].active=!STATE[id].active;
+  if(STATE[id].active){
+    const f=allFmts().find(x=>x.id===id);
+    if(f&&f.id==='spots_licenciados') applyCatalogPautaPlats(f,STATE[id]);
+  }
   document.getElementById('fi_'+id).classList.toggle('active',STATE[id].active);
   // Sync search result item if visible
   const srEl=document.getElementById('sr_'+id);
@@ -2802,9 +2902,31 @@ function webPlatExcelDetail(r){
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
+function getDtoGlobalPct(){
+  const a=document.getElementById('dtoGlobal');
+  const b=document.getElementById('dtoGlobalSide');
+  const raw=a&&document.activeElement===a?a.value:(b&&document.activeElement===b?b.value:(a?.value??b?.value??0));
+  return Math.max(0,Math.min(50,+(raw)||0));
+}
+function syncDtoGlobalInputs(v){
+  const val=String(Math.max(0,Math.min(50,+(v)||0)));
+  const a=document.getElementById('dtoGlobal');
+  const b=document.getElementById('dtoGlobalSide');
+  if(a&&document.activeElement!==a) a.value=val;
+  if(b&&document.activeElement!==b) b.value=val;
+}
+function onDtoGlobalInput(el){
+  const v=Math.max(0,Math.min(50,+(el?.value)||0));
+  const a=document.getElementById('dtoGlobal');
+  const b=document.getElementById('dtoGlobalSide');
+  if(a&&a!==el) a.value=v;
+  if(b&&b!==el) b.value=v;
+  render();
+}
 function render(){
   const rows=getRows();
-  const dtoG=Math.max(0,Math.min(50,+(document.getElementById('dtoGlobal')?.value)||0));
+  const dtoG=getDtoGlobalPct();
+  syncDtoGlobalInputs(dtoG);
   const tNeto=rows.reduce((a,r)=>a+r.neto,0);
   const {final:tFinal,dtoGM}=invFinalConDtoGlobal(tNeto,dtoG);
   const tImp=rows.reduce((a,r)=>a+r.imp,0);
@@ -2814,11 +2936,14 @@ function render(){
   const tDescUnit=rows.reduce((a,r)=>a+r.desc,0);
   const cpm=tImp>0?(tFinal/tImp)*1000:0;
 
-  // Preview descuento global
-  const dp=document.getElementById('dtoPreview');
-  if(dp) dp.innerHTML=dtoG>0&&rows.length
+  // Preview descuento global (main + sidebar)
+  const previewHtml=dtoG>0&&rows.length
     ?`Ahorro: <strong>-${fM(dtoGM)}</strong> · Final: <strong>${fM(tFinal)}</strong>`
     :'Sin descuento aplicado';
+  const dp=document.getElementById('dtoPreview');
+  const dpSide=document.getElementById('dtoPreviewSide');
+  if(dp) dp.innerHTML=previewHtml;
+  if(dpSide) dpSide.innerHTML=previewHtml;
 
   if(!rows.length){
     document.getElementById('emptyState').style.display='';
@@ -3040,7 +3165,7 @@ try{HIST=JSON.parse(localStorage.getItem(HKEY)||'[]')}catch{}
 function guardar(){
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
-  const dtoG=+(document.getElementById('dtoGlobal')?.value)||0;
+  const dtoG=getDtoGlobalPct();
   const tN=rows.reduce((a,r)=>a+r.neto,0);
   const tF=invFinalConDtoGlobal(tN,dtoG).final;
   HIST.unshift({
@@ -3065,6 +3190,8 @@ function cargar(id){
   document.getElementById('semanas').value=h.semanas||4;
   document.getElementById('objetivo').value=h.objetivo||'';
   document.getElementById('dtoGlobal').value=h.dtoG||0;
+  const side=document.getElementById('dtoGlobalSide');
+  if(side) side.value=h.dtoG||0;
   MONEDA=h.moneda||'CLP';
   document.getElementById('btnCLP').classList.toggle('on',MONEDA==='CLP');
   document.getElementById('btnUSD').classList.toggle('on',MONEDA==='USD');
@@ -4073,18 +4200,32 @@ const PAUTA_ALIASES={
   'informativo en terreno':'info_terreno',
   'repositorio vodcast':'vod_repositorio',
   'corte vertical a partir de vodcast mejores momentos':'vod_corte_mm',
-  'backstage de la grabacion':'vod_backstage',
-  'dinamica junto a rostro de la campana':'vod_dinamica',
+  'backstage de la grabacion':'__backstage__',
+  'backstage':'__backstage__',
+  'dinamica junto a rostro de la campana':'__dinamica_rostro__',
   'desafio de marca':'desafio_mega',
   'corte de pantalla react digital':'prog_corte_mg_mega',
   'presencia en react digital':'prog_corte_mg_mega',
-  'dinamica digital con rostro':'dinamicas',
-  'dinamica con rostro':'dinamicas',
-  'dinamicas con rostro':'dinamicas'
+  'dinamica digital con rostro':'__dinamica_rostro__',
+  'dinamica con rostro':'__dinamica_rostro__',
+  'dinamicas con rostro':'__dinamica_rostro__',
+  'capsulas verticales con rostro':'__capsulas_plat__',
+  'capsula vertical con rostro':'__capsulas_plat__',
+  'capsulas verticales':'__capsulas_plat__',
+  'spots licenciados':'spots_licenciados',
+  'spot licenciado':'spots_licenciados',
+  'spots licenciado':'spots_licenciados',
+  'carrusel con productos':'carrusel_productos',
+  'nota dato oferta':'nota_dato_oferta',
+  'nota dato-oferta':'nota_dato_oferta',
+  'corte de pantalla teleseries':'corte_pantalla_ts',
+  'content redes sociales':'md_content_rrss',
+  'content de redes sociales':'md_content_rrss'
 };
 const PAUTA_GRAFICA_FEED_IDS=['grafica_mega','grafica_mn','grafica_mn_mega'];
 const PAUTA_NOTA_WEB_IDS=['nota_mega','nota_mn','nota_mn_mega'];
 const PAUTA_CAPSULA_MN_ID='capsula_info_mn';
+let PAUTA_MATCH_CTX={allowVodcast:false,allowLiveShopping:false};
 function pautaCellStr(v){
   if(v==null||v==='') return '';
   if(typeof v==='object'){
@@ -4248,12 +4389,35 @@ function matchScore(a,b){
   return hits/Math.max(wa.length,wb.length);
 }
 const PAUTA_MATCH_CONFIDENT=.8;
-const PAUTA_ALTERNATIVES_MAX=3;
+const PAUTA_ALTERNATIVES_MAX=12;
+const PAUTA_ALT_MIN_SCORE=.12;
 const PAUTA_NAME_MIN_CONFIDENT=.85;
 const PAUTA_NAME_GAP=.12;
 const PAUTA_NAME_TIE_BAND=.2;
+function pautaDetectPackageContext(parsed){
+  const bits=[];
+  (parsed.etapas||[]).forEach(e=>bits.push(e));
+  (parsed.entries||[]).forEach(e=>{
+    bits.push(e.tipoContenido,e.tematica,e.medio,e.plataforma,e.marca,e.referencia);
+    (e.plats||[]).forEach(p=>bits.push(p.plat));
+  });
+  const blob=normPauta(bits.join(' '));
+  return{
+    allowVodcast:/vodcast/.test(blob),
+    allowLiveShopping:/live\s*shopping|liveshopping/.test(blob)
+  };
+}
+function pautaFmtAllowedInCtx(fmt){
+  if(!fmt) return false;
+  const cat=CATS.find(c=>c.fmts.some(x=>x.id===fmt.id));
+  if(cat&&cat.id==='vodcast'&&!PAUTA_MATCH_CTX.allowVodcast) return false;
+  if(cat&&cat.id==='liveshopping'&&!PAUTA_MATCH_CTX.allowLiveShopping) return false;
+  if(/^vod_/.test(fmt.id)&&!PAUTA_MATCH_CTX.allowVodcast) return false;
+  if(/^ls_/.test(fmt.id)&&!PAUTA_MATCH_CTX.allowLiveShopping) return false;
+  return true;
+}
 function pautaFmtCandidates(){
-  return allFmts().filter(x=>!x.customType&&!x.infType&&x.prodType!=='produccion');
+  return allFmts().filter(x=>!x.customType&&!x.infType&&x.prodType!=='produccion'&&pautaFmtAllowedInCtx(x));
 }
 function pautaEntrySignals(entry){
   const plats=[];
@@ -4319,12 +4483,17 @@ function pautaPlatLineMatches(fmtLine,entryLine){
   if(a===b) return true;
   const entryMn=platLineHasMn(b);
   const entryMega=platLineHasMega(b);
+  const entryMd=platLineHasMd(b);
+  const entryTs=platLineHasTs(b);
   const fmtMn=platLineHasMn(a);
   const fmtMega=platLineHasMega(a);
+  const fmtMd=platLineHasMd(a);
+  const fmtTs=platLineHasTs(a);
   if(entryMn&&!fmtMn) return false;
-  if(entryMega&&!entryMn&&!fmtMega) return false;
-  if(fmtMn&&!entryMn&&entryMega) return false;
-  if(fmtMega&&!entryMega&&entryMn) return false;
+  if(fmtMn&&!entryMn&&(entryMega||entryMd||entryTs)) return false;
+  if(entryMd&&!fmtMd&&!fmtMega) return false;
+  if(entryTs&&!fmtTs&&!fmtMega) return false;
+  if(entryMega&&!entryMn&&!entryMd&&!entryTs&&!fmtMega&&!fmtMd&&!fmtTs) return false;
   return pautaNetworksOverlap(a,b);
 }
 function pautaEntryBrandScope(entry){
@@ -4332,9 +4501,14 @@ function pautaEntryBrandScope(entry){
   if(!lines.length) return'unknown';
   const anyMn=lines.some(platLineHasMn);
   const anyMega=lines.some(platLineHasMega);
-  if(anyMn&&!anyMega) return'meganoticias';
-  if(anyMega&&!anyMn) return'mega';
-  if(anyMn&&anyMega) return'both';
+  const anyMd=lines.some(platLineHasMd);
+  const anyTs=lines.some(platLineHasTs);
+  if(anyMn&&!anyMega&&!anyMd&&!anyTs) return'meganoticias';
+  if(anyMd&&!anyMn) return'megadeportes';
+  if(anyTs&&!anyMn) return'teleseries';
+  if(anyMega&&!anyMn&&!anyMd&&!anyTs) return'mega';
+  if((anyMega||anyMd||anyTs)&&anyMn) return'both';
+  if(anyMega||anyMd||anyTs) return'mega';
   return'unknown';
 }
 function pautaFmtBrandScope(fmt){
@@ -4342,14 +4516,22 @@ function pautaFmtBrandScope(fmt){
   if(!lines.length) return'unknown';
   const anyMn=lines.some(platLineHasMn);
   const anyMega=lines.some(platLineHasMega);
-  if(anyMn&&!anyMega) return'meganoticias';
-  if(anyMega&&!anyMn) return'mega';
-  if(anyMn&&anyMega) return'both';
+  const anyMd=lines.some(platLineHasMd);
+  const anyTs=lines.some(platLineHasTs);
+  if(anyMn&&!anyMega&&!anyMd&&!anyTs) return'meganoticias';
+  if(anyMd&&!anyMn) return'megadeportes';
+  if(anyTs&&!anyMn) return'teleseries';
+  if(anyMega&&!anyMn&&!anyMd&&!anyTs) return'mega';
+  if((anyMega||anyMd||anyTs)&&anyMn) return'both';
+  if(anyMega||anyMd||anyTs) return'mega';
   return'unknown';
 }
 function pautaBrandScopeCompatible(entryScope,fmtScope){
   if(entryScope==='unknown'||fmtScope==='unknown') return true;
   if(entryScope==='both'||fmtScope==='both') return true;
+  if(entryScope==='megadeportes'&&(fmtScope==='megadeportes'||fmtScope==='mega')) return true;
+  if(entryScope==='teleseries'&&(fmtScope==='teleseries'||fmtScope==='mega')) return true;
+  if(entryScope==='mega'&&(fmtScope==='mega'||fmtScope==='megadeportes'||fmtScope==='teleseries')) return true;
   return entryScope===fmtScope;
 }
 function pautaPlatMatchAnalysis(entry,fmt){
@@ -4391,6 +4573,8 @@ function pautaScoreName(entry,fmt){
   if(n&&fn&&(n.includes(fn)||fn.includes(n))) s=Math.max(s,.85);
   if(/informativo/.test(n)&&/previo|previa/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.88);
   if(/capsula/.test(n)&&/informativ/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.9);
+  if((/capsula/.test(n)&&/vertical|rostro/.test(n)||/dinamica/.test(n)&&/rostro/.test(n))&&fmt.id==='dinamicas') s=Math.max(s,.92);
+  if(/backstage/.test(n)&&fmt.id==='backstage'&&!/vodcast|live\s*shopping/.test(n)) s=Math.max(s,.92);
   return s;
 }
 function pautaNameConfident(best,second){
@@ -4405,7 +4589,7 @@ function pautaCandidatesByName(entry){
   const entryScope=pautaEntryBrandScope(entry);
   return pautaFmtCandidates()
     .filter(fmt=>{
-      if((n.includes('grafica')||n.includes('carrusel'))&&fmt.id==='grafica_dto'&&!/descuento|dto|oferta/.test(n)) return false;
+      if((n.includes('grafica')||n.includes('carrusel'))&&fmt.id==='grafica_dto'&&!/descuento|dto|oferta|productos/.test(n)) return false;
       if(entryScope==='meganoticias'&&pautaFmtBrandScope(fmt)==='mega') return false;
       if(entryScope==='mega'&&pautaFmtBrandScope(fmt)==='meganoticias') return false;
       return true;
@@ -4416,14 +4600,16 @@ function pautaCandidatesByName(entry){
       const sig=pautaEntrySignals(entry);
       const descScore=sig.desc?matchScore(sig.desc,normPauta(fmt.desc||'')):0;
       const alcScore=pautaAlcSimilarity(sig.alc,fmt.imp);
-      return{fmt,nameScore,plat,descScore,alcScore,breakdown:{name:nameScore,desc:descScore,plat:plat.score,alc:alcScore,platFull:plat.fullMatch}};
+      const score=plat.score*.5+nameScore*.3+descScore*.2;
+      return{fmt,nameScore,plat,descScore,alcScore,score,breakdown:{name:nameScore,desc:descScore,plat:plat.score,alc:alcScore,platFull:plat.fullMatch}};
     })
-    .filter(c=>c.nameScore>0)
+    .filter(c=>c.plat.score>0||c.nameScore>0||c.descScore>0)
     .sort((a,b)=>{
       if(b.plat.fullMatch!==a.plat.fullMatch) return(b.plat.fullMatch?1:0)-(a.plat.fullMatch?1:0);
-      if(b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
+      if(b.plat.score!==a.plat.score) return b.plat.score-a.plat.score;
       if(b.plat.entryCoverage!==a.plat.entryCoverage) return b.plat.entryCoverage-a.plat.entryCoverage;
-      return b.plat.fmtCoverage-a.plat.fmtCoverage;
+      if(b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
+      return b.descScore-a.descScore;
     });
 }
 function pautaResolveMatch(entry){
@@ -4431,33 +4617,38 @@ function pautaResolveMatch(entry){
   const best=candidates[0];
   if(!best) return null;
   const second=candidates[1];
-  if(pautaNameConfident(best,second)){
+  // 1) Coincidencia completa de plataformas → priorizar; desambiguar por nombre/desc
+  if(best.plat.fullMatch){
+    const full=candidates.filter(c=>c.plat.fullMatch);
+    if(full.length===1){
+      return{fmt:best.fmt,score:Math.max(best.score,.92),method:'plat-full',breakdown:best.breakdown};
+    }
+    full.sort((a,b)=>{
+      if(b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
+      return b.descScore-a.descScore;
+    });
+    const w=full[0];
+    const amb=full.length>1&&Math.abs(full[0].nameScore-full[1].nameScore)<.15;
+    return{fmt:w.fmt,score:Math.max(w.score,.9),method:'plat-full',breakdown:w.breakdown,ambiguous:amb};
+  }
+  // 2) Buena cobertura de plataformas + nombre claro
+  if(best.plat.entryCoverage>=.75&&best.nameScore>=PAUTA_NAME_MIN_CONFIDENT){
+    return{fmt:best.fmt,score:best.score,method:'plat+name',breakdown:best.breakdown};
+  }
+  // 3) Nombre muy claro y gap vs segundo
+  if(pautaNameConfident(best,second)&&best.nameScore>=PAUTA_NAME_MIN_CONFIDENT){
     return{fmt:best.fmt,score:best.nameScore,method:'name',breakdown:best.breakdown};
   }
-  const nameBand=candidates.filter(c=>best.nameScore-c.nameScore<=PAUTA_NAME_TIE_BAND);
-  const platWinners=nameBand.filter(c=>c.plat.fullMatch);
-  if(platWinners.length===1){
-    const w=platWinners[0];
-    return{fmt:w.fmt,score:Math.max(w.nameScore,.9),method:'name+plat-full',breakdown:w.breakdown};
-  }
-  if(platWinners.length>1){
-    platWinners.sort((a,b)=>b.nameScore-a.nameScore);
-    const w=platWinners[0];
-    return{fmt:w.fmt,score:w.nameScore,method:'name+plat-full',breakdown:w.breakdown,ambiguous:true};
-  }
-  const byPlat=[...nameBand].sort((a,b)=>{
-    if(b.plat.entryCoverage!==a.plat.entryCoverage) return b.plat.entryCoverage-a.plat.entryCoverage;
-    if(b.plat.fmtCoverage!==a.plat.fmtCoverage) return b.plat.fmtCoverage-a.plat.fmtCoverage;
-    return b.nameScore-a.nameScore;
-  });
-  const pick=byPlat[0];
-  return{fmt:pick.fmt,score:pick.nameScore*.55+pick.plat.score*.45,method:'name+plat',breakdown:pick.breakdown};
+  // 4) Mejor score compuesto (plataformas → nombre → descripción)
+  return{fmt:best.fmt,score:best.score,method:'plat+name+desc',breakdown:best.breakdown,ambiguous:true};
 }
 function pautaIsConfidentMatch(matchInfo,alternatives){
   if(!matchInfo) return false;
-  if(matchInfo.method==='exact'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn') return true;
   if(matchInfo.ambiguous) return false;
-  if(matchInfo.method==='name+plat-full'&&matchInfo.score>=.85) return true;
+  if(matchInfo.method==='exact'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro') return true;
+  if(matchInfo.method==='capsulas-plat-name'&&matchInfo.score>=.85) return true;
+  if(matchInfo.method==='plat-full'&&matchInfo.score>=.85) return true;
+  if(matchInfo.method==='plat+name'&&matchInfo.score>=.75) return true;
   if(matchInfo.method==='name'&&matchInfo.score>=PAUTA_MATCH_CONFIDENT) return true;
   const second=alternatives[1];
   if(!second) return(matchInfo.score||0)>=PAUTA_MATCH_CONFIDENT;
@@ -4480,9 +4671,8 @@ function scorePautaEntryVsFormat(entry,fmt){
   const sig=pautaEntrySignals(entry);
   const descScore=sig.desc?matchScore(sig.desc,normPauta(fmt.desc||'')):0;
   const alcScore=pautaAlcSimilarity(sig.alc,fmt.imp);
-  const score=nameScore>=PAUTA_NAME_MIN_CONFIDENT
-    ?nameScore*.82+plat.score*.12+descScore*.04+alcScore*.02
-    :nameScore*.45+plat.score*.4+descScore*.1+alcScore*.05;
+  // Prioridad: plataformas (50%) → nombre (30%) → descripción (20%)
+  const score=plat.score*.5+nameScore*.3+descScore*.2;
   return{score,breakdown:{name:nameScore,desc:descScore,plat:plat.score,alc:alcScore,platFull:plat.fullMatch}};
 }
 function pautaRankAlternatives(entry,limit){
@@ -4490,67 +4680,73 @@ function pautaRankAlternatives(entry,limit){
   const entryScope=pautaEntryBrandScope(entry);
   const candidates=[];
   pautaFmtCandidates().forEach(fmt=>{
-    if((n.includes('grafica')||n.includes('carrusel'))&&fmt.id==='grafica_dto'&&!/descuento|dto|oferta/.test(n)) return;
+    if((n.includes('grafica')||n.includes('carrusel'))&&fmt.id==='grafica_dto'&&!/descuento|dto|oferta|productos/.test(n)) return;
     if(entryScope==='meganoticias'&&pautaFmtBrandScope(fmt)==='mega') return;
     if(entryScope==='mega'&&pautaFmtBrandScope(fmt)==='meganoticias') return;
     const r=scorePautaEntryVsFormat(entry,fmt);
+    if(r.score<PAUTA_ALT_MIN_SCORE&&!r.breakdown.platFull&&r.breakdown.name<.35) return;
     candidates.push({fmt,...r,method:'multi'});
   });
   candidates.sort((a,b)=>{
     if(b.breakdown.platFull!==a.breakdown.platFull) return(b.breakdown.platFull?1:0)-(a.breakdown.platFull?1:0);
+    if(b.breakdown.plat!==a.breakdown.plat) return b.breakdown.plat-a.breakdown.plat;
     if(b.breakdown.name!==a.breakdown.name) return b.breakdown.name-a.breakdown.name;
+    if(b.breakdown.desc!==a.breakdown.desc) return b.breakdown.desc-a.breakdown.desc;
     return b.score-a.score;
   });
   const seen=new Set();
   const out=[];
+  const max=limit||PAUTA_ALTERNATIVES_MAX;
   for(const c of candidates){
     if(seen.has(c.fmt.id)) continue;
     seen.add(c.fmt.id);
     out.push(c);
-    if(out.length>=(limit||PAUTA_ALTERNATIVES_MAX)) break;
+    if(out.length>=max) break;
   }
   return out;
 }
 function pautaAliasMatch(n,entry){
-  if(PAUTA_ALIASES[n]){
-    const id=PAUTA_ALIASES[n];
+  function resolveAliasId(id){
     if(id==='__grafica_feed__') return resolveGraficaFeedMatch(entry,n);
     if(id==='__nota_web__') return resolveNotaWebMatch(entry,n);
     if(id==='__capsula_mn__') return resolveCapsulaMnMatch(entry,n);
+    if(id==='__backstage__') return resolveBackstageMatch(entry,n);
+    if(id==='__dinamica_rostro__') return resolveDinamicaRostroMatch(entry,n);
+    if(id==='__capsulas_plat__') return resolveCapsulasPlatFirstMatch(entry,n);
     const f=allFmts().find(x=>x.id===id);
-    if(f) return{fmt:f,score:1,method:'alias'};
+    if(!f||!pautaFmtAllowedInCtx(f)) return null;
+    return{fmt:f,score:1,method:'alias'};
   }
-  for(const key of Object.keys(PAUTA_ALIASES)){
-    if(n.includes(key)||key.includes(n)){
-      const id=PAUTA_ALIASES[key];
-      if(id==='__grafica_feed__'){
-        const g=resolveGraficaFeedMatch(entry,n);
-        if(g) return g;
-        continue;
-      }
-      if(id==='__nota_web__'){
-        const nw=resolveNotaWebMatch(entry,n);
-        if(nw) return nw;
-        continue;
-      }
-      if(id==='__capsula_mn__'){
-        const cm=resolveCapsulaMnMatch(entry,n);
-        if(cm) return cm;
-        continue;
-      }
-      const f=allFmts().find(x=>x.id===id);
-      if(f) return{fmt:f,score:.95,method:'alias-partial'};
-    }
+  if(PAUTA_ALIASES[n]){
+    const hit=resolveAliasId(PAUTA_ALIASES[n]);
+    if(hit) return hit;
+  }
+  // Partial: prefer longest key that is contained in the name (not the reverse, too aggressive)
+  const partialKeys=Object.keys(PAUTA_ALIASES)
+    .filter(key=>key.length>=6&&(n.includes(key)||(n.length>=8&&key.includes(n))))
+    .sort((a,b)=>b.length-a.length);
+  for(const key of partialKeys){
+    const hit=resolveAliasId(PAUTA_ALIASES[key]);
+    if(hit) return{...hit,score:hit.score>=1?.95:hit.score,method:hit.method==='alias'?'alias-partial':hit.method};
+  }
+  // Cápsulas verticales: plataformas primero, luego nombre
+  if(/capsula/.test(n)&&/vertical/.test(n)){
+    return resolveCapsulasPlatFirstMatch(entry,n);
+  }
+  if(/capsula/.test(n)&&/rostro/.test(n)&&!/informativ/.test(n)&&!/meganoticias/.test(n)){
+    return resolveCapsulasPlatFirstMatch(entry,n);
   }
   if(/dinamica/.test(n)&&/rostro/.test(n)){
-    const f=allFmts().find(x=>x.id==='dinamicas');
-    if(f) return{fmt:f,score:.95,method:'dinamica-rostro'};
+    return resolveDinamicaRostroMatch(entry,n);
   }
-  if((/informativo/.test(n)||/capsula/.test(n))&&(/previo|previa|informativ/.test(n)||/capsula/.test(n))){
-    const cm=resolveCapsulaMnMatch(entry,n);
-    if(cm) return cm;
+  if(/backstage/.test(n)){
+    return resolveBackstageMatch(entry,n);
   }
-  if((/grafica/.test(n)||/carrusel/.test(n))&&!/descuento|dto|oferta|anuncio/.test(n)){
+  // Cápsula Informativa MN solo si habla de informativa / previo / meganoticias
+  if((/capsula/.test(n)&&/informativ/.test(n))||(/informativo/.test(n)&&/previo|previa|meganoticias/.test(n))){
+    return resolveCapsulaMnMatch(entry,n);
+  }
+  if((/grafica/.test(n)||(/carrusel/.test(n)&&!/productos/.test(n)))&&!/descuento|dto|oferta|anuncio/.test(n)){
     const g=resolveGraficaFeedMatch(entry,n);
     if(g) return g;
   }
@@ -4565,10 +4761,18 @@ function pautaEntryPlatText(entry){
 function platLineHasMega(p){
   const s=normPauta(p);
   if(/meganoticias/.test(s)) return false;
+  if(/megadeportes/.test(s)) return false;
+  if(/teleseries/.test(s)&&!/mega/.test(s)) return false;
   return /mega/.test(s);
 }
 function platLineHasMn(p){
   return /meganoticias/.test(normPauta(p));
+}
+function platLineHasMd(p){
+  return /megadeportes/.test(normPauta(p));
+}
+function platLineHasTs(p){
+  return /teleseries/.test(normPauta(p));
 }
 function pautaPlatHasBrand(entry,brand){
   const parts=[];
@@ -4576,6 +4780,8 @@ function pautaPlatHasBrand(entry,brand){
   if(entry.plataforma) parts.push(entry.plataforma);
   if(!parts.length) return false;
   if(brand==='meganoticias') return parts.some(platLineHasMn);
+  if(brand==='megadeportes') return parts.some(platLineHasMd);
+  if(brand==='teleseries') return parts.some(platLineHasTs);
   if(brand==='mega') return parts.some(platLineHasMega);
   return parts.some(p=>normPauta(p).includes(normPauta(brand)));
 }
@@ -4592,11 +4798,92 @@ function pickGraficaFeedId(entry){
 }
 function resolveCapsulaMnMatch(entry,n){
   const f=allFmts().find(x=>x.id===PAUTA_CAPSULA_MN_ID);
-  if(!f) return null;
+  if(!f||!pautaFmtAllowedInCtx(f)) return null;
+  // No forzar MN si la pauta es solo Mega
+  if(pautaEntryBrandScope(entry)==='mega') return null;
   const plat=pautaPlatMatchAnalysis(entry,f);
   const r=scorePautaEntryVsFormat(entry,f);
   const score=Math.max(r.score,.9,plat.fullMatch?1:.85);
   return{fmt:f,score,method:'capsula-mn',breakdown:r.breakdown};
+}
+function resolveBackstageMatch(entry,n){
+  const text=normPauta([n,entry.tematica,entry.medio,entry.plataforma].join(' '));
+  const wantsVod=PAUTA_MATCH_CTX.allowVodcast&&/vodcast/.test(text);
+  const wantsLs=PAUTA_MATCH_CTX.allowLiveShopping&&/live\s*shopping|liveshopping/.test(text);
+  let id='backstage';
+  if(wantsLs) id='ls_backstage';
+  else if(wantsVod) id='vod_backstage';
+  const f=allFmts().find(x=>x.id===id);
+  if(!f||!pautaFmtAllowedInCtx(f)){
+    const fallback=allFmts().find(x=>x.id==='backstage');
+    if(!fallback) return null;
+    const r=scorePautaEntryVsFormat(entry,fallback);
+    return{fmt:fallback,score:Math.max(r.score,.92),method:'backstage',breakdown:r.breakdown};
+  }
+  const r=scorePautaEntryVsFormat(entry,f);
+  return{fmt:f,score:Math.max(r.score,.95),method:'backstage',breakdown:r.breakdown};
+}
+function resolveDinamicaRostroMatch(entry,n){
+  // Si el nombre es tipo "cápsulas verticales", usar plataformas primero
+  if(/capsula/.test(n)&&/vertical|rostro/.test(n)){
+    return resolveCapsulasPlatFirstMatch(entry,n);
+  }
+  const text=normPauta([n,entry.tematica,entry.medio,entry.plataforma].join(' '));
+  let id='dinamicas';
+  if(PAUTA_MATCH_CTX.allowVodcast&&/vodcast/.test(text)) id='vod_dinamica';
+  const f=allFmts().find(x=>x.id===id);
+  if(!f||!pautaFmtAllowedInCtx(f)){
+    const fallback=allFmts().find(x=>x.id==='dinamicas');
+    if(!fallback) return null;
+    const r=scorePautaEntryVsFormat(entry,fallback);
+    return{fmt:fallback,score:Math.max(r.score,.95),method:'dinamica-rostro',breakdown:r.breakdown};
+  }
+  const r=scorePautaEntryVsFormat(entry,f);
+  return{fmt:f,score:Math.max(r.score,.95),method:'dinamica-rostro',breakdown:r.breakdown};
+}
+function capsulasNameAffinity(entry,fmt){
+  const n=normPauta(entry.tipoContenido);
+  const fn=normPauta(fmt.name);
+  let s=pautaScoreName(entry,fmt);
+  if(fmt.id==='dinamicas') s=Math.max(s,.95);
+  if(/dinamica/.test(fn)&&/rostro/.test(fn)) s=Math.max(s,.9);
+  if(/capsula/.test(fn)&&(/vertical/.test(fn)||/rostro/.test(fn))) s=Math.max(s,.88);
+  if(/capsula/.test(fn)&&/informativ|meganoticias/.test(fn)&&pautaEntryBrandScope(entry)==='mega') s=Math.min(s,.25);
+  if(/capsula/.test(n)&&/vertical/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.min(s,.2);
+  return s;
+}
+function resolveCapsulasPlatFirstMatch(entry,n){
+  // 1) Prioridad: formatos con mismas plataformas
+  const candidates=pautaCandidatesByName(entry);
+  if(!candidates.length){
+    const fallback=allFmts().find(x=>x.id==='dinamicas');
+    if(!fallback||!pautaFmtAllowedInCtx(fallback)) return null;
+    const r=scorePautaEntryVsFormat(entry,fallback);
+    return{fmt:fallback,score:Math.max(r.score,.85),method:'capsulas-plat-name',breakdown:r.breakdown};
+  }
+  const full=candidates.filter(c=>c.plat.fullMatch);
+  const strong=candidates.filter(c=>c.plat.entryCoverage>=.75);
+  const pool=(full.length?full:strong.length?strong:candidates.slice(0,6)).map(c=>({
+    ...c,
+    nameAff:capsulasNameAffinity(entry,c.fmt)
+  }));
+  // 2) Entre los que coinciden en plataformas, elegir el mejor nombre
+  pool.sort((a,b)=>{
+    if(b.plat.fullMatch!==a.plat.fullMatch) return(b.plat.fullMatch?1:0)-(a.plat.fullMatch?1:0);
+    if(b.plat.score!==a.plat.score) return b.plat.score-a.plat.score;
+    if(b.nameAff!==a.nameAff) return b.nameAff-a.nameAff;
+    return b.descScore-a.descScore;
+  });
+  const w=pool[0];
+  const second=pool[1];
+  const amb=!!second&&w.plat.score-second.plat.score<.05&&Math.abs(w.nameAff-second.nameAff)<.12;
+  return{
+    fmt:w.fmt,
+    score:Math.max(w.plat.score*.55+w.nameAff*.45,.88),
+    method:'capsulas-plat-name',
+    breakdown:{...w.breakdown,name:w.nameAff,platFull:w.plat.fullMatch},
+    ambiguous:amb
+  };
 }
 function pickNotaWebId(entry){
   const mega=pautaPlatHasBrand(entry,'mega');
@@ -4647,18 +4934,18 @@ function matchFormatoEntry(entry){
       ?graficaFeedAlternatives(entry,alias.fmt.id)
       :alias.method==='nota-web'
       ?notaWebAlternatives(entry,alias.fmt.id)
-      :alias.method==='capsula-mn'
-      ?[{fmt:alias.fmt,score:alias.score,method:'capsula-mn',breakdown:alias.breakdown}]
       :[alias];
-    return{matchInfo:alias,alternatives:alts,needsReview:false};
+    // Alias solo es auto-confiable si plataformas no contradicen fuerte
+    const plat=pautaPlatMatchAnalysis(entry,alias.fmt);
+    const needsReview=plat.score===0&&pautaEntryPlatLines(entry).length>0&&!['exact','alias'].includes(alias.method);
+    return{matchInfo:alias,alternatives:alts,needsReview:!!needsReview&&alias.method!=='alias'&&alias.method!=='dinamica-rostro'&&alias.method!=='backstage'};
   }
   const exact=pautaFmtCandidates().find(x=>normPauta(x.name)===n);
   if(exact) return{matchInfo:{fmt:exact,score:1,method:'exact'},alternatives:[{fmt:exact,score:1,method:'exact'}],needsReview:false};
   const resolved=pautaResolveMatch(entry);
   const alternatives=pautaRankAlternatives(entry);
   if(!resolved) return{matchInfo:null,alternatives,needsReview:true};
-  const matchInfo=resolved;
-  return{matchInfo,alternatives,needsReview:!pautaIsConfidentMatch(matchInfo,alternatives)};
+  return{matchInfo:resolved,alternatives,needsReview:!pautaIsConfidentMatch(resolved,alternatives)};
 }
 function matchFormato(tipoContenido){
   return matchFormatoEntry({tipoContenido,plats:[],tematica:'',totalAlc:0}).matchInfo;
@@ -4669,20 +4956,25 @@ function pautaFmtHint(fmt,breakdown){
   if(fmt.imp>0) bits.push(f0(fmt.imp)+' imp. ref.');
   if(breakdown){
     const hints=[];
-    if(breakdown.name>=.5) hints.push('nombre');
     if(breakdown.platFull) hints.push('plataformas ✓');
     else if(breakdown.plat>=.5) hints.push('plataformas');
+    if(breakdown.name>=.5) hints.push('nombre');
     if(breakdown.desc>=.35) hints.push('descripción');
     if(breakdown.alc>=.5) hints.push('alcance');
     if(hints.length) bits.push('coincide en: '+hints.join(', '));
   }
   return bits.join(' · ');
 }
+function pautaEntryPlatSummary(entry){
+  const pl=(entry.plats||[]).map(p=>p.plat).filter(Boolean);
+  if(pl.length) return pl.join(' · ');
+  return entry.plataforma||'';
+}
 function pautaEntryMetaLine(entry){
   const bits=[];
   if(entry.tematica) bits.push(escHtml(entry.tematica.length>90?entry.tematica.slice(0,87)+'…':entry.tematica));
-  const pl=(entry.plats||[]).map(p=>p.plat).filter(Boolean);
-  if(pl.length) bits.push(escHtml(pl.join(' · ')));
+  const pl=pautaEntryPlatSummary(entry);
+  if(pl) bits.push(escHtml(pl));
   if(entry.totalAlc>0) bits.push(f0(entry.totalAlc)+' imp.');
   return bits.join(' · ');
 }
@@ -4702,17 +4994,22 @@ function buildPautaPickCard(idx,m){
       <span class="pauta-pick-pct">${pct}%</span>
     </label>`;
   });
+  const customName=pautaCellStr(e.tipoContenido)||'Formato personalizado';
+  const customDesc=pautaCellStr(e.tematica)||'(sin descripción)';
+  const customPlats=pautaEntryPlatSummary(e)||'(sin plataformas)';
   radios+=`<label class="pauta-pick-opt pauta-pick-custom">
     <input type="radio" name="pautaPick_${idx}" value="__custom__"${!opts.length?' checked':''}>
     <span class="pauta-pick-opt-body">
-      <div class="pauta-pick-opt-name">Formato personalizado</div>
-      <div class="pauta-pick-opt-sub">Crear «${escHtml(pautaCellStr(e.tipoContenido)||'Formato personalizado')}» en Formatos personalizados</div>
+      <div class="pauta-pick-opt-name">＋ Crear formato nuevo</div>
+      <div class="pauta-pick-opt-sub"><strong>Nombre:</strong> ${escHtml(customName)}</div>
+      <div class="pauta-pick-opt-sub"><strong>Descripción:</strong> ${escHtml(customDesc.length>120?customDesc.slice(0,117)+'…':customDesc)}</div>
+      <div class="pauta-pick-opt-sub"><strong>Plataformas:</strong> ${escHtml(customPlats.length>140?customPlats.slice(0,137)+'…':customPlats)}</div>
     </span>
   </label>`;
   const meta=pautaEntryMetaLine(e);
   const altHint=opts.length
-    ?'Elige una de las <strong>3 alternativas</strong> más similares del catálogo (nombre, plataformas, descripción y alcance), o crea un formato personalizado:'
-    :'No se encontraron alternativas cercanas en el catálogo. Puedes crear un formato personalizado:';
+    ?'Alternativas ordenadas por <strong>plataformas</strong>, luego <strong>nombre</strong> y <strong>descripción</strong>. Elige una del catálogo o crea un formato nuevo con los datos del Excel:'
+    :'No se encontraron alternativas cercanas. Puedes crear un formato nuevo con nombre, descripción y plataformas del Excel:';
   return`<div class="pauta-pick-card" data-pauta-idx="${idx}">
     <div class="pauta-pick-src"><strong>${escHtml(pautaCellStr(e.tipoContenido)||'(sin nombre)')}</strong>
       <span class="pauta-tag pauta-tag-pick">Revisar</span></div>
@@ -4761,15 +5058,17 @@ function getPautaSelectedMatchInfo(idx,m){
 }
 function createCustomFromEntry(entry){
   const id='custom_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+  const platLabel=pautaEntryPlatSummary(entry)||'A definir';
   return addCustomFormat({
     id,customType:true,
     name:pautaCellStr(entry.tipoContenido)||'Formato personalizado',
     tag:'Personalizado',tagCls:'tag-fijo',
-    plat:entry.plataforma||entry.plats.map(p=>p.plat).join(' · '),
+    plat:platLabel,
     marca:entry.marca||'A definir',
     desc:entry.tematica||'',
     ref:entry.referencia||'',
-    tipo:'fijo',precio:0,imp:entry.totalAlc||0
+    tipo:'fijo',precio:0,imp:entry.totalAlc||0,
+    pautaPlats:entry.plats&&entry.plats.length?entry.plats.map(p=>({plat:p.plat,alc:+p.alc||0})):[]
   });
 }
 function mergePautaPlats(s,entry){
@@ -4781,6 +5080,13 @@ function mergePautaPlats(s,entry){
   const total=s.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
   if(total>0) s.imp=total;
 }
+function applyCatalogPautaPlats(f,s){
+  if(!f||!s||!f.pautaPlats||!f.pautaPlats.length) return false;
+  s.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:+p.alc||0}));
+  const total=s.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
+  if(total>0) s.imp=total;
+  return true;
+}
 function applyPautaEntry(entry,matchInfo){
   let f,created=false;
   if(matchInfo&&matchInfo.fmt){
@@ -4791,8 +5097,10 @@ function applyPautaEntry(entry,matchInfo){
         &&s.pautaMedio===entry.medio
         &&s.pautaEtapa===entry.etapa;
       if(sameItem||!s.pautaPlats||!s.pautaPlats.length){
-        mergePautaPlats(s,entry);
+        if(f.id==='spots_licenciados') applyCatalogPautaPlats(f,s);
+        else mergePautaPlats(s,entry);
         if(entry.tematica) s.descCustom=entry.tematica;
+        if(entry.qty) s.qty=entry.qty;
         return{fmt:f,created:false,matchInfo};
       }
       f=createCustomFromEntry(entry);
@@ -4808,8 +5116,13 @@ function applyPautaEntry(entry,matchInfo){
   s.descCustom=entry.tematica||null;
   s.pautaEtapa=entry.etapa||'';
   s.pautaMedio=entry.medio||'';
-  s.pautaPlats=entry.plats.length?entry.plats.slice():[];
-  if(entry.totalAlc>0) s.imp=entry.totalAlc;
+  if(f.id==='spots_licenciados'&&applyCatalogPautaPlats(f,s)){
+    // métricas fijas del catálogo: FB Mega 10.000 + YouTube Mega 2.000
+  } else {
+    s.pautaPlats=entry.plats.length?entry.plats.slice():[];
+    if(entry.totalAlc>0) s.imp=entry.totalAlc;
+    else if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
+  }
   if(entry.marca&&f.customType) f.marca=entry.marca;
   if(entry.referencia&&f.customType) f.ref=entry.referencia;
   return{fmt:f,created,matchInfo};
@@ -4869,11 +5182,24 @@ async function importarPautaEditorial(input){
       showToast('No se encontraron formatos en el archivo');
       return;
     }
+    PAUTA_MATCH_CTX=pautaDetectPackageContext(parsed);
     const matches=parsed.entries.map(entry=>{
       const r=matchFormatoEntry(entry);
-      return{entry,matchInfo:r.matchInfo,alternatives:r.alternatives,needsReview:r.needsReview};
+      // Si hay alias confiable, igual enriquecer alternativas con ranking por plataformas
+      let alternatives=r.alternatives||[];
+      if(r.matchInfo&&r.matchInfo.fmt){
+        const ranked=pautaRankAlternatives(entry);
+        const seen=new Set(alternatives.map(a=>a.fmt.id));
+        ranked.forEach(a=>{
+          if(!seen.has(a.fmt.id)){seen.add(a.fmt.id);alternatives.push(a);}
+        });
+        // Poner el match elegido primero
+        alternatives=[{fmt:r.matchInfo.fmt,score:r.matchInfo.score,method:r.matchInfo.method,breakdown:r.matchInfo.breakdown},
+          ...alternatives.filter(a=>a.fmt.id!==r.matchInfo.fmt.id)].slice(0,PAUTA_ALTERNATIVES_MAX);
+      }
+      return{entry,matchInfo:r.matchInfo,alternatives,needsReview:r.needsReview};
     });
-    PAUTA_PENDING_IMPORT={parsed,matches};
+    PAUTA_PENDING_IMPORT={parsed,matches,ctx:PAUTA_MATCH_CTX};
     document.getElementById('pautaModalBody').innerHTML=buildPautaPreviewHtml(parsed,matches);
     document.getElementById('pautaOverlay').classList.add('show');
   }catch(e){
