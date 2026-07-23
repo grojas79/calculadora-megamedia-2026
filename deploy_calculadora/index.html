@@ -1529,7 +1529,7 @@ function initFmtState(f){
   const r=isRadio?RADIO_DEFAULT:null;
   const precio=isRadio&&f.precios?f.precios[r]:f.precio;
   const imp=isRadio&&f.imps?f.imps[r]:f.imp;
-  const base={active:false,qty:1,dto:0,precio,imp,descCustom:null,radio:r,progNombre:'',rostroNombre:'',costoProd:0};
+  const base={active:false,qty:1,dto:0,precio,imp,descCustom:null,nameOverride:null,radio:r,progNombre:'',rostroNombre:'',costoProd:0};
   if(isRadio) base.radioEntries=[newRadioEntry(f,RADIO_DEFAULT)];
   if(f.infType==='influencer'){
     base.influencers=[{name:'',plat:'Instagram',reach:0,precio:0}];
@@ -2042,6 +2042,10 @@ function setCur(c){
 function escHtml(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function getDescDefault(f){
   return (f.desc||'')+(f.descHint?(' '+f.descHint):'');
+}
+function fmtDisplayName(f,s){
+  const ov=(s&&s.nameOverride!=null?String(s.nameOverride):'').trim();
+  return ov||(f&&f.name)||'';
 }
 function getDesc(f){
   const s=STATE[f.id];
@@ -2641,7 +2645,7 @@ function scrollToCat(id){
   },50);
 }
 function sumFmtLabel(r){
-  let t=r.infTotalRow?'TOTAL INFLUENCERS':r.f.name;
+  let t=r.infTotalRow?'TOTAL INFLUENCERS':fmtDisplayName(r.f,r.s);
   if(r.webPlat) t+=' · '+webPlatLabel(r.webPlat);
   if(!r.infTotalRow&&r.s.qty>1) t+=' ×'+r.s.qty;
   return t;
@@ -3137,7 +3141,7 @@ function render(){
         :`<div style="font-size:9.5px;color:var(--cy);margin-top:2px">${webPlatLabel(r.webPlat)} · plataforma ${(r.webPlatIdx||0)+1}</div>`)
         :(r.radioStation?`<div style="font-size:9.5px;color:var(--or);margin-top:2px">📻 Radio ${radioCap(r.radioStation)} · estación ${(r.radioIdx||0)+1}</div>`:'');
       tbody+=`<tr${(r.webPlatRadio||r.radioStation)?' style="background:rgba(230,126,34,.04)"':''}>
-        <td><strong>${r.f.name}</strong>${platSub}</td>
+        <td><strong>${fmtDisplayName(r.f,r.s)}</strong>${platSub}</td>
         <td style="font-size:10px;color:var(--tx2)">${webPlatCellHtml(r)}</td>
         <td class="desc-cell">${(()=>{const tag=getFmtMetaTag(r.f,r.f.id);return tag?'['+tag+'] '+getDesc(r.f):getDesc(r.f);})()}</td>
         <td>${r.f.tipo==='cpm'?'CPM':'Precio fijo'}</td>
@@ -3665,7 +3669,7 @@ async function exportarExcel(){
         } else {
           rh=excelDataRowHeight([
             {text:medioPre,col:1,minH:15},
-            {text:row.f.name,col:2,minH:15},
+            {text:fmtDisplayName(row.f,row.s),col:2,minH:15},
             {text:row.f.marca||'',col:3,minH:14},
             {text:descFull,col:4,minH:15},
             {text:platVal,col:7,minH:14}
@@ -3715,7 +3719,7 @@ async function exportarExcel(){
 
         const medio = medioPre;
         sc(r,1,medio,{bg,fg:C.black,bold:true,sz:9,ha:'center',va:'top'});
-        sc(r,2,row.f.name,{bg,fg:C.black,bold:true,sz:9,ha:'center',va:'top'});
+        sc(r,2,fmtDisplayName(row.f,row.s),{bg,fg:C.black,bold:true,sz:9,ha:'center',va:'top'});
         sc(r,3,row.f.marca||'',{bg,fg:C.black,sz:9,ha:'center',va:'top'});
         sc(r,4,descFull,{bg,fg:C.black,sz:9,ha:'left',italic:true,wrap:true,va:'top'});
         // Referencia con hyperlink
@@ -4097,7 +4101,7 @@ function exportarPDF(){
         const platFg=(row.webPlatRadio||row.radioStation)?C.dto:C.black;
         cells=[
           td(esc(medioPre),{bg,bold:true,align:'center',va:'top'}),
-          td(esc(row.f.name),{bg,bold:true,align:'center',va:'top'}),
+          td(esc(fmtDisplayName(row.f,row.s)),{bg,bold:true,align:'center',va:'top'}),
           td(esc(row.f.marca||''),{bg,align:'center',va:'top'}),
           td(esc(descFull),{bg,align:'left',italic:true,va:'top'}),
           td(refCell,{bg,align:'center'}),
@@ -5240,6 +5244,7 @@ function applyPautaEntry(entry,matchInfo){
         else mergePautaPlats(s,entry);
         if(entry.tematica) s.descCustom=entry.tematica;
         if(entry.qty) s.qty=entry.qty;
+        s.nameOverride=pautaCellStr(entry.tipoContenido)||null;
         return{fmt:f,created:false,matchInfo};
       }
       f=createCustomFromEntry(entry);
@@ -5255,6 +5260,7 @@ function applyPautaEntry(entry,matchInfo){
   s.descCustom=entry.tematica||null;
   s.pautaEtapa=entry.etapa||'';
   s.pautaMedio=entry.medio||'';
+  if(!f.customType) s.nameOverride=pautaCellStr(entry.tipoContenido)||null;
   if(f.id==='spots_licenciados'&&applyCatalogPautaPlats(f,s)){
     // métricas fijas del catálogo: FB Mega 10.000 + YouTube Mega 2.000
   } else {
