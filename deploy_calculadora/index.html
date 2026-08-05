@@ -502,27 +502,27 @@ td.inv{color:var(--cy);font-weight:700}
 <div class="card">
   <div class="sec">Datos de campaña</div>
   <div class="g2">
-    <div class="field"><label>Cliente</label><input id="cliente" type="text" placeholder="Ej: L'Oréal Chile"/></div>
-    <div class="field"><label>Nombre de campaña</label><input id="campania" type="text" placeholder="Ej: Lanzamiento Armani"/></div>
+    <div class="field"><label for="cliente">Cliente</label><input id="cliente" type="text" placeholder="Ej: L'Oréal Chile" autocomplete="organization"/></div>
+    <div class="field"><label for="campania">Nombre de campaña</label><input id="campania" type="text" placeholder="Ej: Lanzamiento Armani" autocomplete="off"/></div>
   </div>
   <div class="g2" style="margin-bottom:10px">
-    <div class="field"><label>E-mail del ejecutivo</label><input id="emailEjec" type="email" placeholder="Ej: nombre.apellido@megamedia.cl" autocomplete="email"/></div>
+    <div class="field"><label for="emailEjec">E-mail del ejecutivo</label><input id="emailEjec" type="email" placeholder="Ej: nombre.apellido@megamedia.cl" autocomplete="email"/></div>
   </div>
   <div class="g3">
-    <div class="field"><label>Duración (semanas)</label><input id="semanas" type="number" value="4" min="1" max="52"/></div>
-    <div class="field"><label>Objetivo</label>
-      <select id="objetivo">
+    <div class="field"><label for="semanas">Duración (semanas)</label><input id="semanas" type="number" value="4" min="1" max="52"/></div>
+    <div class="field"><label for="objetivo">Objetivo</label>
+      <select id="objetivo" aria-label="Objetivo de campaña">
         <option>Awareness / Alcance</option>
         <option>Engagement</option>
         <option>Performance / Leads</option>
         <option>Branding Continuo</option>
       </select>
     </div>
-    <div class="field"><label>Moneda</label>
-      <div class="cur-row">
+    <div class="field"><label id="lblMoneda">Moneda</label>
+      <div class="cur-row" role="group" aria-labelledby="lblMoneda">
         <div class="cur-tog">
-          <button class="cur-btn on" id="btnCLP" onclick="setCur('CLP')">🇨🇱 CLP</button>
-          <button class="cur-btn" id="btnUSD" onclick="setCur('USD')">🇺🇸 USD</button>
+          <button type="button" class="cur-btn on" id="btnCLP" onclick="setCur('CLP')" aria-pressed="true">CLP</button>
+          <button type="button" class="cur-btn" id="btnUSD" onclick="setCur('USD')" aria-pressed="false">USD</button>
         </div>
         <div class="tc-pill"><strong id="tcPillVal">…</strong><span style="opacity:.6">CLP/USD</span></div>
       </div>
@@ -542,13 +542,15 @@ td.inv{color:var(--cy);font-weight:700}
       stroke-linecap="round" stroke-linejoin="round">
       <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
     </svg>
-    <input id="fmtSearch" type="text" placeholder="Buscar formato… (ej: nota, live, CPM, deportes)"
+    <input id="fmtSearch" type="search" placeholder="Buscar formato… (ej: nota, live, CPM, deportes)  ·  atajo /"
+      aria-label="Buscar formato en el tarifario"
       style="width:100%;background:var(--dk3);border:1px solid var(--bd2);border-radius:var(--r2);
              padding:8px 36px 8px 32px;color:var(--tx);font-size:13px;outline:none;transition:.15s"
       oninput="filtrarFormatos(this.value)"
       onfocus="this.style.borderColor='var(--cy)'"
       onblur="this.style.borderColor='var(--bd2)'"/>
-    <button id="fmtSearchClear" onclick="document.getElementById('fmtSearch').value='';filtrarFormatos('')"
+    <button type="button" id="fmtSearchClear" onclick="document.getElementById('fmtSearch').value='';filtrarFormatos('')"
+      aria-label="Limpiar búsqueda"
       style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);
              background:none;border:none;color:var(--tx2);cursor:pointer;font-size:16px;
              line-height:1;padding:0 4px">✕</button>
@@ -559,10 +561,10 @@ td.inv{color:var(--cy);font-weight:700}
   <div class="dto-global" style="margin-top:14px">
     <div class="dto-global-title">Descuento por volumen sobre el total de la pauta</div>
     <div class="dto-global-row">
-      <label>Descuento global %</label>
-      <input type="number" id="dtoGlobal" value="0" min="0" max="100" step="0.01" oninput="onDtoGlobalInput(this)"/>
-      <label>Inversión final</label>
-      <input type="text" id="invFinalMain" class="inv-final-field" data-m="1" inputmode="numeric" placeholder="Ej: 3.000.000" oninput="onInvFinalInput(this)"/>
+      <label for="dtoGlobal">Descuento global %</label>
+      <input type="number" id="dtoGlobal" value="0" min="0" max="100" step="0.01" oninput="onDtoGlobalInput(this)" aria-describedby="dtoPreview"/>
+      <label for="invFinalMain">Inversión final</label>
+      <input type="text" id="invFinalMain" class="inv-final-field" data-m="1" inputmode="numeric" placeholder="Ej: 3.000.000" oninput="onInvFinalInput(this)" aria-label="Inversión final de la pauta"/>
       <div class="dto-preview" id="dtoPreview">Sin descuento aplicado</div>
     </div>
   </div>
@@ -598,7 +600,7 @@ td.inv{color:var(--cy);font-weight:700}
           <div class="sum-total-label" style="color:var(--cy)">Inversión Final</div>
           <input type="text" id="invFinalSide" class="inv-final-input" data-m="1" inputmode="numeric"
             placeholder="—" title="Edita el valor final; el descuento por volumen se ajusta solo"
-            oninput="onInvFinalInput(this)"/>
+            oninput="onInvFinalInput(this)" aria-label="Inversión final de la propuesta"/>
           <div class="inv-final-hint" id="invFinalHint">Editable · redondea y el % se calcula solo</div>
           <div id="sumTotal" style="display:none">—</div>
         </div>
@@ -609,12 +611,12 @@ td.inv{color:var(--cy);font-weight:700}
     <div class="dto-global dto-side">
       <div class="dto-global-title">Descuento por volumen</div>
       <div class="dto-global-row">
-        <label>Descuento %</label>
-        <input type="number" id="dtoGlobalSide" value="0" min="0" max="100" step="0.01" oninput="onDtoGlobalInput(this)"/>
+        <label for="dtoGlobalSide">Descuento %</label>
+        <input type="number" id="dtoGlobalSide" value="0" min="0" max="100" step="0.01" oninput="onDtoGlobalInput(this)" aria-describedby="dtoPreviewSide"/>
       </div>
       <div class="dto-global-row" style="margin-top:8px">
-        <label>Inversión final</label>
-        <input type="text" id="invFinalSide2" class="inv-final-field" data-m="1" inputmode="numeric" placeholder="Ej: 3.000.000" oninput="onInvFinalInput(this)"/>
+        <label for="invFinalSide2">Inversión final</label>
+        <input type="text" id="invFinalSide2" class="inv-final-field" data-m="1" inputmode="numeric" placeholder="Ej: 3.000.000" oninput="onInvFinalInput(this)" aria-label="Inversión final (resumen)"/>
       </div>
       <div class="dto-preview" id="dtoPreviewSide">Sin descuento aplicado</div>
     </div>
@@ -673,7 +675,33 @@ td.inv{color:var(--cy);font-weight:700}
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<script>
+// Carga ExcelJS con CDN de respaldo (cdnjs → jsDelivr)
+window.__exceljsReady=(function(){
+  const urls=[
+    'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js',
+    'https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js'
+  ];
+  function loadOne(src){
+    return new Promise(function(resolve,reject){
+      const s=document.createElement('script');
+      s.src=src; s.async=true;
+      s.onload=function(){ resolve(true); };
+      s.onerror=function(){ reject(new Error('fail '+src)); };
+      document.head.appendChild(s);
+    });
+  }
+  return (async function(){
+    for(let i=0;i<urls.length;i++){
+      try{
+        await loadOne(urls[i]);
+        if(typeof ExcelJS!=='undefined') return true;
+      }catch(e){}
+    }
+    return false;
+  })();
+})();
+</script>
 <script>
 // ── Tipo de cambio ────────────────────────────────────────────────────────
 let USD_CLP=900,TC_FECHA='—',MONEDA='CLP';
@@ -2097,8 +2125,10 @@ function calcInversionFinal(tNeto){
 }
 function setCur(c){
   MONEDA=c;
-  document.getElementById('btnCLP').classList.toggle('on',c==='CLP');
-  document.getElementById('btnUSD').classList.toggle('on',c==='USD');
+  const clp=document.getElementById('btnCLP');
+  const usd=document.getElementById('btnUSD');
+  if(clp){ clp.classList.toggle('on',c==='CLP'); clp.setAttribute('aria-pressed',c==='CLP'?'true':'false'); }
+  if(usd){ usd.classList.toggle('on',c==='USD'); usd.setAttribute('aria-pressed',c==='USD'?'true':'false'); }
   render();
 }
 
@@ -2678,25 +2708,25 @@ function fmtGrid(f,s){
   }
   if(isProduccionFmt(f)){
     s.imp=0;
-    return '<div><label>Precio unit. (CLP)</label>'
-      +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio||0)+'" '+oi+' style="'+inp+'"/></div>'
-      +'<div><label>Cantidad</label>'
-      +'<input type="number" id="q_'+id+'" value="'+(s.qty||1)+'" min="1" max="200" '+oi+' style="'+inp+'"/></div>'
-      +'<div><label>Dto. unitario %</label>'
-      +'<input type="number" id="d_'+id+'" value="'+(s.dto||0)+'" min="0" max="50" '+oi+' style="'+inp+'"/></div>'
-      +'<div style="display:none"><input type="number" id="i_'+id+'" value="0"/></div>';
+    return '<div><label for="p_'+id+'">Precio unit. (CLP)</label>'
+      +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio||0)+'" '+oi+' style="'+inp+'" aria-label="Precio unitario"/></div>'
+      +'<div><label for="q_'+id+'">Cantidad</label>'
+      +'<input type="number" id="q_'+id+'" value="'+(s.qty||1)+'" min="1" max="200" '+oi+' style="'+inp+'" aria-label="Cantidad"/></div>'
+      +'<div><label for="d_'+id+'">Dto. unitario %</label>'
+      +'<input type="number" id="d_'+id+'" value="'+(s.dto||0)+'" min="0" max="50" '+oi+' style="'+inp+'" aria-label="Descuento unitario porcentual"/></div>'
+      +'<div style="display:none"><input type="number" id="i_'+id+'" value="0" aria-hidden="true"/></div>';
   }
-  let g=progField+rostroField+'<div><label>'+(f.tipo==='cpm'?'CPM (CLP)':'Precio unit. (CLP)')+'</label>'
-    +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio)+'" '+oi+' style="'+inp+'"/></div>'
-    +'<div><label>Cantidad</label>'
-    +'<input type="number" id="q_'+id+'" value="'+s.qty+'" min="1" max="200" '+oi+' style="'+inp+'"/></div>'
-    +'<div><label>Dto. unitario %</label>'
-    +'<input type="number" id="d_'+id+'" value="'+s.dto+'" min="0" max="50" '+oi+' style="'+inp+'"/></div>'
-    +'<div><label>Impresiones est.</label>'
-    +'<input type="text" data-m="1" id="i_'+id+'" value="'+fmtMiles(s.imp)+'" '+oi+' style="'+inp+'"/></div>';
+  let g=progField+rostroField+'<div><label for="p_'+id+'">'+(f.tipo==='cpm'?'CPM (CLP)':'Precio unit. (CLP)')+'</label>'
+    +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio)+'" '+oi+' style="'+inp+'" aria-label="'+(f.tipo==='cpm'?'CPM':'Precio unitario')+'"/></div>'
+    +'<div><label for="q_'+id+'">Cantidad</label>'
+    +'<input type="number" id="q_'+id+'" value="'+s.qty+'" min="1" max="200" '+oi+' style="'+inp+'" aria-label="Cantidad"/></div>'
+    +'<div><label for="d_'+id+'">Dto. unitario %</label>'
+    +'<input type="number" id="d_'+id+'" value="'+s.dto+'" min="0" max="50" '+oi+' style="'+inp+'" aria-label="Descuento unitario porcentual"/></div>'
+    +'<div><label for="i_'+id+'">Impresiones est.</label>'
+    +'<input type="text" data-m="1" id="i_'+id+'" value="'+fmtMiles(s.imp)+'" '+oi+' style="'+inp+'" aria-label="Impresiones estimadas"/></div>';
   if(f.tipo==='cpm'){
-    g+='<div style="grid-column:1/-1"><label style="color:var(--cy)">💰 Inversión objetivo (CLP) → recalcula impresiones</label>'
-      +'<input type="text" data-m="1" id="inv_'+id+'" placeholder="Ej: 2.000.000" style="'+inpCy+'" '+oiInv+'/></div>';
+    g+='<div style="grid-column:1/-1"><label for="inv_'+id+'" style="color:var(--cy)">Inversión objetivo (CLP) → recalcula impresiones</label>'
+      +'<input type="text" data-m="1" id="inv_'+id+'" placeholder="Ej: 2.000.000" style="'+inpCy+'" '+oiInv+' aria-label="Inversión objetivo"/></div>';
   }
   return g+costoProdField;
 }
@@ -3555,14 +3585,25 @@ function excelDataRowHeight(cells,colWidths){
   return h;
 }
 
+async function ensureExcelJS(){
+  if(typeof ExcelJS!=='undefined') return true;
+  showToast('Cargando librería Excel…');
+  const ok=window.__exceljsReady?await window.__exceljsReady:false;
+  if(!ok||typeof ExcelJS==='undefined'){
+    showToast('No se pudo cargar ExcelJS. Revisa tu conexión e intenta de nuevo');
+    return false;
+  }
+  return true;
+}
+
 // ── Export Excel (ExcelJS → xlsx real con estilos) ───────────────────────
 async function exportarExcel(){
-  if(typeof ExcelJS==='undefined'){showToast('ExcelJS no cargó, reintenta');return;}
+  if(!(await ensureExcelJS())) return;
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
 
   const btn=document.querySelector('[onclick="exportarExcel()"]');
-  if(btn){btn.textContent='⏳ Generando…';btn.disabled=true;}
+  if(btn){btn.textContent='Generando…';btn.disabled=true;}
 
   try{
     const tNeto=rows.reduce((a,r)=>a+r.neto,0);
@@ -4080,7 +4121,7 @@ async function exportarExcel(){
     console.error(e);
     showToast('Error al generar Excel: '+e.message.slice(0,50));
   }finally{
-    if(btn){btn.textContent='📊 Excel';btn.disabled=false;}
+    if(btn){btn.textContent='Excel';btn.disabled=false;}
   }
 }
 
@@ -4090,7 +4131,7 @@ function exportarPDF(){
   if(!rows.length){showToast('Sin formatos activos');return;}
 
   const btn=document.querySelector('[onclick="exportarPDF()"]');
-  if(btn){btn.textContent='⏳ Generando…';btn.disabled=true;}
+  if(btn){btn.textContent='Generando…';btn.disabled=true;}
 
   try{
     const tNeto=rows.reduce((a,r)=>a+r.neto,0);
@@ -4422,19 +4463,27 @@ function exportarPDF(){
     root.innerHTML=html;
 
     document.body.classList.add('pdf-mode');
+    const prevTitle=document.title;
+    const safe=(s)=>String(s||'').replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_').slice(0,40);
+    document.title='Propuesta_'+safe(cli)+'_'+safe(cam)+'_'+hoy.replace(/\//g,'-');
     const cleanup=()=>{
       document.body.classList.remove('pdf-mode');
+      document.title=prevTitle;
       window.removeEventListener('afterprint',cleanup);
+      if(btn){btn.textContent='PDF';btn.disabled=false;}
     };
     window.addEventListener('afterprint',cleanup);
     setTimeout(()=>{ window.print(); },60);
-    showToast('✓ Abriendo impresión — elige "Guardar como PDF"');
+    showToast('Abriendo impresión — elige «Guardar como PDF»');
+    // Fallback si afterprint no dispara (algunos navegadores)
+    setTimeout(()=>{ if(document.body.classList.contains('pdf-mode')) cleanup(); },120000);
   }catch(e){
     console.error(e);
     document.body.classList.remove('pdf-mode');
     showToast('Error al generar PDF: '+e.message.slice(0,50));
+    if(btn){btn.textContent='PDF';btn.disabled=false;}
   }finally{
-    if(btn){btn.textContent='🖨 PDF';btn.disabled=false;}
+    // El botón se restaura en cleanup (tras print) o en catch
   }
 }
 
@@ -5441,7 +5490,7 @@ async function importarPautaEditorial(input){
       const text=await file.text();
       parsed=parsePautaCSV(text);
     } else if(ext==='xlsx'){
-      if(typeof ExcelJS==='undefined'){showToast('ExcelJS no cargó, reintenta');return;}
+      if(!(await ensureExcelJS())) return;
       const buffer=await file.arrayBuffer();
       parsed=await parsePautaXLSX(buffer);
     } else {
@@ -5502,12 +5551,29 @@ initTheme();
 loadEmailPref();
 const restoredDraft=loadDraft();
 buildFmts();render();renderHist();
-if(restoredDraft) showToast('✓ Borrador restaurado');
+if(restoredDraft) showToast('Borrador restaurado');
 ['cliente','campania','semanas','objetivo','emailEjec'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     if(id==='emailEjec') persistEmailPref();
     render();
   });
+});
+
+// Atajo: tecla / enfoca búsqueda de formatos (fuera de campos de texto)
+document.addEventListener('keydown',e=>{
+  if(e.key!=='/'||e.ctrlKey||e.metaKey||e.altKey) return;
+  const t=e.target;
+  if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable)) return;
+  e.preventDefault();
+  const sr=document.getElementById('fmtSearch');
+  if(sr){ sr.focus(); sr.select(); }
+});
+
+// Aviso al cerrar pestaña si hay formatos activos
+window.addEventListener('beforeunload',e=>{
+  try{
+    if(getRows().length){ e.preventDefault(); e.returnValue=''; }
+  }catch(_){}
 });
 </script>
 </body>
