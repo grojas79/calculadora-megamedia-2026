@@ -3441,8 +3441,10 @@ function applyCampaignSnapshot(h){
   const side=document.getElementById('dtoGlobalSide');
   if(side) side.value=formatDtoPct(h.dtoG||0);
   MONEDA=h.moneda||'CLP';
-  document.getElementById('btnCLP').classList.toggle('on',MONEDA==='CLP');
-  document.getElementById('btnUSD').classList.toggle('on',MONEDA==='USD');
+  const btnClp=document.getElementById('btnCLP');
+  const btnUsd=document.getElementById('btnUSD');
+  if(btnClp){ btnClp.classList.toggle('on',MONEDA==='CLP'); btnClp.setAttribute('aria-pressed',MONEDA==='CLP'?'true':'false'); }
+  if(btnUsd){ btnUsd.classList.toggle('on',MONEDA==='USD'); btnUsd.setAttribute('aria-pressed',MONEDA==='USD'?'true':'false'); }
 }
 function scheduleDraftSave(){
   clearTimeout(draftTimer);
