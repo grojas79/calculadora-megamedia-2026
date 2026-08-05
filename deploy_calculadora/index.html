@@ -291,7 +291,15 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
 .dto-global.dto-side{margin:12px 0 4px;padding:10px 12px}
 .dto-global.dto-side .dto-global-row{gap:8px}
 .dto-global.dto-side input{width:72px}
+.dto-global.dto-side input.inv-final-field{width:100%;max-width:160px;font-weight:700;color:var(--cy);border-color:rgba(0,200,232,.35)}
 .dto-global.dto-side .dto-preview{margin-left:0;width:100%;font-size:11px}
+.dto-global input.inv-final-field{width:130px;font-weight:700;color:var(--cy);border-color:rgba(0,200,232,.35)}
+.inv-final-input{width:100%;background:transparent;border:1px dashed transparent;border-radius:6px;
+  padding:4px 2px;color:var(--cy);font-size:22px;font-weight:800;line-height:1.1;text-align:center;
+  outline:none;font-family:inherit;transition:.15s}
+.inv-final-input:hover{border-color:rgba(0,200,232,.35);background:rgba(0,174,239,.06)}
+.inv-final-input:focus{border-color:var(--cy);background:rgba(0,174,239,.1)}
+.inv-final-hint{font-size:9.5px;color:var(--tx3);margin-top:4px;line-height:1.3}
 
 hr{border:none;border-top:1px solid var(--bd);margin:14px 0}
 .empty{text-align:center;padding:24px;color:var(--tx2);font-size:13px;
@@ -552,7 +560,9 @@ td.inv{color:var(--cy);font-weight:700}
     <div class="dto-global-title">Descuento por volumen sobre el total de la pauta</div>
     <div class="dto-global-row">
       <label>Descuento global %</label>
-      <input type="number" id="dtoGlobal" value="0" min="0" max="50" step="1" oninput="onDtoGlobalInput(this)"/>
+      <input type="number" id="dtoGlobal" value="0" min="0" max="100" step="0.01" oninput="onDtoGlobalInput(this)"/>
+      <label>Inversión final</label>
+      <input type="text" id="invFinalMain" class="inv-final-field" data-m="1" inputmode="numeric" placeholder="Ej: 3.000.000" oninput="onInvFinalInput(this)"/>
       <div class="dto-preview" id="dtoPreview">Sin descuento aplicado</div>
     </div>
   </div>
@@ -585,8 +595,12 @@ td.inv{color:var(--cy);font-weight:700}
           <div id="sumBruto" style="font-size:15px;font-weight:700;color:var(--tx2)">—</div>
         </div>
         <div style="background:rgba(0,174,239,.12);border-radius:7px;padding:12px 8px;border:1px solid rgba(0,174,239,.35);box-shadow:0 0 14px rgba(0,174,239,.15)">
-          <div class="sum-total-label" style="color:var(--cy)">⭐ Inversión Final</div>
-          <div id="sumTotal" style="font-size:24px;font-weight:800;color:var(--cy);line-height:1.1">—</div>
+          <div class="sum-total-label" style="color:var(--cy)">Inversión Final</div>
+          <input type="text" id="invFinalSide" class="inv-final-input" data-m="1" inputmode="numeric"
+            placeholder="—" title="Edita el valor final; el descuento por volumen se ajusta solo"
+            oninput="onInvFinalInput(this)"/>
+          <div class="inv-final-hint" id="invFinalHint">Editable · redondea y el % se calcula solo</div>
+          <div id="sumTotal" style="display:none">—</div>
         </div>
       </div>
       <!-- Ahorro: oculto permanentemente -->
@@ -596,7 +610,11 @@ td.inv{color:var(--cy);font-weight:700}
       <div class="dto-global-title">Descuento por volumen</div>
       <div class="dto-global-row">
         <label>Descuento %</label>
-        <input type="number" id="dtoGlobalSide" value="0" min="0" max="50" step="1" oninput="onDtoGlobalInput(this)"/>
+        <input type="number" id="dtoGlobalSide" value="0" min="0" max="100" step="0.01" oninput="onDtoGlobalInput(this)"/>
+      </div>
+      <div class="dto-global-row" style="margin-top:8px">
+        <label>Inversión final</label>
+        <input type="text" id="invFinalSide2" class="inv-final-field" data-m="1" inputmode="numeric" placeholder="Ej: 3.000.000" oninput="onInvFinalInput(this)"/>
       </div>
       <div class="dto-preview" id="dtoPreviewSide">Sin descuento aplicado</div>
     </div>
@@ -2041,11 +2059,41 @@ function netoDesdeBruto(bruto,dtoPct){
   const neto=roundInv(b-b*((+dtoPct||0)/100));
   return{neto,desc:b-neto};
 }
+// Control del total: por % de volumen o por valor final manual (redondeo comercial)
+let DTO_CONTROL='pct'; // 'pct' | 'final'
+let FINAL_OVERRIDE=null; // CLP enteros cuando DTO_CONTROL==='final'
+function formatDtoPct(p){
+  const n=Math.round((+p||0)*100)/100;
+  if(n<=0) return '0';
+  return String(n);
+}
+function moneyToInputValue(clp){
+  const v=MONEDA==='USD'?Math.round((+clp||0)/USD_CLP):Math.round(+clp||0);
+  return v?v.toLocaleString('es-CL'):'';
+}
+function moneyFromInputValue(raw){
+  let v=parseMiles(raw);
+  if(MONEDA==='USD') v=Math.round(v*USD_CLP);
+  return Math.max(0,Math.round(v||0));
+}
 function invFinalConDtoGlobal(tNeto,dtoGPct){
   const sub=+tNeto||0;
-  const g=Math.max(0,Math.min(50,+dtoGPct||0));
+  const g=Math.max(0,Math.min(100,+dtoGPct||0));
   const final=roundInv(sub*(1-g/100));
-  return{final,dtoGM:sub-final};
+  return{final,dtoGM:sub-final,dtoG:g};
+}
+/** Inversión final unificada: respeta % o valor final manual exacto. */
+function calcInversionFinal(tNeto){
+  const sub=+tNeto||0;
+  if(sub<=0) return{final:0,dtoGM:0,dtoG:0};
+  if(DTO_CONTROL==='final'&&FINAL_OVERRIDE!=null){
+    const final=Math.max(0,Math.min(sub,Math.round(+FINAL_OVERRIDE||0)));
+    FINAL_OVERRIDE=final;
+    const dtoGM=sub-final;
+    const dtoG=sub>0?(dtoGM/sub)*100:0;
+    return{final,dtoGM,dtoG};
+  }
+  return invFinalConDtoGlobal(sub,getDtoGlobalPctRaw());
 }
 function setCur(c){
   MONEDA=c;
@@ -3023,33 +3071,80 @@ function webPlatExcelDetail(r){
 }
 
 // ── Render ────────────────────────────────────────────────────────────────
-function getDtoGlobalPct(){
+function getDtoGlobalPctRaw(){
   const a=document.getElementById('dtoGlobal');
   const b=document.getElementById('dtoGlobalSide');
   const raw=a&&document.activeElement===a?a.value:(b&&document.activeElement===b?b.value:(a?.value??b?.value??0));
-  return Math.max(0,Math.min(50,+(raw)||0));
+  return Math.max(0,Math.min(100,+(raw)||0));
+}
+function getDtoGlobalPct(){
+  return getDtoGlobalPctRaw();
 }
 function syncDtoGlobalInputs(v){
-  const val=String(Math.max(0,Math.min(50,+(v)||0)));
+  const val=formatDtoPct(v);
   const a=document.getElementById('dtoGlobal');
   const b=document.getElementById('dtoGlobalSide');
   if(a&&document.activeElement!==a) a.value=val;
   if(b&&document.activeElement!==b) b.value=val;
 }
+const INV_FINAL_IDS=['invFinalSide','invFinalSide2','invFinalMain'];
+function syncInvFinalInputs(clpVal){
+  const val=clpVal>0?moneyToInputValue(clpVal):'';
+  INV_FINAL_IDS.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&document.activeElement!==el) el.value=val;
+  });
+  const hidden=document.getElementById('sumTotal');
+  if(hidden) hidden.textContent=clpVal>0?fM(clpVal):'—';
+}
 function onDtoGlobalInput(el){
-  const v=Math.max(0,Math.min(50,+(el?.value)||0));
+  DTO_CONTROL='pct';
+  FINAL_OVERRIDE=null;
+  const v=Math.max(0,Math.min(100,+(el?.value)||0));
   const a=document.getElementById('dtoGlobal');
   const b=document.getElementById('dtoGlobalSide');
-  if(a&&a!==el) a.value=v;
-  if(b&&b!==el) b.value=v;
+  if(a&&a!==el) a.value=formatDtoPct(v);
+  if(b&&b!==el) b.value=formatDtoPct(v);
   render();
+}
+function onInvFinalInput(el){
+  const rows=getRows();
+  const tNeto=rows.reduce((a,r)=>a+r.neto,0);
+  if(tNeto<=0){
+    showToast('Activa formatos para fijar la inversión final');
+    return;
+  }
+  DTO_CONTROL='final';
+  let clp=moneyFromInputValue(el?.value||'');
+  if(clp>tNeto) clp=tNeto;
+  FINAL_OVERRIDE=clp;
+  // Sincronizar los otros inputs de final sin pisar el activo
+  const display=moneyToInputValue(clp);
+  INV_FINAL_IDS.forEach(id=>{
+    const other=document.getElementById(id);
+    if(other&&other!==el) other.value=display;
+  });
+  const pct=tNeto>0?((tNeto-clp)/tNeto)*100:0;
+  syncDtoGlobalInputs(pct);
+  render();
+}
+function resetDtoControl(){
+  DTO_CONTROL='pct';
+  FINAL_OVERRIDE=null;
+  syncDtoGlobalInputs(0);
+  syncInvFinalInputs(0);
 }
 function render(){
   const rows=getRows();
-  const dtoG=getDtoGlobalPct();
-  syncDtoGlobalInputs(dtoG);
   const tNeto=rows.reduce((a,r)=>a+r.neto,0);
-  const {final:tFinal,dtoGM}=invFinalConDtoGlobal(tNeto,dtoG);
+  const {final:tFinal,dtoGM,dtoG}=calcInversionFinal(tNeto);
+  // Mantener campos sincronizados según el control activo
+  if(DTO_CONTROL==='final'){
+    syncDtoGlobalInputs(dtoG);
+  } else {
+    syncDtoGlobalInputs(getDtoGlobalPctRaw());
+  }
+  syncInvFinalInputs(tFinal);
   const tImp=rows.reduce((a,r)=>a+r.imp,0);
   const tAlc=calcAlcSainsbury(rows);
   const tAlcRRSS=calcAlcSainsburyByTipo(rows,'rrss');
@@ -3059,23 +3154,30 @@ function render(){
 
   // Preview descuento global (main + sidebar)
   const previewHtml=dtoG>0&&rows.length
-    ?`Ahorro: <strong>-${fM(dtoGM)}</strong> · Final: <strong>${fM(tFinal)}</strong>`
+    ?`Ahorro: <strong>-${fM(dtoGM)}</strong> · Final: <strong>${fM(tFinal)}</strong> · Dto. <strong>${formatDtoPct(dtoG)}%</strong>`
     :'Sin descuento aplicado';
   const dp=document.getElementById('dtoPreview');
   const dpSide=document.getElementById('dtoPreviewSide');
   if(dp) dp.innerHTML=previewHtml;
   if(dpSide) dpSide.innerHTML=previewHtml;
+  const hint=document.getElementById('invFinalHint');
+  if(hint){
+    hint.textContent=DTO_CONTROL==='final'&&dtoG>0
+      ?`Fijado manualmente · dto. volumen ${formatDtoPct(dtoG)}%`
+      :'Editable · redondea y el % se calcula solo';
+  }
 
   if(!rows.length){
     document.getElementById('emptyState').style.display='';
     document.getElementById('resBlock').style.display='none';
     document.getElementById('sumRows').innerHTML='<div style="color:var(--tx3);font-size:12px;text-align:center;padding:10px 0">Sin formatos seleccionados</div>';
     document.getElementById('sumBruto').textContent='—';
-    document.getElementById('sumTotal').textContent='—';
+    syncInvFinalInputs(0);
     document.getElementById('sumAhorro').style.display='none';
     document.getElementById('sumOrig').textContent='';
     document.getElementById('miniKpis').innerHTML='';
     document.getElementById('pricingStrip').style.display='none';
+    scheduleDraftSave();
     return;
   }
   document.getElementById('emptyState').style.display='none';
@@ -3212,7 +3314,7 @@ function render(){
   if(dtoG>0){
     tbody+=`<tr style="background:rgba(230,126,34,.10)">
       <td colspan="7" style="color:var(--or);text-align:right;font-size:11px;font-style:italic">
-        Descuento por volumen (${dtoG}%) sobre subtotal neto ${fM(tNeto)}
+        Descuento por volumen (${formatDtoPct(dtoG)}%)${DTO_CONTROL==='final'?' · valor final manual':''} sobre subtotal neto ${fM(tNeto)}
       </td>
       <td class="num" style="color:var(--or);font-weight:700">-${fM(dtoGM)}</td>
       <td colspan="5"></td>
@@ -3243,12 +3345,12 @@ function render(){
       <span class="sum-dto-val">-${fM(tDescUnit)}</span>
     </div>`:'')
     +(dtoG>0?`<div class="sum-dto-row">
-      <span class="sum-dto-label">Dto. volumen (${dtoG}%)</span>
+      <span class="sum-dto-label">Dto. volumen (${formatDtoPct(dtoG)}%)${DTO_CONTROL==='final'?' · manual':''}</span>
       <span class="sum-dto-val">-${fM(dtoGM)}</span>
     </div>`:'');
 
   document.getElementById('sumBruto').textContent=fM(tBrutoTotal);
-  document.getElementById('sumTotal').textContent=fM(tFinal);
+  // sumTotal se actualiza vía syncInvFinalInputs
   const totalAhorro=tBrutoTotal-tFinal;
   const ahorroEl=document.getElementById('sumAhorro');
   if(totalAhorro>0){
@@ -3285,11 +3387,16 @@ let HIST=[];
 try{HIST=JSON.parse(localStorage.getItem(HKEY)||'[]')}catch{}
 
 function campaignSnapshot(){
+  const tN=getRows().reduce((a,r)=>a+r.neto,0);
+  const inv=calcInversionFinal(tN);
   return{
     cliente:gv('cliente'),campania:gv('campania'),
     semanas:gv('semanas'),objetivo:gv('objetivo'),
     emailEjec:gv('emailEjec').trim(),
-    dtoG:getDtoGlobalPct(),moneda:MONEDA
+    dtoG:inv.dtoG,moneda:MONEDA,
+    dtoControl:DTO_CONTROL,
+    finalOverride:DTO_CONTROL==='final'?FINAL_OVERRIDE:null,
+    tFinal:inv.final
   };
 }
 function applyCampaignSnapshot(h){
@@ -3298,9 +3405,11 @@ function applyCampaignSnapshot(h){
   document.getElementById('semanas').value=h.semanas||4;
   document.getElementById('objetivo').value=h.objetivo||'Awareness / Alcance';
   if(h.emailEjec) document.getElementById('emailEjec').value=h.emailEjec;
-  document.getElementById('dtoGlobal').value=h.dtoG||0;
+  DTO_CONTROL=(h.dtoControl==='final'&&h.finalOverride!=null)?'final':'pct';
+  FINAL_OVERRIDE=DTO_CONTROL==='final'?Math.round(+h.finalOverride||0):null;
+  document.getElementById('dtoGlobal').value=formatDtoPct(h.dtoG||0);
   const side=document.getElementById('dtoGlobalSide');
-  if(side) side.value=h.dtoG||0;
+  if(side) side.value=formatDtoPct(h.dtoG||0);
   MONEDA=h.moneda||'CLP';
   document.getElementById('btnCLP').classList.toggle('on',MONEDA==='CLP');
   document.getElementById('btnUSD').classList.toggle('on',MONEDA==='USD');
@@ -3344,14 +3453,13 @@ function loadDraft(){
 function guardar(){
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
-  const dtoG=getDtoGlobalPct();
   const tN=rows.reduce((a,r)=>a+r.neto,0);
-  const tF=invFinalConDtoGlobal(tN,dtoG).final;
+  const inv=calcInversionFinal(tN);
   const snap=campaignSnapshot();
   HIST.unshift({
     id:Date.now(),
     cli:snap.cliente||'—',cam:snap.campania||'—',
-    tN:tF,dtoG,moneda:MONEDA,
+    tN:inv.final,dtoG:inv.dtoG,moneda:MONEDA,
     fecha:new Date().toLocaleDateString('es-CL'),
     state:JSON.parse(JSON.stringify(STATE)),
     ...snap
@@ -3382,10 +3490,12 @@ function nuevaPropuesta(){
   Object.keys(STATE).forEach(k=>delete STATE[k]);
   allFmts().forEach(f=>initFmtState(f));
   PAUTA_IMPORT_META={hasPautaSections:false,etapas:[]};
+  resetDtoControl();
   applyCampaignSnapshot({
     cliente:'',campania:'',semanas:4,
     objetivo:'Awareness / Alcance',
-    emailEjec:email,dtoG:0,moneda:'CLP'
+    emailEjec:email,dtoG:0,moneda:'CLP',
+    dtoControl:'pct',finalOverride:null
   });
   clearDraft();
   buildFmts();render();
@@ -3455,10 +3565,9 @@ async function exportarExcel(){
   if(btn){btn.textContent='⏳ Generando…';btn.disabled=true;}
 
   try{
-    const dtoG=getDtoGlobalPct();
     const tNeto=rows.reduce((a,r)=>a+r.neto,0);
     const tBruto=rows.reduce((a,r)=>a+r.bruto,0);
-    const {final:tFinal,dtoGM}=invFinalConDtoGlobal(tNeto,dtoG);
+    const {final:tFinal,dtoGM,dtoG}=calcInversionFinal(tNeto);
     const totalAhorro=tBruto-tFinal;
     const tImp=rows.reduce((a,r)=>a+r.imp,0);
     const tAlc=calcAlcSainsbury(rows);
@@ -3853,14 +3962,14 @@ async function exportarExcel(){
     // ── Resumen financiero claro (siempre visible)
     const dtoFmt=Math.max(0,tBruto-tNeto);
     const dtoFmtPct=tBruto>0?(dtoFmt/tBruto*100):0;
-    const dtoVolPctLabel=dtoG>0?` (${dtoG}%)`:'';
+    const dtoVolPctLabel=dtoG>0?` (${formatDtoPct(dtoG)}%)`:'';
     const dtoTotalPct=tBruto>0?((tBruto-tFinal)/tBruto*100):0;
     secTitle('RESUMEN DE INVERSIÓN',C.blue);
     ws.addRow([]); dataRowN++;
     const resumenRows=[
       ['Total Tarifa',`$${f0(tBruto)}`,C.blue,'Tarifa bruta sin descuentos',false],
       ['Descuentos por formatos',dtoFmt>0?`-$${f0(dtoFmt)}`:'$0',C.orange,dtoFmt>0?`Ahorro unitario por formato (${dtoFmtPct.toFixed(1)}%)`:'Sin descuentos unitarios por formato',false],
-      ['Descuento por Volumen',dtoGM>0?`-$${f0(dtoGM)}`:'$0',C.orange,dtoG>0?`Descuento por volumen${dtoVolPctLabel} sobre subtotal neto $${f0(tNeto)}`:'Sin descuento por volumen',false],
+      ['Descuento por Volumen',dtoGM>0?`-$${f0(dtoGM)}`:'$0',C.orange,dtoG>0?`Descuento por volumen${dtoVolPctLabel}${DTO_CONTROL==='final'?' · valor final manual':''} sobre subtotal neto $${f0(tNeto)}`:'Sin descuento por volumen',false],
       ['Total Final',`$${f0(tFinal)}`,C.green,dtoTotalPct>0?`Inversión final · ahorro total ${dtoTotalPct.toFixed(1)}%`:'Inversión final de la pauta',true],
     ];
     resumenRows.forEach(([label,val,color,sub,isFinal])=>{
@@ -3984,10 +4093,9 @@ function exportarPDF(){
   if(btn){btn.textContent='⏳ Generando…';btn.disabled=true;}
 
   try{
-    const dtoG=getDtoGlobalPct();
     const tNeto=rows.reduce((a,r)=>a+r.neto,0);
     const tBruto=rows.reduce((a,r)=>a+r.bruto,0);
-    const {final:tFinal,dtoGM}=invFinalConDtoGlobal(tNeto,dtoG);
+    const {final:tFinal,dtoGM,dtoG}=calcInversionFinal(tNeto);
     const tImp=rows.reduce((a,r)=>a+r.imp,0);
     const tAlc=calcAlcSainsbury(rows);
     const cpm=tImp>0?(tFinal/tImp)*1000:0;
@@ -4211,7 +4319,7 @@ function exportarPDF(){
       const resumenRows=[
         ['Total Tarifa','$'+f0(tBruto),C.blue,'Tarifa bruta sin descuentos',false],
         ['Descuentos por formatos',dtoFmt>0?'-$'+f0(dtoFmt):'$0',C.orange,dtoFmt>0?'Ahorro unitario por formato ('+dtoFmtPct.toFixed(1)+'%)':'Sin descuentos unitarios por formato',false],
-        ['Descuento por Volumen',dtoGM>0?'-$'+f0(dtoGM):'$0',C.orange,dtoG>0?'Descuento por volumen ('+dtoG+'%) sobre subtotal neto $'+f0(tNeto):'Sin descuento por volumen',false],
+        ['Descuento por Volumen',dtoGM>0?'-$'+f0(dtoGM):'$0',C.orange,dtoG>0?'Descuento por volumen ('+formatDtoPct(dtoG)+'%)'+(DTO_CONTROL==='final'?' · valor final manual':'')+' sobre subtotal neto $'+f0(tNeto):'Sin descuento por volumen',false],
         ['Total Final','$'+f0(tFinal),C.green,dtoTotalPct>0?'Inversión final · ahorro total '+dtoTotalPct.toFixed(1)+'%':'Inversión final de la pauta',true],
       ];
       resumenRows.forEach(([label,val,color,sub,isFinal])=>{
