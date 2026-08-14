@@ -14,7 +14,11 @@
   try{
     var t=localStorage.getItem('mg_theme_v1');
     document.documentElement.setAttribute('data-theme',t==='day'?'day':'night');
-  }catch(e){document.documentElement.setAttribute('data-theme','night');}
+    if(!localStorage.getItem('mg_ejecutivo_v1')) document.documentElement.classList.add('need-login');
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','night');
+    document.documentElement.classList.add('need-login');
+  }
 })();
 </script>
 <style>
@@ -84,6 +88,7 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
 .field input,.field select{width:100%;background:var(--dk3);border:1px solid var(--bd2);
   border-radius:var(--r2);padding:7px 10px;color:var(--tx);font-size:13px;outline:none;transition:.15s}
 .field input:focus,.field select:focus{border-color:var(--cy)}
+.field input[readonly]{opacity:.9;cursor:default;color:var(--tx);font-weight:600}
 .field select option{background:var(--dk2)}
 .cur-row{display:flex;align-items:center;gap:8px}
 .cur-tog{display:flex;background:var(--dk3);border:1px solid var(--bd2);border-radius:var(--r2);overflow:hidden}
@@ -405,6 +410,31 @@ td.inv{color:var(--cy);font-weight:700}
 .hist-item.draft{border-bottom-color:rgba(245,158,11,.22)}
 .hist-item.draft:last-child{border-bottom:none}
 .hist-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:99px;background:rgba(245,158,11,.18);color:var(--am);margin-right:6px;vertical-align:middle}
+.hist-actions{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+
+.user-chip{display:none;align-items:center;gap:8px;padding:6px 10px 6px 12px;
+  background:var(--dk3);border:1px solid var(--bd2);border-radius:20px;font-size:12px;color:var(--tx)}
+.user-chip.show{display:flex}
+.user-chip strong{font-size:12px}
+.user-chip button{background:none;border:none;color:var(--cy);cursor:pointer;font-size:11px;font-weight:700;padding:0}
+
+.login-overlay{display:none;position:fixed;inset:0;z-index:10050;align-items:center;justify-content:center;
+  padding:20px;background:rgba(7,7,14,.78);backdrop-filter:blur(10px)}
+html.need-login .login-overlay{display:flex}
+html.need-login body{overflow:hidden}
+.login-card{width:100%;max-width:420px;background:var(--dk2);border:1px solid var(--bd);border-radius:14px;padding:28px 24px 22px;
+  box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.login-card img{height:42px;width:auto;object-fit:contain;filter:invert(1) brightness(2);margin-bottom:14px}
+html[data-theme="day"] .login-card img{filter:none}
+.login-card h1{font-size:18px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
+.login-card p{font-size:13px;color:var(--tx2);margin-bottom:18px;line-height:1.45}
+.login-list{display:flex;flex-direction:column;gap:7px}
+.login-btn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--dk3);
+  border:1px solid var(--bd2);border-radius:10px;padding:10px 12px;color:var(--tx);cursor:pointer;font:inherit;transition:.15s}
+.login-btn:hover{border-color:var(--cy);background:rgba(0,200,232,.08)}
+.login-avatar{width:32px;height:32px;border-radius:50%;background:rgba(0,200,232,.16);color:var(--cy);
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;letter-spacing:.04em}
+.login-btn .login-name{font-size:14px;font-weight:600}
 
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);
   background:var(--dk2);border:1px solid var(--cy);border-radius:var(--r2);
@@ -443,7 +473,7 @@ td.inv{color:var(--cy);font-weight:700}
 .custom-fmt-name{width:100%;background:var(--dk);border:1px solid var(--am);border-radius:4px;padding:4px 8px;color:var(--tx);font-size:13px;font-weight:700;outline:none}
 
 @media print{
-  .sidebar,.hist-card,.btn-row,.hdr .tc-badge,.hdr .theme-switch-wrap{display:none!important}
+  .sidebar,.hist-card,.btn-row,.hdr .tc-badge,.hdr .theme-switch-wrap,.hdr .user-chip,.login-overlay{display:none!important}
   body{background:#fff!important;color:#000!important;font-size:11px}
   .layout{grid-template-columns:1fr!important}
   .card{background:#fff!important;border:1px solid #ccc!important;break-inside:avoid}
@@ -460,13 +490,21 @@ td.inv{color:var(--cy);font-weight:700}
 @media print{
   @page{size:A4 landscape;margin:4mm;}
   html,body{margin:0!important;padding:0!important;}
-  body.pdf-mode>.shell,body.pdf-mode>.toast,body.pdf-mode>.pauta-overlay{display:none!important;}
+  body.pdf-mode>.shell,body.pdf-mode>.toast,body.pdf-mode>.pauta-overlay,body.pdf-mode>.login-overlay{display:none!important;}
   body.pdf-mode #pdfExportRoot{display:block!important;width:100%;}
   body.pdf-mode{background:#fff!important;}
 }
 </style>
 </head>
 <body>
+<div class="login-overlay" id="loginOverlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+  <div class="login-card">
+    <img src="assets/logo-megamedia-digital.png" alt="Megamedia Digital"/>
+    <h1 id="loginTitle">¿Quién eres?</h1>
+    <p>Elige tu nombre para identificar las propuestas que hagas. Luego podrás sacar un reporte de todo el equipo.</p>
+    <div class="login-list" id="loginList"></div>
+  </div>
+</div>
 <div class="shell">
 
 <div class="hdr">
@@ -489,6 +527,10 @@ td.inv{color:var(--cy);font-weight:700}
     <p class="hdr-credit">Creado por Gabriel Rojas Cárdenas</p>
   </div>
   <div class="hdr-r">
+    <div class="user-chip" id="userChip">
+      <strong id="userChipName"></strong>
+      <button type="button" onclick="logoutEjecutivo()">Salir</button>
+    </div>
     <div class="theme-switch-wrap" title="Cambiar entre modo día y nocturno">
       <span class="theme-switch-label" id="themeLblNight">Nocturno</span>
       <label class="theme-switch" aria-label="Modo día">
@@ -514,8 +556,9 @@ td.inv{color:var(--cy);font-weight:700}
     <div class="field"><label for="campania">Nombre de campaña</label><input id="campania" type="text" placeholder="Ej: Lanzamiento Armani" autocomplete="off"/></div>
   </div>
   <div class="g2" style="margin-bottom:10px">
-    <div class="field"><label for="emailEjec">E-mail del ejecutivo</label><input id="emailEjec" type="email" placeholder="Ej: nombre.apellido@megamedia.cl" autocomplete="email"/></div>
+    <div class="field"><label for="ejecutivoNombre">Ejecutivo</label><input id="ejecutivoNombre" type="text" readonly autocomplete="off" aria-label="Ejecutivo conectado"/></div>
   </div>
+  <input type="hidden" id="emailEjec" value=""/>
   <div class="g3">
     <div class="field"><label for="semanas">Duración (semanas)</label><input id="semanas" type="number" value="4" min="1" max="52"/></div>
     <div class="field"><label for="objetivo">Objetivo</label>
@@ -664,6 +707,9 @@ td.inv{color:var(--cy);font-weight:700}
     <div class="hist-header">
       <div class="sec" style="margin:0;padding:0;border:none">Propuestas</div>
       <button class="hist-clear" onclick="limpiarHist()">Borrar todas</button>
+    </div>
+    <div class="hist-actions">
+      <button class="btn btn-pri btn-full" onclick="exportarReporteEquipo()">Reporte equipo (Excel)</button>
     </div>
     <div id="histList"></div>
   </div>
@@ -2050,6 +2096,20 @@ const gv=id=>document.getElementById(id)?.value||'';
 const f0=n=>{const s=Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');return Math.round(n)<0?'-'+s:s;};
 const fM=n=>{const v=MONEDA==='USD'?n/USD_CLP:n;return(MONEDA==='USD'?'USD ':'$')+f0(v);}
 const EMAIL_KEY='mg_email_ejec_v1';
+const EJEC_KEY='mg_ejecutivo_v1';
+const TEAM_LOCAL_KEY='mg_team_propuestas_v1';
+const TEAM_API='/api/propuestas';
+const TEAM_BIN_URL='https://jsonbin-zeta.vercel.app/api/bins/uMogXtk4Ar';
+const EJECUTIVOS=[
+  'Alicia Campos',
+  'Gabriela Araya',
+  'Paulina Cvitanic',
+  'Victor Gonzalez',
+  'Victor Lagunas',
+  'Ignacio Gonzalez',
+  'Gabriel Rojas'
+];
+let CURRENT_EJEC='';
 const DRAFT_KEY='mg_draft_v1';
 const DRAFT_ID=-1;
 const MAX_DRAFTS=8;
@@ -2058,21 +2118,64 @@ let sessionFromDraft=false;
 let loadedDraftId=null;
 let sessionDirty=false;
 let draftMuted=false;
+function iniciales(nombre){
+  return String(nombre||'').split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0].toUpperCase()).join('');
+}
+function getStoredEjecutivo(){
+  try{
+    const v=(localStorage.getItem(EJEC_KEY)||'').trim();
+    return EJECUTIVOS.includes(v)?v:'';
+  }catch(e){return '';}
+}
+function applyEjecutivoUI(nombre){
+  CURRENT_EJEC=nombre||'';
+  const chip=document.getElementById('userChip');
+  const chipName=document.getElementById('userChipName');
+  const nom=document.getElementById('ejecutivoNombre');
+  const email=document.getElementById('emailEjec');
+  if(chipName) chipName.textContent=CURRENT_EJEC;
+  if(chip) chip.classList.toggle('show',!!CURRENT_EJEC);
+  if(nom) nom.value=CURRENT_EJEC;
+  if(email) email.value=CURRENT_EJEC;
+}
+function loginEjecutivo(nombre){
+  if(!EJECUTIVOS.includes(nombre)) return;
+  try{localStorage.setItem(EJEC_KEY,nombre);}catch(e){}
+  applyEjecutivoUI(nombre);
+  document.documentElement.classList.remove('need-login');
+  persistEmailPref();
+  showToast('Hola, '+nombre.split(' ')[0]);
+}
+function logoutEjecutivo(){
+  try{localStorage.removeItem(EJEC_KEY);}catch(e){}
+  applyEjecutivoUI('');
+  document.documentElement.classList.add('need-login');
+  renderLoginList();
+}
+function renderLoginList(){
+  const el=document.getElementById('loginList');
+  if(!el) return;
+  el.innerHTML=EJECUTIVOS.map(n=>
+    '<button type="button" class="login-btn" onclick="loginEjecutivo(\''+n.replace(/'/g,'\\\'')+'\')">'
+    +'<span class="login-avatar">'+escHtml(iniciales(n))+'</span>'
+    +'<span class="login-name">'+escHtml(n)+'</span></button>'
+  ).join('');
+}
+function requireLogin(){
+  if(CURRENT_EJEC) return true;
+  document.documentElement.classList.add('need-login');
+  showToast('Selecciona tu nombre para continuar');
+  return false;
+}
 function contactoEjec(){
-  const v=gv('emailEjec').trim();
-  return v||'Megamedia Digital';
+  return CURRENT_EJEC||gv('emailEjec').trim()||'Megamedia Digital';
 }
 function persistEmailPref(){
-  const v=gv('emailEjec').trim();
+  const v=(CURRENT_EJEC||gv('emailEjec').trim());
   try{if(v) localStorage.setItem(EMAIL_KEY,v);}catch(e){}
 }
 function loadEmailPref(){
-  const el=document.getElementById('emailEjec');
-  if(!el||el.value.trim()) return;
-  try{
-    const v=localStorage.getItem(EMAIL_KEY);
-    if(v) el.value=v;
-  }catch(e){}
+  applyEjecutivoUI(CURRENT_EJEC||getStoredEjecutivo());
 }
 function parseMiles(s){if(typeof s==='number')return s;return +(String(s).replace(/\./g,''))||0;}
 function fmtMiles(n){const v=+n||0;return v?v.toLocaleString('es-CL'):'';}
@@ -3436,7 +3539,8 @@ function campaignSnapshot(){
   return{
     cliente:gv('cliente'),campania:gv('campania'),
     semanas:gv('semanas'),objetivo:gv('objetivo'),
-    emailEjec:gv('emailEjec').trim(),
+    emailEjec:CURRENT_EJEC||gv('emailEjec').trim(),
+    ejecutivo:CURRENT_EJEC||gv('emailEjec').trim(),
     dtoG:inv.dtoG,moneda:MONEDA,
     dtoControl:DTO_CONTROL,
     finalOverride:DTO_CONTROL==='final'?FINAL_OVERRIDE:null,
@@ -3459,6 +3563,7 @@ function applyCampaignSnapshot(h){
   const btnUsd=document.getElementById('btnUSD');
   if(btnClp){ btnClp.classList.toggle('on',MONEDA==='CLP'); btnClp.setAttribute('aria-pressed',MONEDA==='CLP'?'true':'false'); }
   if(btnUsd){ btnUsd.classList.toggle('on',MONEDA==='USD'); btnUsd.setAttribute('aria-pressed',MONEDA==='USD'?'true':'false'); }
+  applyEjecutivoUI(CURRENT_EJEC);
 }
 function persistHist(){
   try{localStorage.setItem(HKEY,JSON.stringify(HIST))}catch(e){}
@@ -3569,15 +3674,242 @@ function parkSessionDraftIfAny(){
   }catch(e){return false;}
 }
 
+function teamRecordFromCurrent(id){
+  const rows=getRows();
+  const tN=rows.reduce((a,r)=>a+r.neto,0);
+  const inv=calcInversionFinal(tN);
+  const formatos=[...new Set(rows.filter(r=>!r.infTotalRow).map(r=>sumFmtLabel(r)))].join(' · ');
+  return{
+    id,
+    ejecutivo:CURRENT_EJEC||gv('emailEjec').trim()||'—',
+    cliente:gv('cliente').trim()||'—',
+    campania:gv('campania').trim()||'—',
+    objetivo:gv('objetivo')||'',
+    semanas:+gv('semanas')||0,
+    moneda:MONEDA,
+    tFinal:inv.final,
+    dtoG:inv.dtoG,
+    fecha:new Date().toLocaleDateString('es-CL'),
+    fechaISO:new Date().toISOString(),
+    formatos:formatos.slice(0,400),
+    nFormatos:rows.filter(r=>!r.infTotalRow).length
+  };
+}
+function readLocalTeamStore(){
+  try{
+    const d=JSON.parse(localStorage.getItem(TEAM_LOCAL_KEY)||'{}');
+    return Array.isArray(d.proposals)?d:{proposals:[],updatedAt:0};
+  }catch(e){return {proposals:[],updatedAt:0};}
+}
+function writeLocalTeamStore(store){
+  try{localStorage.setItem(TEAM_LOCAL_KEY,JSON.stringify(store));}catch(e){}
+}
+function mergeTeamProposal(list,rec){
+  const out=Array.isArray(list)?list.slice():[];
+  const i=out.findIndex(p=>p&&p.id===rec.id);
+  if(i>=0) out[i]=Object.assign({},out[i],rec);
+  else out.unshift(rec);
+  return out;
+}
+async function teamApi(method,body){
+  const opts={method,headers:{'Content-Type':'application/json'},cache:'no-store'};
+  if(body) opts.body=JSON.stringify(body);
+  try{
+    const r=await fetch(TEAM_API,opts);
+    if(r.ok) return r.json();
+  }catch(e){}
+  if(method==='GET'){
+    const r=await fetch(TEAM_BIN_URL,{cache:'no-store'});
+    if(!r.ok) throw new Error('sin conexión');
+    return r.json();
+  }
+  if(method==='POST'){
+    const cur=await fetch(TEAM_BIN_URL,{cache:'no-store'}).then(r=>r.json());
+    const store={proposals:Array.isArray(cur.proposals)?cur.proposals:[],updatedAt:Date.now()};
+    if(body.action==='upsert') store.proposals=mergeTeamProposal(store.proposals,body.proposal);
+    if(body.action==='delete') store.proposals=store.proposals.filter(p=>p&&p.id!==body.id);
+    const wr=await fetch(TEAM_BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(store)});
+    if(!wr.ok) throw new Error('sin conexión');
+    return {ok:true,count:store.proposals.length};
+  }
+  throw new Error('sin conexión');
+}
+async function syncTeamUpsert(rec){
+  const local=readLocalTeamStore();
+  local.proposals=mergeTeamProposal(local.proposals,rec);
+  local.updatedAt=Date.now();
+  writeLocalTeamStore(local);
+  try{await teamApi('POST',{action:'upsert',proposal:rec});}
+  catch(e){console.warn('sync equipo',e);}
+}
+async function syncTeamDelete(id){
+  const local=readLocalTeamStore();
+  local.proposals=local.proposals.filter(p=>p&&p.id!==id);
+  local.updatedAt=Date.now();
+  writeLocalTeamStore(local);
+  try{await teamApi('POST',{action:'delete',id});}
+  catch(e){console.warn('sync equipo',e);}
+}
+async function fetchTeamProposals(){
+  let remote=[];
+  try{
+    const data=await teamApi('GET');
+    if(data&&Array.isArray(data.proposals)) remote=data.proposals;
+  }catch(e){}
+  const local=readLocalTeamStore().proposals||[];
+  const fromHist=(HIST||[]).filter(h=>!isDraftItem(h)).map(h=>({
+    id:h.id,
+    ejecutivo:h.ejecutivo||h.emailEjec||CURRENT_EJEC||'—',
+    cliente:h.cli||h.cliente||'—',
+    campania:h.cam||h.campania||'—',
+    objetivo:h.objetivo||'',
+    semanas:+h.semanas||0,
+    moneda:h.moneda||'CLP',
+    tFinal:+h.tN||+h.tFinal||0,
+    dtoG:+h.dtoG||0,
+    fecha:h.fecha||'',
+    fechaISO:h.fechaISO||'',
+    formatos:h.formatos||'',
+    nFormatos:+h.nFormatos||0
+  }));
+  const byId=new Map();
+  fromHist.concat(local).concat(remote).forEach(p=>{
+    if(!p||p.id==null) return;
+    const prev=byId.get(p.id);
+    if(!prev){ byId.set(p.id,p); return; }
+    const newer=(p.fechaISO||'')>=(prev.fechaISO||'');
+    const richer=(p.formatos&&!prev.formatos)||(p.ejecutivo&&p.ejecutivo!=='—'&&(!prev.ejecutivo||prev.ejecutivo==='—'));
+    if(newer||richer) byId.set(p.id,Object.assign({},prev,p));
+  });
+  return [...byId.values()].sort((a,b)=>(b.fechaISO||b.fecha||'').localeCompare(a.fechaISO||a.fecha||''));
+}
+
+async function exportarReporteEquipo(){
+  if(!requireLogin()) return;
+  if(!(await ensureExcelJS())) return;
+  const btn=document.querySelector('[onclick="exportarReporteEquipo()"]');
+  if(btn){btn.textContent='Generando…';btn.disabled=true;}
+  try{
+    const list=await fetchTeamProposals();
+    if(!list.length){showToast('Aún no hay propuestas del equipo');return;}
+    const C={blue:'FF69AEEC',white:'FFFFFFFF',black:'FF1A1A2E',grayLight:'FFF2F4F7',grayDark:'FF8496AF',sub1:'FFE8F4FB',orange:'FFE67E22',green:'FF1A8F3C'};
+    const wb=new ExcelJS.Workbook();
+    wb.creator='Megamedia Digital';
+    const ws=wb.addWorksheet('Propuestas equipo',{views:[{state:'frozen',ySplit:4,showGridLines:false}]});
+    const headers=['Fecha','Ejecutivo','Cliente','Campaña','Objetivo','Semanas','Moneda','Inversión final (CLP)','Dto %','N° formatos','Formatos'];
+    ws.columns=[{width:16},{width:22},{width:24},{width:28},{width:22},{width:12},{width:12},{width:22},{width:12},{width:14},{width:48}];
+    const title=ws.addRow(['Reporte de propuestas — equipo comercial Megamedia Digital']);
+    title.height=22;
+    ws.mergeCells(1,1,1,11);
+    const tcell=title.getCell(1);
+    tcell.font={name:'Arial',bold:true,size:14,color:{argb:C.white}};
+    tcell.fill={type:'pattern',pattern:'solid',fgColor:{argb:C.blue}};
+    tcell.alignment={vertical:'middle',horizontal:'left'};
+    const sub=ws.addRow(['Generado por '+CURRENT_EJEC+' · '+new Date().toLocaleString('es-CL')+' · '+list.length+' propuesta'+(list.length===1?'':'s')]);
+    ws.mergeCells(2,1,2,11);
+    sub.getCell(1).font={name:'Arial',italic:true,size:10,color:{argb:C.grayDark}};
+    ws.addRow([]);
+    const hr=ws.addRow(headers);
+    hr.height=18;
+    hr.eachCell(cell=>{
+      cell.font={name:'Arial',bold:true,size:9,color:{argb:C.white}};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF003087'}};
+      cell.alignment={vertical:'middle',wrapText:true};
+    });
+    list.forEach((p,i)=>{
+      const clp=Math.round(+p.tFinal||0);
+      const r=ws.addRow([
+        p.fecha||'',
+        p.ejecutivo||'—',
+        p.cliente||'—',
+        p.campania||'—',
+        p.objetivo||'',
+        +p.semanas||'',
+        p.moneda||'CLP',
+        clp,
+        Math.round((+p.dtoG||0)*100)/100,
+        +p.nFormatos||'',
+        p.formatos||''
+      ]);
+      r.height=18;
+      r.eachCell(cell=>{
+        cell.font={name:'Arial',size:9,color:{argb:C.black}};
+        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:i%2?C.sub1:C.white}};
+        cell.alignment={vertical:'middle',wrapText:true};
+        cell.border={top:{style:'thin',color:{argb:'FFC0C8D4'}},bottom:{style:'thin',color:{argb:'FFC0C8D4'}},left:{style:'thin',color:{argb:'FFC0C8D4'}},right:{style:'thin',color:{argb:'FFC0C8D4'}}};
+      });
+      r.getCell(8).numFmt='"$"#,##0';
+      r.getCell(9).numFmt='0.00"%"';
+    });
+    const tot=list.reduce((a,p)=>a+(+p.tFinal||0),0);
+    const totRow=ws.addRow(['','TOTAL EQUIPO','','','','','',Math.round(tot),'','','']);
+    totRow.eachCell(cell=>{
+      cell.font={name:'Arial',bold:true,size:10,color:{argb:C.white}};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:C.blue}};
+    });
+    totRow.getCell(8).numFmt='"$"#,##0';
+
+    const ws2=wb.addWorksheet('Por ejecutivo');
+    ws2.columns=[{width:24},{width:16},{width:24},{width:22}];
+    const t2=ws2.addRow(['Resumen por ejecutivo']);
+    ws2.mergeCells(1,1,1,4);
+    t2.getCell(1).font={name:'Arial',bold:true,size:14,color:{argb:C.white}};
+    t2.getCell(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:C.blue}};
+    ws2.addRow([]);
+    const h2=ws2.addRow(['Ejecutivo','N° propuestas','Inversión total (CLP)','Ticket promedio']);
+    h2.eachCell(cell=>{
+      cell.font={name:'Arial',bold:true,size:9,color:{argb:C.white}};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF003087'}};
+    });
+    const byEjec=new Map();
+    EJECUTIVOS.forEach(n=>byEjec.set(n,{n:0,tot:0}));
+    list.forEach(p=>{
+      const k=p.ejecutivo||'—';
+      if(!byEjec.has(k)) byEjec.set(k,{n:0,tot:0});
+      const o=byEjec.get(k);
+      o.n+=1; o.tot+=(+p.tFinal||0);
+    });
+    let ri=0;
+    byEjec.forEach((o,name)=>{
+      const r=ws2.addRow([name,o.n,Math.round(o.tot),o.n?Math.round(o.tot/o.n):0]);
+      r.eachCell(cell=>{
+        cell.font={name:'Arial',size:9};
+        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:ri%2?C.sub1:C.white}};
+      });
+      r.getCell(3).numFmt='"$"#,##0';
+      r.getCell(4).numFmt='"$"#,##0';
+      ri++;
+    });
+
+    const buffer=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    const d=new Date();
+    const yyyy=d.getFullYear();
+    const mm=String(d.getMonth()+1).padStart(2,'0');
+    const dd=String(d.getDate()).padStart(2,'0');
+    a.download=`${yyyy}-${mm}-${dd}_Reporte_Equipo_Propuestas_Megamedia.xlsx`;
+    a.click();
+    showToast('✓ Reporte del equipo descargado');
+  }catch(e){
+    console.error(e);
+    showToast('Error al generar reporte: '+((e&&e.message)||'').slice(0,50));
+  }finally{
+    if(btn){btn.textContent='Reporte equipo (Excel)';btn.disabled=false;}
+  }
+}
+
 function guardar(){
+  if(!requireLogin()) return;
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
   const tN=rows.reduce((a,r)=>a+r.neto,0);
   const inv=calcInversionFinal(tN);
   const snap=campaignSnapshot();
   if(sessionFromDraft&&loadedDraftId!=null) HIST=HIST.filter(h=>h.id!==loadedDraftId);
+  const id=Date.now();
   HIST.unshift({
-    id:Date.now(),
+    id,
     cli:snap.cliente||'—',cam:snap.campania||'—',
     tN:inv.final,dtoG:inv.dtoG,moneda:MONEDA,
     fecha:new Date().toLocaleDateString('es-CL'),
@@ -3592,7 +3924,9 @@ function guardar(){
   sessionFromDraft=false;
   loadedDraftId=null;
   sessionDirty=false;
-  renderHist();showToast('✓ Propuesta guardada');
+  renderHist();
+  showToast('✓ Propuesta guardada');
+  syncTeamUpsert(teamRecordFromCurrent(id));
 }
 
 function cargar(id){
@@ -3638,6 +3972,7 @@ function nuevaPropuesta(){
 
 function borrar(id,ev){
   ev.stopPropagation();
+  const wasDraft=HIST.some(h=>h.id===id&&isDraftItem(h));
   HIST=HIST.filter(h=>h.id!==id);
   persistHist();
   if(loadedDraftId===id){
@@ -3646,11 +3981,12 @@ function borrar(id,ev){
     clearSessionDraft();
   }
   renderHist();
+  if(!wasDraft) syncTeamDelete(id);
 }
 
 function limpiarHist(){
   if(!HIST.length)return;
-  if(!confirm('¿Borrar todas las propuestas y los borradores?'))return;
+  if(!confirm('¿Borrar el historial de este navegador?\nEl reporte del equipo se mantiene.'))return;
   HIST=[];try{localStorage.removeItem(HKEY)}catch{}
   clearSessionDraft();
   sessionFromDraft=false;
@@ -3665,7 +4001,7 @@ function histItemHtml(h,isDraft){
     <div class="hist-item${isDraft?' draft':''}" onclick="cargar(${h.id})">
       <div class="hist-info">
         <div class="hist-name">${name}</div>
-        <div class="hist-meta">${isDraft?'Sin finalizar · ':''}${escHtml(h.fecha)} · ${escHtml(h.moneda)}${h.emailEjec?' · '+escHtml(h.emailEjec):''}</div>
+        <div class="hist-meta">${isDraft?'Sin finalizar · ':''}${escHtml(h.fecha)} · ${escHtml(h.moneda)}${(h.ejecutivo||h.emailEjec)?' · '+escHtml(h.ejecutivo||h.emailEjec):''}</div>
       </div>
       <div class="hist-neto">${h.moneda==='USD'?'US$'+f0(h.tN/USD_CLP):'$'+f0(h.tN)}</div>
       <button class="hist-del" onclick="borrar(${h.id},event)">✕</button>
@@ -5768,6 +6104,9 @@ function initTheme(){
 
 // ── Init ──────────────────────────────────────────────────────────────────
 initTheme();
+renderLoginList();
+CURRENT_EJEC=getStoredEjecutivo();
+if(CURRENT_EJEC) document.documentElement.classList.remove('need-login');
 loadEmailPref();
 const parkedDraft=parkSessionDraftIfAny();
 withDraftMuted(()=>{buildFmts();render();});
