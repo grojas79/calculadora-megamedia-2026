@@ -397,6 +397,14 @@ td.inv{color:var(--cy);font-weight:700}
 .hist-del{background:none;border:none;color:var(--tx3);cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0}
 .hist-del:hover{color:var(--tx2)}
 .hist-empty{text-align:center;color:var(--tx3);font-size:12px;padding:12px 0}
+.hist-section-drafts{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35);border-radius:var(--r);padding:8px 10px 2px;margin-bottom:12px}
+.hist-sub{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin:8px 0 6px}
+.hist-sub:first-child{margin-top:0}
+.hist-sub.drafts{color:var(--am);display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 4px}
+.hist-alert{font-size:10.5px;color:var(--am);margin:0 0 8px;line-height:1.35;font-weight:500}
+.hist-item.draft{border-bottom-color:rgba(245,158,11,.22)}
+.hist-item.draft:last-child{border-bottom:none}
+.hist-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:99px;background:rgba(245,158,11,.18);color:var(--am);margin-right:6px;vertical-align:middle}
 
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);
   background:var(--dk2);border:1px solid var(--cy);border-radius:var(--r2);
@@ -654,7 +662,7 @@ td.inv{color:var(--cy);font-weight:700}
   </div>
   <div class="hist-card">
     <div class="hist-header">
-      <div class="sec" style="margin:0;padding:0;border:none">Propuestas guardadas</div>
+      <div class="sec" style="margin:0;padding:0;border:none">Propuestas</div>
       <button class="hist-clear" onclick="limpiarHist()">Borrar todas</button>
     </div>
     <div id="histList"></div>
@@ -2043,7 +2051,13 @@ const f0=n=>{const s=Math.round(Math.abs(n)).toString().replace(/\B(?=(\d{3})+(?
 const fM=n=>{const v=MONEDA==='USD'?n/USD_CLP:n;return(MONEDA==='USD'?'USD ':'$')+f0(v);}
 const EMAIL_KEY='mg_email_ejec_v1';
 const DRAFT_KEY='mg_draft_v1';
+const DRAFT_ID=-1;
+const MAX_DRAFTS=8;
 let draftTimer=null;
+let sessionFromDraft=false;
+let loadedDraftId=null;
+let sessionDirty=false;
+let draftMuted=false;
 function contactoEjec(){
   const v=gv('emailEjec').trim();
   return v||'Megamedia Digital';
@@ -3446,39 +3460,112 @@ function applyCampaignSnapshot(h){
   if(btnClp){ btnClp.classList.toggle('on',MONEDA==='CLP'); btnClp.setAttribute('aria-pressed',MONEDA==='CLP'?'true':'false'); }
   if(btnUsd){ btnUsd.classList.toggle('on',MONEDA==='USD'); btnUsd.setAttribute('aria-pressed',MONEDA==='USD'?'true':'false'); }
 }
+function persistHist(){
+  try{localStorage.setItem(HKEY,JSON.stringify(HIST))}catch(e){}
+}
+function isDraftItem(h){
+  return !!(h&&(h.isDraft||h.id===DRAFT_ID));
+}
+function trimHist(){
+  let drafts=HIST.filter(isDraftItem);
+  let saved=HIST.filter(h=>!isDraftItem(h));
+  if(drafts.length>MAX_DRAFTS) drafts=drafts.slice(0,MAX_DRAFTS);
+  if(saved.length>15) saved=saved.slice(0,15);
+  HIST=[...drafts,...saved];
+}
+function hasCurrentWork(){
+  const hasActive=allFmts().some(f=>STATE[f.id]?.active);
+  const hasCam=!!(gv('cliente').trim()||gv('campania').trim());
+  return hasActive||hasCam;
+}
+function draftPayloadHasWork(d){
+  if(!d||!d.state) return false;
+  const hasActive=Object.values(d.state).some(s=>s&&s.active);
+  const hasCam=!!((d.cliente||'').trim()||(d.campania||'').trim());
+  return hasActive||hasCam;
+}
+function buildDraftItem(d,id){
+  const snap={
+    cliente:d.cliente||'',campania:d.campania||'',
+    semanas:d.semanas||4,objetivo:d.objetivo||'Awareness / Alcance',
+    emailEjec:(d.emailEjec||'').trim(),
+    dtoG:d.dtoG||0,moneda:d.moneda||'CLP',
+    dtoControl:d.dtoControl||'pct',
+    finalOverride:d.finalOverride!=null?d.finalOverride:null,
+    tFinal:d.tFinal||0
+  };
+  return{
+    id:id,
+    isDraft:true,
+    cli:(snap.cliente||'').trim()||'—',
+    cam:(snap.campania||'').trim()||'—',
+    tN:snap.tFinal,
+    dtoG:snap.dtoG,moneda:snap.moneda,
+    fecha:new Date(d.savedAt||Date.now()).toLocaleString('es-CL'),
+    state:JSON.parse(JSON.stringify(d.state||STATE)),
+    pautaMeta:JSON.parse(JSON.stringify(d.pautaMeta||PAUTA_IMPORT_META)),
+    ...snap
+  };
+}
+function upsertHistDraft(d){
+  if(!draftPayloadHasWork(d)) return false;
+  const wantId=+d.id;
+  const canReuse=Number.isFinite(wantId)&&HIST.some(h=>isDraftItem(h)&&h.id===wantId);
+  const id=canReuse?wantId:Date.now();
+  const item=buildDraftItem(d,id);
+  if(canReuse) HIST=HIST.map(h=>h.id===id?item:h);
+  else HIST.unshift(item);
+  trimHist();
+  persistHist();
+  return true;
+}
+function currentDraftPayload(){
+  return{
+    ...campaignSnapshot(),
+    id:sessionFromDraft&&loadedDraftId!=null?loadedDraftId:undefined,
+    state:JSON.parse(JSON.stringify(STATE)),
+    pautaMeta:JSON.parse(JSON.stringify(PAUTA_IMPORT_META)),
+    savedAt:Date.now()
+  };
+}
+function withDraftMuted(fn){
+  draftMuted=true;
+  try{fn();}finally{draftMuted=false;}
+}
 function scheduleDraftSave(){
+  if(draftMuted) return;
+  sessionDirty=true;
   clearTimeout(draftTimer);
   draftTimer=setTimeout(saveDraft,450);
 }
 function saveDraft(){
   try{
-    const payload={
-      ...campaignSnapshot(),
-      state:STATE,
-      pautaMeta:PAUTA_IMPORT_META,
-      savedAt:Date.now()
-    };
-    localStorage.setItem(DRAFT_KEY,JSON.stringify(payload));
+    if(!sessionDirty||!hasCurrentWork()){
+      localStorage.removeItem(DRAFT_KEY);
+      return;
+    }
+    localStorage.setItem(DRAFT_KEY,JSON.stringify(currentDraftPayload()));
   }catch(e){}
 }
-function clearDraft(){
+function flushDraft(){
+  clearTimeout(draftTimer);
+  saveDraft();
+}
+function clearSessionDraft(){
   try{localStorage.removeItem(DRAFT_KEY);}catch(e){}
 }
-function loadDraft(){
+function parkCurrentAsDraft(){
+  if(!hasCurrentWork()) return false;
+  return upsertHistDraft(currentDraftPayload());
+}
+function parkSessionDraftIfAny(){
   try{
     const raw=localStorage.getItem(DRAFT_KEY);
     if(!raw) return false;
     const d=JSON.parse(raw);
-    if(!d||!d.state) return false;
-    const hasActive=Object.values(d.state).some(s=>s&&s.active);
-    const hasCam=!!((d.cliente||'').trim()||(d.campania||'').trim());
-    if(!hasActive&&!hasCam) return false;
-    Object.keys(STATE).forEach(k=>delete STATE[k]);
-    Object.assign(STATE,JSON.parse(JSON.stringify(d.state)));
-    allFmts().forEach(f=>{if(!STATE[f.id]) initFmtState(f);});
-    applyCampaignSnapshot(d);
-    if(d.pautaMeta) PAUTA_IMPORT_META=d.pautaMeta;
-    return true;
+    const ok=upsertHistDraft(d);
+    localStorage.removeItem(DRAFT_KEY);
+    return ok;
   }catch(e){return false;}
 }
 
@@ -3488,17 +3575,23 @@ function guardar(){
   const tN=rows.reduce((a,r)=>a+r.neto,0);
   const inv=calcInversionFinal(tN);
   const snap=campaignSnapshot();
+  if(sessionFromDraft&&loadedDraftId!=null) HIST=HIST.filter(h=>h.id!==loadedDraftId);
   HIST.unshift({
     id:Date.now(),
     cli:snap.cliente||'—',cam:snap.campania||'—',
     tN:inv.final,dtoG:inv.dtoG,moneda:MONEDA,
     fecha:new Date().toLocaleDateString('es-CL'),
     state:JSON.parse(JSON.stringify(STATE)),
+    pautaMeta:JSON.parse(JSON.stringify(PAUTA_IMPORT_META)),
     ...snap
   });
-  if(HIST.length>15) HIST=HIST.slice(0,15);
-  try{localStorage.setItem(HKEY,JSON.stringify(HIST))}catch{}
+  trimHist();
+  persistHist();
   persistEmailPref();
+  clearSessionDraft();
+  sessionFromDraft=false;
+  loadedDraftId=null;
+  sessionDirty=false;
   renderHist();showToast('✓ Propuesta guardada');
 }
 
@@ -3508,16 +3601,21 @@ function cargar(id){
   Object.assign(STATE,JSON.parse(JSON.stringify(h.state)));
   allFmts().forEach(f=>{if(!STATE[f.id]) initFmtState(f);});
   applyCampaignSnapshot(h);
+  PAUTA_IMPORT_META=h.pautaMeta?JSON.parse(JSON.stringify(h.pautaMeta)):{hasPautaSections:false,etapas:[]};
   if(!gv('emailEjec')) loadEmailPref();
   persistEmailPref();
-  buildFmts();render();scheduleDraftSave();
-  showToast('✓ Propuesta cargada');
+  sessionFromDraft=isDraftItem(h);
+  loadedDraftId=sessionFromDraft?h.id:null;
+  sessionDirty=false;
+  clearSessionDraft();
+  withDraftMuted(()=>{buildFmts();render();});
+  showToast(sessionFromDraft?'✓ Borrador cargado':'✓ Propuesta cargada');
 }
 
 function nuevaPropuesta(){
-  const hasActive=allFmts().some(f=>STATE[f.id]?.active);
-  const hasData=!!(gv('cliente').trim()||gv('campania').trim());
-  if((hasActive||hasData)&&!confirm('¿Empezar una propuesta nueva?\nSe limpian formatos activos y datos de campaña. El historial se mantiene.')) return;
+  const hasWork=hasCurrentWork();
+  if(hasWork&&!confirm('¿Empezar una propuesta nueva?\nEl trabajo actual quedará como borrador. El historial se mantiene.')) return;
+  if(hasWork) parkCurrentAsDraft();
   const email=gv('emailEjec').trim();
   Object.keys(STATE).forEach(k=>delete STATE[k]);
   allFmts().forEach(f=>initFmtState(f));
@@ -3529,37 +3627,77 @@ function nuevaPropuesta(){
     emailEjec:email,dtoG:0,moneda:'CLP',
     dtoControl:'pct',finalOverride:null
   });
-  clearDraft();
-  buildFmts();render();
-  showToast('✓ Propuesta nueva');
+  clearSessionDraft();
+  sessionFromDraft=false;
+  loadedDraftId=null;
+  sessionDirty=false;
+  withDraftMuted(()=>{buildFmts();render();});
+  renderHist();
+  showToast(hasWork?'✓ Propuesta nueva · borrador guardado':'✓ Propuesta nueva');
 }
 
 function borrar(id,ev){
   ev.stopPropagation();
   HIST=HIST.filter(h=>h.id!==id);
-  try{localStorage.setItem(HKEY,JSON.stringify(HIST))}catch{}
+  persistHist();
+  if(loadedDraftId===id){
+    loadedDraftId=null;
+    sessionFromDraft=false;
+    clearSessionDraft();
+  }
   renderHist();
 }
 
 function limpiarHist(){
   if(!HIST.length)return;
-  if(!confirm('¿Borrar todas las propuestas guardadas?'))return;
+  if(!confirm('¿Borrar todas las propuestas y los borradores?'))return;
   HIST=[];try{localStorage.removeItem(HKEY)}catch{}
+  clearSessionDraft();
+  sessionFromDraft=false;
+  loadedDraftId=null;
   renderHist();
+}
+
+function histItemHtml(h,isDraft){
+  const unnamed=(h.cli==='—'||!h.cli)&&(h.cam==='—'||!h.cam);
+  const name=isDraft&&unnamed?'Sin nombre':(escHtml(h.cli)+' · '+escHtml(h.cam));
+  return `
+    <div class="hist-item${isDraft?' draft':''}" onclick="cargar(${h.id})">
+      <div class="hist-info">
+        <div class="hist-name">${name}</div>
+        <div class="hist-meta">${isDraft?'Sin finalizar · ':''}${escHtml(h.fecha)} · ${escHtml(h.moneda)}${h.emailEjec?' · '+escHtml(h.emailEjec):''}</div>
+      </div>
+      <div class="hist-neto">${h.moneda==='USD'?'US$'+f0(h.tN/USD_CLP):'$'+f0(h.tN)}</div>
+      <button class="hist-del" onclick="borrar(${h.id},event)">✕</button>
+    </div>`;
 }
 
 function renderHist(){
   const el=document.getElementById('histList');
-  if(!HIST.length){el.innerHTML='<div class="hist-empty">Ninguna propuesta guardada</div>';return;}
-  el.innerHTML=HIST.map(h=>`
-    <div class="hist-item" onclick="cargar(${h.id})">
-      <div class="hist-info">
-        <div class="hist-name">${escHtml(h.cli)} · ${escHtml(h.cam)}</div>
-        <div class="hist-meta">${escHtml(h.fecha)} · ${escHtml(h.moneda)}${h.emailEjec?' · '+escHtml(h.emailEjec):''}</div>
-      </div>
-      <div class="hist-neto">${h.moneda==='USD'?'US$'+f0(h.tN/USD_CLP):'$'+f0(h.tN)}</div>
-      <button class="hist-del" onclick="borrar(${h.id},event)">✕</button>
-    </div>`).join('');
+  const drafts=HIST.filter(isDraftItem);
+  const saved=HIST.filter(h=>!isDraftItem(h));
+  if(!drafts.length&&!saved.length){
+    el.innerHTML='<div class="hist-empty">Ninguna propuesta guardada</div>';
+    return;
+  }
+  let html='';
+  if(drafts.length){
+    const n=drafts.length;
+    html+='<div class="hist-section-drafts">'
+      +'<div class="hist-sub drafts"><span>Borradores</span><span>'+n+' sin finalizar</span></div>'
+      +'<div class="hist-alert">'+(n===1
+        ?'Hay una propuesta sin finalizar. Púlsala para continuar.'
+        :'Hay '+n+' propuestas sin finalizar. Púlsalas para continuar.')+'</div>'
+      +drafts.map(h=>histItemHtml(h,true)).join('')
+      +'</div>';
+  }
+  if(saved.length){
+    if(drafts.length) html+='<div class="hist-sub">Guardadas</div>';
+    html+=saved.map(h=>histItemHtml(h,false)).join('');
+  }else if(drafts.length){
+    html+='<div class="hist-empty">Ninguna propuesta guardada</div>';
+  }
+  el.innerHTML=html;
 }
 
 // Altura de fila en Excel (px): según longitud de texto, sin inflar filas vacías
@@ -5631,9 +5769,10 @@ function initTheme(){
 // ── Init ──────────────────────────────────────────────────────────────────
 initTheme();
 loadEmailPref();
-const restoredDraft=loadDraft();
-buildFmts();render();renderHist();
-if(restoredDraft) showToast('Borrador restaurado');
+const parkedDraft=parkSessionDraftIfAny();
+withDraftMuted(()=>{buildFmts();render();});
+renderHist();
+if(parkedDraft) showToast('Borrador disponible en Propuestas');
 ['cliente','campania','semanas','objetivo','emailEjec'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     if(id==='emailEjec') persistEmailPref();
@@ -5651,8 +5790,13 @@ document.addEventListener('keydown',e=>{
   if(sr){ sr.focus(); sr.select(); }
 });
 
-// Aviso al cerrar pestaña si hay formatos activos
+function onLeavePage(){ flushDraft(); }
+window.addEventListener('pagehide',onLeavePage);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden') flushDraft();
+});
 window.addEventListener('beforeunload',e=>{
+  flushDraft();
   try{
     if(getRows().length){ e.preventDefault(); e.returnValue=''; }
   }catch(_){}
