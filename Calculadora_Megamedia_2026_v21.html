@@ -147,6 +147,10 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
 .fmt-grid input{width:100%;background:var(--dk);border:1px solid var(--bd2);
   border-radius:var(--r3);padding:5px 7px;color:var(--tx);font-size:12px;outline:none;transition:.15s}
 .fmt-grid input:focus{border-color:var(--cy)}
+.fmt-grid input.fmt-inv-field,
+.web-plat-metrics input.fmt-inv-field,
+.rad-entry-metrics input.fmt-inv-field{border-color:rgba(0,200,232,.35);font-weight:600;color:var(--cy)}
+.fmt-inv-hint{font-size:9px;color:var(--tx3);margin-top:2px;line-height:1.25}
 .fmt-rostro-input{width:100%;background:var(--dk);border:1px solid var(--bd2);border-radius:4px;padding:5px 7px;color:var(--tx);font-size:12px;outline:none;transition:.15s;font-family:inherit}
 .fmt-rostro-input:focus{border-color:var(--cy)}
 .fmt-rostro-input:invalid{box-shadow:none;border-color:var(--bd2)}
@@ -1676,7 +1680,7 @@ function initFmtState(f){
   const r=isRadio?RADIO_DEFAULT:null;
   const precio=isRadio&&f.precios?f.precios[r]:f.precio;
   const imp=isRadio&&f.imps?f.imps[r]:f.imp;
-  const base={active:false,qty:1,dto:0,precio,imp,descCustom:null,nameOverride:null,radio:r,progNombre:'',rostroNombre:'',costoProd:0};
+  const base={active:false,qty:1,dto:0,dtoControl:'pct',finalOverride:null,precio,imp,descCustom:null,nameOverride:null,radio:r,progNombre:'',rostroNombre:'',costoProd:0};
   if(isRadio) base.radioEntries=[newRadioEntry(f,RADIO_DEFAULT)];
   if(f.infType==='influencer'){
     base.influencers=[{name:'',plat:'Instagram',reach:0,precio:0}];
@@ -1778,13 +1782,17 @@ function getFmtMetaTag(f,id){
   if(f.rostroField) return (s?.rostroNombre||document.getElementById('rostro_'+id)?.value||'').trim();
   return '';
 }
+function fmtMediaBruto(f,s){
+  if(!f||!s) return 0;
+  const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
+  const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(pautaM?pautaM.imp:(+s.imp||0)*(+s.qty||1));
+  return f.tipo==='cpm'?((+s.precio||0)/1000)*imp:(+s.precio||0)*(+s.qty||1);
+}
 function calcFmtNeto(f,s){
   if(f.infType==='influencer') return calcInfluencerTotals(s).neto;
   if(esTipoWeb(f)){ migrateWebPlats(s,f); return calcWebFmtTotals(f,s).neto; }
   if(f.radioType==='radio'){ migrateRadioEntries(s,f); return calcRadioFmtTotals(f,s).neto; }
-  const imp=s.imp*s.qty;
-  const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
-  return netoDesdeBruto(bruto,s.dto||0).neto+fmtCostoProdExtra(f,s);
+  return unitNetoFromTarget(s,fmtMediaBruto(f,s)).neto+fmtCostoProdExtra(f,s);
 }
 function visibleFmtRoot(id){
   const sr=document.getElementById('sr_'+id);
@@ -1808,12 +1816,21 @@ function syncFmtStateFromDom(id){
   const cprod=root?root.querySelector('#cprod_'+id):null;
   if(p) s.precio=parseMiles(p.value);
   if(q) s.qty=+q.value||1;
-  if(d) s.dto=+d.value||0;
   if(i){
     s.imp=parseMiles(i.value);
     // Mantener pautaPlats alineadas al total editado (patrocinio / boost)
     if(s.pautaPlats&&s.pautaPlats.length)
       s.pautaPlats=scalePautaPlatsToImp(s.pautaPlats,s.imp);
+  }
+  const finv=fmtInputInRoot(root,'finv_',id);
+  const active=document.activeElement;
+  const f=allFmts().find(x=>x.id===id);
+  if(f&&active===d){
+    applyUnitDtoPct(s,d?d.value:0);
+  } else if(f&&active===finv){
+    applyUnitInvFinal(s,fmtMediaBruto(f,s),parseMiles(finv&&finv.value||''));
+  } else if(d&&s.dtoControl!=='final'){
+    s.dto=Math.max(0,Math.min(100,+d.value||0));
   }
   if(prog!=null) s.progNombre=prog.value||'';
   if(rostro!=null) s.rostroNombre=rostro.value||'';
@@ -1859,11 +1876,9 @@ function updateFmtAlcNeto(id,f,s){
 }
 function setFmtPricePreview(id,f,s){
   if(!f) return;
-  const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
-  const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(pautaM?pautaM.imp:s.imp*s.qty);
-  const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
+  const bruto=fmtMediaBruto(f,s);
   const costoExtra=fmtCostoProdExtra(f,s);
-  const {neto,desc}=netoDesdeBruto(bruto,s.dto||0);
+  const {neto,desc}=unitNetoFromTarget(s,bruto);
   const netoFinal=neto+costoExtra;
   const html=s.dto>0||costoExtra>0
     ?`<span style="color:var(--tx2);font-size:10.5px">Bruto: <s style="color:var(--tx3)">$${f0(bruto+costoExtra)}</s> &nbsp;·&nbsp; Dto: <span style="color:var(--or)">-$${f0(desc)}</span>${costoExtra>0?` &nbsp;·&nbsp; Prod.: <span style="color:var(--or)">+$${f0(costoExtra)}</span>`:''} &nbsp;·&nbsp; </span><span style="color:var(--cy);font-weight:700;font-size:11px">Neto: $${f0(netoFinal)}</span>`
@@ -2021,7 +2036,7 @@ function isWebRadioPlat(p){return WEB_RADIO_PLATS.includes(p);}
 function isWebMegaPlat(p){return WEB_MEGA_PLATS.includes(p);}
 function newWebPlatEntry(f, plat){
   plat=WEB_PLATAFORMAS.includes(plat)?plat:WEB_PLAT_DEFAULT;
-  return{plat,precio:f.precio||0,qty:1,dto:0,imp:f.imp||0};
+  return{plat,precio:f.precio||0,qty:1,dto:0,dtoControl:'pct',finalOverride:null,imp:f.imp||0};
 }
 function migrateWebPlats(s,f){
   if(!s.webPlats||!s.webPlats.length){
@@ -2030,9 +2045,17 @@ function migrateWebPlats(s,f){
   }
   s.webPlats=s.webPlats.map((p,i)=>{
     if(typeof p==='string'){
-      return{plat:p,precio:i===0?(+s.precio||f.precio||0):(f.precio||0),qty:i===0?(+s.qty||1):1,dto:i===0?(+s.dto||0):0,imp:i===0?(+s.imp||f.imp||0):(f.imp||0)};
+      return{plat:p,precio:i===0?(+s.precio||f.precio||0):(f.precio||0),qty:i===0?(+s.qty||1):1,dto:i===0?(+s.dto||0):0,dtoControl:'pct',finalOverride:null,imp:i===0?(+s.imp||f.imp||0):(f.imp||0)};
     }
-    return{plat:WEB_PLATAFORMAS.includes(p.plat)?p.plat:WEB_PLAT_DEFAULT,precio:+p.precio||0,qty:Math.max(1,+p.qty||1),dto:Math.max(0,+p.dto||0),imp:+p.imp||0};
+    return{
+      plat:WEB_PLATAFORMAS.includes(p.plat)?p.plat:WEB_PLAT_DEFAULT,
+      precio:+p.precio||0,
+      qty:Math.max(1,+p.qty||1),
+      dto:Math.max(0,+p.dto||0),
+      dtoControl:p.dtoControl==='final'?'final':'pct',
+      finalOverride:p.dtoControl==='final'&&p.finalOverride!=null?Math.round(+p.finalOverride||0):null,
+      imp:+p.imp||0
+    };
   });
 }
 function calcWebFmtAlcPreview(f,s){
@@ -2050,8 +2073,8 @@ function calcWebFmtTotals(f,s){
   s.webPlats.forEach(wp=>{
     const qty=+wp.qty||1;
     const im=(+wp.imp||0)*qty;
-    const b=f.tipo==='cpm'?((+wp.precio||0)/1000)*im:(+wp.precio||0)*qty;
-    const nd=netoDesdeBruto(b,wp.dto||0);
+    const b=entryMediaBruto(f.tipo,wp);
+    const nd=unitNetoFromTarget(wp,b);
     bruto+=b;desc+=nd.desc;neto+=nd.neto;imp+=im;
   });
   return{bruto,desc,neto,imp};
@@ -2063,6 +2086,8 @@ function newRadioEntry(f, station){
     precio:(f.precios&&f.precios[r]!=null)?f.precios[r]:(f.precio||0),
     qty:1,
     dto:0,
+    dtoControl:'pct',
+    finalOverride:null,
     imp:(f.imps&&f.imps[r]!=null)?f.imps[r]:(f.imp||0)
   };
 }
@@ -2074,6 +2099,8 @@ function migrateRadioEntries(s,f){
       precio:+s.precio||((f.precios&&f.precios[r]!=null)?f.precios[r]:(f.precio||0)),
       qty:Math.max(1,+s.qty||1),
       dto:Math.max(0,+s.dto||0),
+      dtoControl:s.dtoControl==='final'?'final':'pct',
+      finalOverride:s.dtoControl==='final'&&s.finalOverride!=null?Math.round(+s.finalOverride||0):null,
       imp:+s.imp||((f.imps&&f.imps[r]!=null)?f.imps[r]:(f.imp||0))
     }];
     return;
@@ -2085,6 +2112,8 @@ function migrateRadioEntries(s,f){
       precio:+re.precio||((f.precios&&f.precios[r]!=null)?f.precios[r]:(f.precio||0)),
       qty:Math.max(1,+re.qty||1),
       dto:Math.max(0,+re.dto||0),
+      dtoControl:re.dtoControl==='final'?'final':'pct',
+      finalOverride:re.dtoControl==='final'&&re.finalOverride!=null?Math.round(+re.finalOverride||0):null,
       imp:+re.imp||((f.imps&&f.imps[r]!=null)?f.imps[r]:(f.imp||0))
     };
   });
@@ -2092,8 +2121,8 @@ function migrateRadioEntries(s,f){
 function radioEntryTotals(f,re){
   const qty=+re.qty||1;
   const imp=(+re.imp||0)*qty;
-  const bruto=f.tipo==='cpm'?((+re.precio||0)/1000)*imp:(+re.precio||0)*qty;
-  const {neto,desc}=netoDesdeBruto(bruto,re.dto||0);
+  const bruto=entryMediaBruto(f.tipo,re);
+  const {neto,desc}=unitNetoFromTarget(re,bruto);
   return{bruto,desc,neto,imp,alc:calcAlcNeto(f,imp,qty)};
 }
 function calcRadioFmtTotals(f,s){
@@ -2234,6 +2263,43 @@ function netoDesdeBruto(bruto,dtoPct){
   const b=+bruto||0;
   const neto=roundInv(b-b*((+dtoPct||0)/100));
   return{neto,desc:b-neto};
+}
+/** Neto de un ítem: por % o por inversión manual exacta (como el dto. por volumen). */
+function unitNetoFromTarget(target,bruto){
+  const b=Math.max(0,+bruto||0);
+  if(!target) return netoDesdeBruto(b,0);
+  if(b<=0){
+    if(target.dtoControl==='final') target.dto=0;
+    return{neto:0,desc:0};
+  }
+  if(target.dtoControl==='final'&&target.finalOverride!=null){
+    const final=Math.max(0,Math.min(Math.round(b),Math.round(+target.finalOverride||0)));
+    target.finalOverride=final;
+    target.dto=b>0?((b-final)/b)*100:0;
+    return{neto:final,desc:b-final};
+  }
+  return netoDesdeBruto(b,target.dto||0);
+}
+function applyUnitDtoPct(target,dtoPct){
+  if(!target) return;
+  target.dtoControl='pct';
+  target.finalOverride=null;
+  target.dto=Math.max(0,Math.min(100,+dtoPct||0));
+}
+function applyUnitInvFinal(target,bruto,invClp){
+  if(!target) return{neto:0,desc:0};
+  const b=Math.max(0,+bruto||0);
+  let clp=Math.max(0,Math.round(+invClp||0));
+  if(clp>b) clp=Math.round(b);
+  target.dtoControl='final';
+  target.finalOverride=clp;
+  return unitNetoFromTarget(target,b);
+}
+function entryMediaBruto(tipo,entry){
+  const qty=+entry.qty||1;
+  const imp=(+entry.imp||0)*qty;
+  const precio=+entry.precio||0;
+  return tipo==='cpm'?(precio/1000)*imp:precio*qty;
 }
 // Control del total: por % de volumen o por valor final manual (redondeo comercial)
 let DTO_CONTROL='pct'; // 'pct' | 'final'
@@ -2394,7 +2460,10 @@ function renderRadioGrid(f,s){
         +'<div><label>Cantidad</label>'
         +'<input type="number" min="1" max="200" value="'+(+re.qty||1)+'" '+oi+'qty\',+this.value)" style="'+inp+'"/></div>'
         +'<div><label>Dto. unitario %</label>'
-        +'<input type="number" min="0" max="50" value="'+(+re.dto||0)+'" '+oi+'dto\',+this.value)" style="'+inp+'"/></div>'
+        +'<input type="number" id="rd_'+id+'_'+idx+'" min="0" max="100" step="0.01" value="'+formatDtoPct(+re.dto||0)+'" '+oi+'dto\',+this.value)" style="'+inp+'"/></div>'
+        +'<div><label style="color:var(--cy)">Inversión (CLP)</label>'
+        +'<input type="text" data-m="1" class="fmt-inv-field" id="rfinv_'+id+'_'+idx+'" inputmode="numeric" placeholder="Ej: 500.000" value="'+(tot.neto?fmtMiles(tot.neto):'')+'" '+oi+'inv\',parseMiles(this.value))" style="'+inp+'"/>'
+        +'<div class="fmt-inv-hint">Editable · el % se calcula desde la tarifa</div></div>'
         +'<div><label>Impresiones est.</label>'
         +'<input type="text" data-m="1" value="'+fmtMiles(+re.imp||0)+'" '+oi+'imp\',parseMiles(this.value))" style="'+inp+'"/></div>'
       +'</div>'
@@ -2445,11 +2514,16 @@ function updRadioEntryField(id,idx,field,value){
   const re=s.radioEntries[idx];
   if(field==='precio') re.precio=+value||0;
   else if(field==='qty') re.qty=Math.max(1,+value||1);
-  else if(field==='dto') re.dto=Math.max(0,+value||0);
+  else if(field==='dto') applyUnitDtoPct(re,value);
+  else if(field==='inv') applyUnitInvFinal(re,entryMediaBruto(f.tipo,re),value);
   else if(field==='imp') re.imp=+value||0;
+  const tot=radioEntryTotals(f,re);
+  const dEl=document.getElementById('rd_'+id+'_'+idx);
+  const invEl=document.getElementById('rfinv_'+id+'_'+idx);
+  if(dEl&&document.activeElement!==dEl) dEl.value=formatDtoPct(re.dto||0);
+  if(invEl&&document.activeElement!==invEl) invEl.value=tot.neto?fmtMiles(tot.neto):'';
   const mini=document.getElementById('rmini_'+id+'_'+idx);
   if(mini){
-    const tot=radioEntryTotals(f,re);
     mini.innerHTML=(re.dto>0
       ? '<span>Bruto: <s style="color:var(--tx3)">$'+f0(tot.bruto)+'</s> · Neto: <strong>$'+f0(tot.neto)+'</strong></span>'
       : '<span>Inversión: <strong>$'+f0(tot.neto)+'</strong></span>')
@@ -2505,8 +2579,8 @@ function displayWebPlats(s){
 function webPlatRowTotals(f,wp){
   const qty=+wp.qty||1;
   const imp=(+wp.imp||0)*qty;
-  const bruto=f.tipo==='cpm'?((+wp.precio||0)/1000)*imp:(+wp.precio||0)*qty;
-  const {neto,desc}=netoDesdeBruto(bruto,wp.dto||0);
+  const bruto=entryMediaBruto(f.tipo,wp);
+  const {neto,desc}=unitNetoFromTarget(wp,bruto);
   return{bruto,desc,neto,imp,alc:calcAlcNeto(f,imp,qty)};
 }
 function renderWebPlatGrid(f,s){
@@ -2539,7 +2613,10 @@ function renderWebPlatGrid(f,s){
         +'<div><label>Cantidad</label>'
         +'<input type="number" min="1" max="200" value="'+(+wp.qty||1)+'" '+oi+'qty\',+this.value)" style="'+inp+'"/></div>'
         +'<div><label>Dto. unitario %</label>'
-        +'<input type="number" min="0" max="50" value="'+(+wp.dto||0)+'" '+oi+'dto\',+this.value)" style="'+inp+'"/></div>'
+        +'<input type="number" id="wd_'+id+'_'+idx+'" min="0" max="100" step="0.01" value="'+formatDtoPct(+wp.dto||0)+'" '+oi+'dto\',+this.value)" style="'+inp+'"/></div>'
+        +'<div><label style="color:var(--cy)">Inversión (CLP)</label>'
+        +'<input type="text" data-m="1" class="fmt-inv-field" id="wfinv_'+id+'_'+idx+'" inputmode="numeric" placeholder="Ej: 500.000" value="'+(tot.neto?fmtMiles(tot.neto):'')+'" '+oi+'inv\',parseMiles(this.value))" style="'+inpCy+'"/>'
+        +'<div class="fmt-inv-hint">Editable · el % se calcula desde la tarifa</div></div>'
         +'<div><label>Impresiones est.</label>'
         +'<input type="text" data-m="1" value="'+fmtMiles(+wp.imp||0)+'" '+oi+'imp\',parseMiles(this.value))" style="'+inp+'"/></div>'
         +(f.tipo==='cpm'
@@ -2589,11 +2666,16 @@ function updWebPlatField(id,idx,field,value){
   const wp=s.webPlats[idx];
   if(field==='precio') wp.precio=+value||0;
   else if(field==='qty') wp.qty=Math.max(1,+value||1);
-  else if(field==='dto') wp.dto=Math.max(0,+value||0);
+  else if(field==='dto') applyUnitDtoPct(wp,value);
+  else if(field==='inv') applyUnitInvFinal(wp,entryMediaBruto(f.tipo,wp),value);
   else if(field==='imp') wp.imp=+value||0;
+  const tot=webPlatRowTotals(f,wp);
+  const dEl=document.getElementById('wd_'+id+'_'+idx);
+  const invEl=document.getElementById('wfinv_'+id+'_'+idx);
+  if(dEl&&document.activeElement!==dEl) dEl.value=formatDtoPct(wp.dto||0);
+  if(invEl&&document.activeElement!==invEl) invEl.value=tot.neto?fmtMiles(tot.neto):'';
   const mini=document.getElementById('wmini_'+id+'_'+idx);
   if(mini){
-    const tot=webPlatRowTotals(f,wp);
     mini.innerHTML=(wp.dto>0
       ? '<span>Bruto: <s style="color:var(--tx3)">$'+f0(tot.bruto)+'</s> · Neto: <strong>$'+f0(tot.neto)+'</strong></span>'
       : '<span>Inversión: <strong>$'+f0(tot.neto)+'</strong></span>')
@@ -2856,20 +2938,28 @@ function fmtGrid(f,s){
   }
   if(isProduccionFmt(f)){
     s.imp=0;
+    const prodNeto=unitNetoFromTarget(s,(+s.precio||0)*(+s.qty||1)).neto;
     return '<div><label for="p_'+id+'">Precio unit. (CLP)</label>'
       +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio||0)+'" '+oi+' style="'+inp+'" aria-label="Precio unitario"/></div>'
       +'<div><label for="q_'+id+'">Cantidad</label>'
       +'<input type="number" id="q_'+id+'" value="'+(s.qty||1)+'" min="1" max="200" '+oi+' style="'+inp+'" aria-label="Cantidad"/></div>'
       +'<div><label for="d_'+id+'">Dto. unitario %</label>'
-      +'<input type="number" id="d_'+id+'" value="'+(s.dto||0)+'" min="0" max="50" '+oi+' style="'+inp+'" aria-label="Descuento unitario porcentual"/></div>'
+      +'<input type="number" id="d_'+id+'" value="'+formatDtoPct(s.dto||0)+'" min="0" max="100" step="0.01" '+oi+' style="'+inp+'" aria-label="Descuento unitario porcentual"/></div>'
+      +'<div><label for="finv_'+id+'" style="color:var(--cy)">Inversión (CLP)</label>'
+      +'<input type="text" data-m="1" id="finv_'+id+'" class="fmt-inv-field" inputmode="numeric" placeholder="Ej: 2.000.000" value="'+(prodNeto?fmtMiles(prodNeto):'')+'" '+oi+' style="'+inpCy+'" aria-label="Inversión del formato sobre tarifa"/>'
+      +'<div class="fmt-inv-hint">Editable · el % se calcula desde la tarifa</div></div>'
       +'<div style="display:none"><input type="number" id="i_'+id+'" value="0" aria-hidden="true"/></div>';
   }
+  const invNeto=unitNetoFromTarget(s,fmtMediaBruto(f,s)).neto;
   let g=progField+rostroField+'<div><label for="p_'+id+'">'+(f.tipo==='cpm'?'CPM (CLP)':'Precio unit. (CLP)')+'</label>'
     +'<input type="text" data-m="1" id="p_'+id+'" value="'+fmtMiles(s.precio)+'" '+oi+' style="'+inp+'" aria-label="'+(f.tipo==='cpm'?'CPM':'Precio unitario')+'"/></div>'
     +'<div><label for="q_'+id+'">Cantidad</label>'
     +'<input type="number" id="q_'+id+'" value="'+s.qty+'" min="1" max="200" '+oi+' style="'+inp+'" aria-label="Cantidad"/></div>'
     +'<div><label for="d_'+id+'">Dto. unitario %</label>'
-    +'<input type="number" id="d_'+id+'" value="'+s.dto+'" min="0" max="50" '+oi+' style="'+inp+'" aria-label="Descuento unitario porcentual"/></div>'
+    +'<input type="number" id="d_'+id+'" value="'+formatDtoPct(s.dto||0)+'" min="0" max="100" step="0.01" '+oi+' style="'+inp+'" aria-label="Descuento unitario porcentual"/></div>'
+    +'<div><label for="finv_'+id+'" style="color:var(--cy)">Inversión (CLP)</label>'
+    +'<input type="text" data-m="1" id="finv_'+id+'" class="fmt-inv-field" inputmode="numeric" placeholder="Ej: 2.000.000" value="'+(invNeto?fmtMiles(invNeto):'')+'" '+oi+' style="'+inpCy+'" aria-label="Inversión del formato sobre tarifa"/>'
+    +'<div class="fmt-inv-hint">Editable · el % se calcula desde la tarifa</div></div>'
     +'<div><label for="i_'+id+'">Impresiones est.</label>'
     +'<input type="text" data-m="1" id="i_'+id+'" value="'+fmtMiles(s.imp)+'" '+oi+' style="'+inp+'" aria-label="Impresiones estimadas"/></div>';
   if(f.tipo==='cpm'){
@@ -2935,6 +3025,7 @@ function filtrarFormatos(q){
         syncFmtStateFromDom(f.id);
         updateFmtAlcNeto(f.id,f,STATE[f.id]);
         setFmtPricePreview(f.id,f,STATE[f.id]);
+        syncFmtDtoInvInputs(f.id);
       }
     });
     return;
@@ -3109,7 +3200,20 @@ function upd(id){
   const s=syncFmtStateFromDom(id);
   if(f) updateFmtAlcNeto(id,f,s);
   if(f) setFmtPricePreview(id,f,s);
+  syncFmtDtoInvInputs(id);
   render();
+}
+function syncFmtDtoInvInputs(id){
+  const s=STATE[id];
+  const f=allFmts().find(x=>x.id===id);
+  if(!s||!f||esTipoWeb(f)||f.radioType==='radio'||f.infType==='influencer') return;
+  const root=visibleFmtRoot(id);
+  const bruto=isProduccionFmt(f)?((+s.precio||0)*(+s.qty||1)):fmtMediaBruto(f,s);
+  const neto=unitNetoFromTarget(s,bruto).neto;
+  const d=fmtInputInRoot(root,'d_',id);
+  const finv=fmtInputInRoot(root,'finv_',id);
+  if(d&&document.activeElement!==d) d.value=formatDtoPct(s.dto||0);
+  if(finv&&document.activeElement!==finv) finv.value=neto?fmtMiles(neto):'';
 }
 
 function updInv(id){
@@ -3157,9 +3261,9 @@ function getRows(){
         const qty=+wp.qty||1;
         const imp=(+wp.imp||0)*qty;
         const precio=+wp.precio||0;
+        const bruto=entryMediaBruto(f.tipo,wp);
+        const {neto,desc}=unitNetoFromTarget(wp,bruto);
         const dto=+wp.dto||0;
-        const bruto=f.tipo==='cpm'?(precio/1000)*imp:precio*qty;
-        const {neto,desc}=netoDesdeBruto(bruto,dto);
         const alc=calcAlcNeto(f,imp,qty);
         const cpm=imp>0?(neto/imp)*1000:0;
         const plat=wp.plat||WEB_PLAT_DEFAULT;
@@ -3201,9 +3305,9 @@ function getRows(){
         const qty=+re.qty||1;
         const imp=(+re.imp||0)*qty;
         const precio=+re.precio||0;
+        const bruto=entryMediaBruto(f.tipo,re);
+        const {neto,desc}=unitNetoFromTarget(re,bruto);
         const dto=+re.dto||0;
-        const bruto=f.tipo==='cpm'?(precio/1000)*imp:precio*qty;
-        const {neto,desc}=netoDesdeBruto(bruto,dto);
         const alc=calcAlcNeto(f,imp,qty);
         const cpm=imp>0?(neto/imp)*1000:0;
         out.push({
@@ -3217,9 +3321,9 @@ function getRows(){
     }
     const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
     const imp=esTipoRRSS(f)?calcRRSSFmtImp(f,s):(s.imp*s.qty);
-    const bruto=f.tipo==='cpm'?(s.precio/1000)*imp:s.precio*s.qty;
+    const bruto=fmtMediaBruto(f,s);
     const costoExtra=fmtCostoProdExtra(f,s);
-    const {neto,desc}=netoDesdeBruto(bruto,s.dto||0);
+    const {neto,desc}=unitNetoFromTarget(s,bruto);
     const alc=esTipoRRSS(f)?calcRRSSFmtAlc(f,s):(pautaM?pautaM.alc:calcAlcNeto(f,imp,s.qty));
     const cpm=imp>0?(neto/imp)*1000:0;
     const row={f,s,bruto:bruto+costoExtra,desc,neto:neto+costoExtra,imp,alc,cpm:imp>0?((neto+costoExtra)/imp)*1000:0};
