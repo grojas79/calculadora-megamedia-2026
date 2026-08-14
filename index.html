@@ -411,6 +411,15 @@ td.inv{color:var(--cy);font-weight:700}
 .hist-item.draft:last-child{border-bottom:none}
 .hist-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:99px;background:rgba(245,158,11,.18);color:var(--am);margin-right:6px;vertical-align:middle}
 .hist-actions{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.rep-period{background:var(--dk3);border:1px solid var(--bd);border-radius:var(--r);padding:10px}
+.rep-period-label{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin-bottom:8px}
+.rep-presets{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.rep-preset{background:var(--dk2);border:1px solid var(--bd2);border-radius:20px;padding:4px 9px;font-size:10.5px;font-weight:600;color:var(--tx2);cursor:pointer}
+.rep-preset:hover{border-color:var(--cy);color:var(--tx)}
+.rep-preset.on{background:var(--cy);border-color:var(--cy);color:#000;font-weight:700}
+.rep-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rep-dates input[type="date"]{color-scheme:dark}
+html[data-theme="day"] .rep-dates input[type="date"]{color-scheme:light}
 
 .user-chip{display:none;align-items:center;gap:8px;padding:6px 10px 6px 12px;
   background:var(--dk3);border:1px solid var(--bd2);border-radius:20px;font-size:12px;color:var(--tx)}
@@ -709,6 +718,25 @@ html[data-theme="day"] .login-card img{filter:none}
       <button class="hist-clear" onclick="limpiarHist()">Borrar todas</button>
     </div>
     <div class="hist-actions">
+      <div class="rep-period">
+        <div class="rep-period-label">Período del reporte</div>
+        <div class="rep-presets" role="group" aria-label="Atajos de período">
+          <button type="button" class="rep-preset on" data-period="month" onclick="setReportePeriodo('month')">Este mes</button>
+          <button type="button" class="rep-preset" data-period="prev" onclick="setReportePeriodo('prev')">Mes anterior</button>
+          <button type="button" class="rep-preset" data-period="year" onclick="setReportePeriodo('year')">Este año</button>
+          <button type="button" class="rep-preset" data-period="all" onclick="setReportePeriodo('all')">Todo</button>
+        </div>
+        <div class="rep-dates">
+          <div class="field">
+            <label for="repDesde">Desde</label>
+            <input id="repDesde" type="date" onchange="onReporteFechasChange()" aria-label="Fecha inicial del reporte"/>
+          </div>
+          <div class="field">
+            <label for="repHasta">Hasta</label>
+            <input id="repHasta" type="date" onchange="onReporteFechasChange()" aria-label="Fecha final del reporte"/>
+          </div>
+        </div>
+      </div>
       <button class="btn btn-pri btn-full" onclick="exportarReporteEquipo()">Reporte equipo (Excel)</button>
     </div>
     <div id="histList"></div>
@@ -3784,14 +3812,99 @@ async function fetchTeamProposals(){
   return [...byId.values()].sort((a,b)=>(b.fechaISO||b.fecha||'').localeCompare(a.fechaISO||a.fecha||''));
 }
 
+function isoDateLocal(d){
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+function fmtFechaLarga(iso){
+  if(!iso) return '';
+  const p=iso.split('-');
+  if(p.length!==3) return iso;
+  return p[2]+'-'+p[1]+'-'+p[0];
+}
+function markReportePreset(kind){
+  document.querySelectorAll('.rep-preset').forEach(b=>b.classList.toggle('on',b.dataset.period===kind));
+}
+function setReportePeriodo(kind){
+  const from=document.getElementById('repDesde');
+  const to=document.getElementById('repHasta');
+  if(!from||!to) return;
+  const now=new Date();
+  if(kind==='month'){
+    from.value=isoDateLocal(new Date(now.getFullYear(),now.getMonth(),1));
+    to.value=isoDateLocal(new Date(now.getFullYear(),now.getMonth()+1,0));
+  }else if(kind==='prev'){
+    from.value=isoDateLocal(new Date(now.getFullYear(),now.getMonth()-1,1));
+    to.value=isoDateLocal(new Date(now.getFullYear(),now.getMonth(),0));
+  }else if(kind==='year'){
+    from.value=isoDateLocal(new Date(now.getFullYear(),0,1));
+    to.value=isoDateLocal(new Date(now.getFullYear(),11,31));
+  }else{
+    from.value='';
+    to.value='';
+    kind='all';
+  }
+  markReportePreset(kind);
+}
+function onReporteFechasChange(){
+  markReportePreset('');
+}
+function proposalDateMs(p){
+  if(!p) return NaN;
+  if(p.fechaISO){
+    const t=Date.parse(p.fechaISO);
+    if(!isNaN(t)) return t;
+  }
+  if(p.fecha){
+    const m=String(p.fecha).match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+    if(m){
+      const y=m[3].length===2?2000+(+m[3]):+m[3];
+      const d=new Date(y,+m[2]-1,+m[1],12,0,0).getTime();
+      if(!isNaN(d)) return d;
+    }
+  }
+  if(typeof p.id==='number'&&p.id>1e12) return p.id;
+  return NaN;
+}
+function getReporteRango(){
+  let from=gv('repDesde');
+  let to=gv('repHasta');
+  if(from&&to&&from>to){ const x=from; from=to; to=x; }
+  return {from,to};
+}
+function labelReportePeriodo(from,to){
+  if(!from&&!to) return 'todo el historial';
+  if(from&&to) return fmtFechaLarga(from)+' al '+fmtFechaLarga(to);
+  if(from) return 'desde '+fmtFechaLarga(from);
+  return 'hasta '+fmtFechaLarga(to);
+}
+function filtrarPropuestasPorPeriodo(list,from,to){
+  if(!from&&!to) return list.slice();
+  const start=from?new Date(from+'T00:00:00').getTime():null;
+  const end=to?new Date(to+'T23:59:59.999').getTime():null;
+  return list.filter(p=>{
+    const t=proposalDateMs(p);
+    if(isNaN(t)) return false;
+    if(start!=null&&t<start) return false;
+    if(end!=null&&t>end) return false;
+    return true;
+  });
+}
+
 async function exportarReporteEquipo(){
   if(!requireLogin()) return;
   if(!(await ensureExcelJS())) return;
   const btn=document.querySelector('[onclick="exportarReporteEquipo()"]');
   if(btn){btn.textContent='Generando…';btn.disabled=true;}
   try{
-    const list=await fetchTeamProposals();
-    if(!list.length){showToast('Aún no hay propuestas del equipo');return;}
+    const all=await fetchTeamProposals();
+    if(!all.length){showToast('Aún no hay propuestas del equipo');return;}
+    const {from,to}=getReporteRango();
+    const list=filtrarPropuestasPorPeriodo(all,from,to);
+    const periodoTxt=labelReportePeriodo(from,to);
+    if(!list.length){showToast('No hay propuestas en '+periodoTxt);return;}
     const C={blue:'FF69AEEC',white:'FFFFFFFF',black:'FF1A1A2E',grayLight:'FFF2F4F7',grayDark:'FF8496AF',sub1:'FFE8F4FB',orange:'FFE67E22',green:'FF1A8F3C'};
     const wb=new ExcelJS.Workbook();
     wb.creator='Megamedia Digital';
@@ -3805,9 +3918,11 @@ async function exportarReporteEquipo(){
     tcell.font={name:'Arial',bold:true,size:14,color:{argb:C.white}};
     tcell.fill={type:'pattern',pattern:'solid',fgColor:{argb:C.blue}};
     tcell.alignment={vertical:'middle',horizontal:'left'};
-    const sub=ws.addRow(['Generado por '+CURRENT_EJEC+' · '+new Date().toLocaleString('es-CL')+' · '+list.length+' propuesta'+(list.length===1?'':'s')]);
+    const sub=ws.addRow(['Período: '+periodoTxt+' · Generado por '+CURRENT_EJEC+' · '+new Date().toLocaleString('es-CL')+' · '+list.length+' propuesta'+(list.length===1?'':'s')]);
+    sub.height=18;
     ws.mergeCells(2,1,2,11);
     sub.getCell(1).font={name:'Arial',italic:true,size:10,color:{argb:C.grayDark}};
+    sub.getCell(1).alignment={vertical:'middle',wrapText:true};
     ws.addRow([]);
     const hr=ws.addRow(headers);
     hr.height=18;
@@ -3851,7 +3966,7 @@ async function exportarReporteEquipo(){
 
     const ws2=wb.addWorksheet('Por ejecutivo');
     ws2.columns=[{width:24},{width:16},{width:24},{width:22}];
-    const t2=ws2.addRow(['Resumen por ejecutivo']);
+    const t2=ws2.addRow(['Resumen por ejecutivo · '+periodoTxt]);
     ws2.mergeCells(1,1,1,4);
     t2.getCell(1).font={name:'Arial',bold:true,size:14,color:{argb:C.white}};
     t2.getCell(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:C.blue}};
@@ -3888,9 +4003,9 @@ async function exportarReporteEquipo(){
     const yyyy=d.getFullYear();
     const mm=String(d.getMonth()+1).padStart(2,'0');
     const dd=String(d.getDate()).padStart(2,'0');
-    a.download=`${yyyy}-${mm}-${dd}_Reporte_Equipo_Propuestas_Megamedia.xlsx`;
+    a.download=(from&&to?`${from}_${to}`:`${yyyy}-${mm}-${dd}`)+`_Reporte_Equipo_Propuestas_Megamedia.xlsx`;
     a.click();
-    showToast('✓ Reporte del equipo descargado');
+    showToast('✓ Reporte '+periodoTxt+' descargado');
   }catch(e){
     console.error(e);
     showToast('Error al generar reporte: '+((e&&e.message)||'').slice(0,50));
@@ -6112,6 +6227,7 @@ const parkedDraft=parkSessionDraftIfAny();
 withDraftMuted(()=>{buildFmts();render();});
 renderHist();
 if(parkedDraft) showToast('Borrador disponible en Propuestas');
+setReportePeriodo('month');
 ['cliente','campania','semanas','objetivo','emailEjec'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     if(id==='emailEjec') persistEmailPref();
