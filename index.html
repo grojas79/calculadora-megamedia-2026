@@ -717,6 +717,7 @@ html[data-theme="day"] .login-card img{filter:none}
     <div class="btn-row">
       <button class="btn btn-sec" onclick="exportarExcel()">Excel</button>
       <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
+      <button class="btn btn-sec btn-full" onclick="exportarOTWeb()">Crear OT WEB</button>
     </div>
   </div>
   <div class="hist-card">
@@ -4336,6 +4337,128 @@ async function ensureHtml2Pdf(){
     }catch(e){}
   }
   return false;
+}
+
+const OT_WEB_FMT_MAP={
+  advideo:'Ad Video (Pre-Mid-Pos)',
+  banner_display:'Banners Tradicionales (desktop y mobile)',
+  dai_sev:'DAI',
+  ig_social_extend:'Instagram Social Extend',
+  itt:'ITT (desktop + mobile)',
+  itt_video:'ITT Video Full (solo desktop)',
+  rich_media:'Formato Rich Media',
+  skin:'Skinbranding',
+  skin_video_cpm:'Ad Video (Pre-Mid-Pos) con Skin'
+};
+const OT_WEB_SEC_MAP={
+  'Redes Megamedia':'RON (TODA_LA_RED)',
+  Mega:'ROS_Mega.cl',
+  Meganoticias:'ROS_Meganoticias.cl',
+  'Mega Go':'ROS MegaPlus',
+  Carolina:'ROS_Radio_Carolina',
+  Romantica:'ROS_Radio_Romantica',
+  Infinita:'ROS_Radio_Infinita'
+};
+function otWebSeccion(plat){
+  const seccion=OT_WEB_SEC_MAP[plat];
+  if(seccion) return {seccion,detalle:''};
+  return {seccion:'OTROS',detalle:'Plataforma propuesta: '+(webPlatLabel(plat)||plat||'sin definir')};
+}
+function otWebFileSlug(s){
+  return String(s||'').trim().replace(/\s+/g,'_').replace(/[^\w\-áéíóúÁÉÍÓÚñÑ]/g,'_')||'sin_nombre';
+}
+function buildOTWebPayload(){
+  const webRows=getRows().filter(r=>esTipoWeb(r.f));
+  const cliente=gv('cliente').trim();
+  const campania=gv('campania').trim();
+  const semanas=gv('semanas')||'4';
+  const email=gv('emailEjec').trim();
+  const formatos=webRows.map((r,i)=>{
+    const plat=r.webPlat||WEB_PLAT_DEFAULT;
+    const sec=otWebSeccion(plat);
+    const tipo=r.f.tipo==='cpm'?'CPM':'AUS';
+    const valor=Math.round(+r.neto||0);
+    const imp=Math.round(+r.imp||0);
+    const cpm=imp>0?Math.round((valor/imp)*1000):Math.round(+r.s.precio||0);
+    const platLbl=webPlatLabel(plat);
+    const lineObs=[
+      'Desde propuesta WEB',
+      platLbl?'Plataforma: '+platLbl:'',
+      r.s.qty>1?'Cantidad: '+r.s.qty:'',
+      r.s.dto>0?'Dto. unitario: '+r.s.dto+'%':''
+    ].filter(Boolean).join(' · ');
+    return{
+      fid:'f'+(i+1),
+      titulo:(r.f.name||'')+(platLbl?' · '+platLbl:''),
+      prioridad:'3.- MEDIA PRIORIDAD',
+      tipo,
+      seccion:sec.seccion,
+      detalle:sec.detalle,
+      formato:OT_WEB_FMT_MAP[r.f.id]||r.f.name||'',
+      valor:String(valor),
+      cpm:String(cpm),
+      impManual:tipo==='AUS'&&imp?String(imp):'',
+      estado:'PENDIENTE',
+      obs:lineObs,
+      calDays:[]
+    };
+  });
+  const obsParts=[
+    'Generada desde Creador de Propuestas (solo formatos WEB).',
+    'Duración propuesta: '+semanas+' semana(s).',
+    'Completar razón social, agencia, contrato, trafficker y fechas.'
+  ];
+  if(email) obsParts.push('E-mail ejecutivo: '+email);
+  return{
+    unit:'Mega',
+    ejecutivo:'',
+    trafficker:'',
+    razon:'',
+    agencia:'',
+    cliente,
+    campNombre:campania,
+    nombreRealPrograma:'',
+    contrato:'',
+    capitulo:'',
+    inicio:'',
+    termino:'',
+    obs:obsParts.join(' '),
+    formatos,
+    version:1,
+    parentId:null,
+    savedAt:new Date().toISOString()
+  };
+}
+function exportarOTWeb(){
+  const cliente=gv('cliente').trim();
+  const campania=gv('campania').trim();
+  if(!cliente||!campania){
+    showToast('Indica cliente y campaña antes de crear la OT');
+    return;
+  }
+  const webRows=getRows().filter(r=>esTipoWeb(r.f));
+  if(!webRows.length){
+    showToast('No hay formatos WEB activos en la propuesta');
+    return;
+  }
+  const ok=confirm(
+    '¿La propuesta está aprobada?\n\n'+
+    'Se descargará un JSON con '+webRows.length+' línea(s) WEB para importarlo en el Creador de OTs (⬆ Importar OT).\n\n'+
+    'Quedarán pendientes: razón social, agencia, contrato, trafficker y fechas.'
+  );
+  if(!ok) return;
+  const payload=buildOTWebPayload();
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const hoy=new Date();
+  const yyyy=hoy.getFullYear();
+  const mm=String(hoy.getMonth()+1).padStart(2,'0');
+  const dd=String(hoy.getDate()).padStart(2,'0');
+  a.download=yyyy+'-'+mm+'-'+dd+'_OT_WEB_'+otWebFileSlug(cliente)+'_'+otWebFileSlug(campania)+'.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('✓ OT WEB descargada · impórtala en el Creador de OTs');
 }
 
 async function ensureExcelJS(){
