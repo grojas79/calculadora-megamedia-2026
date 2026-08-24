@@ -5602,10 +5602,39 @@ function pautaEditorialFmts(family){
   const catIds=family==='radios'?PAUTA_RADIOS_CAT_IDS:PAUTA_MEGA_CAT_IDS;
   return CATS.filter(c=>catIds.includes(c.id)).flatMap(c=>c.fmts).filter(f=>!isPautaComercialFmt(f));
 }
+function pautaFmtDefaultImp(f){
+  if(!f) return 0;
+  if(f.pautaPlats&&f.pautaPlats.length){
+    const sum=f.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
+    if(sum>0) return sum;
+  }
+  return Math.max(0,+f.imp||0);
+}
+function pautaCatalogFmtForEntry(e){
+  if(!e) return null;
+  const id=String(e.fmtId||'').trim();
+  if(id){
+    const byId=allFmts().find(f=>f.id===id);
+    if(byId) return byId;
+  }
+  const n=normPauta(e.tipoContenido);
+  if(!n) return null;
+  return allFmts().find(f=>!f.customType&&normPauta(f.name)===n)||null;
+}
 function pautaEntryIsUsed(e){
-  if(e.tematica&&String(e.tematica).trim()) return true;
-  if((+e.totalAlc||0)>0) return true;
   if(canonPautaOrigen(e.medio)) return true;
+  if(canonPautaEtapa(e.etapa)) return true;
+  const f=pautaCatalogFmtForEntry(e);
+  const tema=String(e.tematica||'').trim();
+  if(tema){
+    const def=String(f&&f.desc||'').trim();
+    if(!f||normPauta(tema)!==normPauta(def)) return true;
+  }
+  const imp=+e.totalAlc||0;
+  if(imp>0){
+    const defImp=pautaFmtDefaultImp(f);
+    if(!f||imp!==defImp) return true;
+  }
   return false;
 }
 function pautaFmtPlatLabel(f){
@@ -5627,7 +5656,7 @@ function detectPautaHeaderMap(cells){
       if(map.plat==null) map.plat=i;
       else map.platDetail=i;
     }
-    else if(n.includes('alcance')) map.alc=i;
+    else if(n.includes('impresion')||n.includes('impacto')||n.includes('alcance')) map.alc=i;
     else if(n.includes('etapa')) map.etapa=i;
     else if(n==='formato id'||n==='formato_id'||n==='id formato'||n==='id') map.fmtId=i;
   });
@@ -5740,6 +5769,7 @@ function parsePautaRows(rawRows){
       const p0=pautaCellAt(cells,platIdx);
       const a0=parsePautaNum(pautaCellAt(cells,colMap.alc));
       if(p0) plats.push({plat:p0,alc:a0});
+      else if(a0>0) plats.push({plat:'',alc:a0});
       const origenRaw=pautaCellAt(cells,colMap.origen);
       const origen=canonPautaOrigen(origenRaw);
       const etapaCol=colMap.etapa!=null?canonPautaEtapa(pautaCellAt(cells,colMap.etapa)):'';
@@ -6543,21 +6573,35 @@ function createCustomFromEntry(entry,nameOverride){
     pautaPlats:entry.plats&&entry.plats.length?entry.plats.map(p=>({plat:p.plat,alc:+p.alc||0})):[]
   });
 }
-function mergePautaPlats(s,entry){
-  if(!s.pautaPlats) s.pautaPlats=[];
-  entry.plats.forEach(p=>{
-    if(!s.pautaPlats.find(x=>normPauta(x.plat)===normPauta(p.plat)))
-      s.pautaPlats.push({plat:p.plat,alc:p.alc});
-  });
-  const total=s.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
-  if(total>0) s.imp=total;
-}
 function applyCatalogPautaPlats(f,s){
   if(!f||!s||!f.pautaPlats||!f.pautaPlats.length) return false;
   s.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:+p.alc||0}));
   const total=s.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
   if(total>0) s.imp=total;
   return true;
+}
+function pautaTemaEffective(f,s){
+  if(s&&s.descCustom!=null&&String(s.descCustom).trim()!=='') return String(s.descCustom).trim();
+  return String(f&&f.desc||'').trim();
+}
+function pautaEntryHasDetailedPlats(entry){
+  return !!(entry&&entry.plats&&entry.plats.filter(p=>p.plat&&+p.alc>0).length>1);
+}
+function applyPautaImpsFromEntry(f,s,entry){
+  if(pautaEntryHasDetailedPlats(entry)){
+    s.pautaPlats=entry.plats.map(p=>({plat:p.plat,alc:+p.alc||0}));
+    if(entry.totalAlc>0) s.imp=entry.totalAlc;
+    return;
+  }
+  if(f.pautaPlats&&f.pautaPlats.length&&entry.totalAlc>0){
+    s.pautaPlats=scalePautaPlatsToImp(f.pautaPlats,entry.totalAlc);
+    s.imp=entry.totalAlc;
+    return;
+  }
+  if(f.id==='spots_licenciados'&&applyCatalogPautaPlats(f,s)) return;
+  if(entry.plats&&entry.plats.length) s.pautaPlats=entry.plats.slice();
+  else if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
+  if(entry.totalAlc>0) s.imp=entry.totalAlc;
 }
 function applyPautaEntry(entry,matchInfo,customName){
   if(matchInfo&&matchInfo.fmt&&isPautaComercialFmt(matchInfo.fmt)) matchInfo=null;
@@ -6566,17 +6610,19 @@ function applyPautaEntry(entry,matchInfo,customName){
     f=matchInfo.fmt;
     const s=STATE[f.id];
     if(s.active){
-      const sameItem=normPauta(s.descCustom||'')===normPauta(entry.tematica||'')
+      const sameItem=normPauta(pautaTemaEffective(f,s))===normPauta(entry.tematica||f.desc||'')
         &&canonPautaOrigen(s.pautaMedio)===canonPautaOrigen(entry.medio)
         &&(canonPautaEtapa(s.pautaEtapa)||s.pautaEtapa||'')===(canonPautaEtapa(entry.etapa)||entry.etapa||'');
       if(sameItem||!s.pautaPlats||!s.pautaPlats.length){
-        if(f.id==='spots_licenciados') applyCatalogPautaPlats(f,s);
-        else mergePautaPlats(s,entry);
-        if(entry.tematica) s.descCustom=entry.tematica;
+        if(entry.tematica){
+          const defDesc=String(f.desc||'').trim();
+          s.descCustom=normPauta(entry.tematica)===normPauta(defDesc)?null:entry.tematica;
+        }
         if(entry.qty) s.qty=entry.qty;
         s.nameOverride=pautaCellStr(entry.tipoContenido)||null;
         s.pautaEtapa=canonPautaEtapa(entry.etapa)||entry.etapa||s.pautaEtapa||'';
         s.pautaMedio=canonPautaOrigen(entry.medio)||entry.medio||s.pautaMedio||'';
+        applyPautaImpsFromEntry(f,s,entry);
         return{fmt:f,created:false,matchInfo};
       }
       f=createCustomFromEntry(entry,customName);
@@ -6589,17 +6635,13 @@ function applyPautaEntry(entry,matchInfo,customName){
   const s=STATE[f.id];
   s.active=true;
   s.qty=entry.qty||1;
-  s.descCustom=entry.tematica||null;
+  const defDesc=String(f.desc||'').trim();
+  const tema=String(entry.tematica||'').trim();
+  s.descCustom=(tema&&normPauta(tema)!==normPauta(defDesc))?tema:null;
   s.pautaEtapa=canonPautaEtapa(entry.etapa)||entry.etapa||'';
   s.pautaMedio=canonPautaOrigen(entry.medio)||entry.medio||'';
   if(!f.customType) s.nameOverride=pautaCellStr(entry.tipoContenido)||null;
-  if(f.id==='spots_licenciados'&&applyCatalogPautaPlats(f,s)){
-    // métricas fijas del catálogo: FB Mega 10.000 + YouTube Mega 2.000
-  } else {
-    s.pautaPlats=entry.plats.length?entry.plats.slice():[];
-    if(entry.totalAlc>0) s.imp=entry.totalAlc;
-    else if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
-  }
+  applyPautaImpsFromEntry(f,s,entry);
   if(entry.marca&&f.customType) f.marca=entry.marca;
   if(entry.referencia&&f.customType) f.ref=entry.referencia;
   return{fmt:f,created,matchInfo};
@@ -6716,7 +6758,8 @@ function abrirPlantillaEditorialModal(){
   document.getElementById('pautaModalTitle').textContent='Descargar plantilla editorial';
   document.getElementById('pautaModalBody').innerHTML=
     '<p>La plantilla <strong>ya trae todos los formatos de contenido</strong> de esa mesa, sin precios. '+
-    'Editorial solo completa las filas que van en la campaña (origen, etapa, temática de uso y alcances). Las demás se ignoran al importar.</p>'+
+    'Cada fila incluye la temática por defecto (editable) y las impresiones/impactos de referencia. '+
+    'Editorial completa ORIGEN y ETAPA en las filas de la campaña. El alcance lo calcula comercial con Sainsbury sobre esas impresiones.</p>'+
     '<div class="pauta-pick-card" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'mega\')">'+
       '<div class="pauta-pick-opt-name">Digital Mega</div>'+
       '<div class="pauta-pick-opt-sub">Todos los formatos de Contenido Editorial, Vodcast, Live Shopping de contenido, Programas, Teleseries y Megadeportes.</div>'+
@@ -6747,7 +6790,7 @@ async function descargarPlantillaEditorial(family){
     origenes.forEach((o,i)=>{lists.getCell(i+1,1).value=o;});
     ETAPAS_CANONICAS.forEach((e,i)=>{lists.getCell(i+1,2).value=e;});
     const NCOLS=10;
-    const widths=[26,34,22,42,26,10,36,14,16,14];
+    const widths=[26,34,22,42,26,10,36,18,16,14];
     widths.forEach((w,i)=>{ws.getColumn(i+1).width=w;});
     ws.getColumn(10).hidden=true;
     const fill=(r,c,v,opts)=>{
@@ -6763,16 +6806,16 @@ async function descargarPlantillaEditorial(family){
     fill(1,1,'PAUTA EDITORIAL MEGAMEDIA — '+title,{bg:'FF003087',fg:'FFFFFFFF',bold:true,sz:14,ha:'center',wrap:false});
     ws.getRow(1).height=24;
     ws.mergeCells(2,1,2,9);
-    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) En las filas que SÍ van en esta pauta, elijan ORIGEN y ETAPA y escriban la TEMÁTICA (uso del formato para el cliente) y el ALCANCE. 3) Las filas vacías no se importan. 4) Si el mismo formato va en dos etapas, copien la fila. Sin precios: comercial cotiza y suma CPM e influencers.',
+    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) En las filas que SÍ van en esta pauta, elijan ORIGEN y ETAPA. 3) La TEMÁTICA viene con el texto del formato: edítenla si el uso en esta campaña es distinto. 4) IMPRESIONES / IMPACTOS es la suma de impactos de referencia (editable). El alcance neto lo calcula comercial con Sainsbury. 5) Si no marcan origen ni etapa, la fila no se importa. 6) Para repetir un formato en otra etapa, copien la fila.',
       {bg:'FFE8F4FC',fg:'FF1A3A6B',sz:9,wrap:true});
-    ws.getRow(2).height=42;
+    ws.getRow(2).height=48;
     fill(4,1,'CLIENTE',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
     fill(4,2,'CAMPAÑA',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
     fill(4,3,'FECHAS',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
     fill(5,1,'',{bg:'FFFFFFFF'});
     fill(5,2,'',{bg:'FFFFFFFF'});
     fill(5,3,'',{bg:'FFFFFFFF'});
-    const hdrs=['ORIGEN','TIPO DE CONTENIDO','PRESENCIA DE MARCA','TEMÁTICA (uso en esta campaña)','REFERENCIA','CANT.','PLATAFORMA','ALCANCE','ETAPA','formato_id'];
+    const hdrs=['ORIGEN','TIPO DE CONTENIDO','PRESENCIA DE MARCA','TEMÁTICA (editable)','REFERENCIA','CANT.','PLATAFORMA','IMPRESIONES / IMPACTOS','ETAPA','formato_id'];
     hdrs.forEach((h,i)=>fill(8,i+1,h,{bg:'FF003087',fg:'FFFFFFFF',bold:true,ha:'center',sz:8,wrap:true}));
     ws.getRow(8).height=32;
     let r=9;
@@ -6791,14 +6834,15 @@ async function descargarPlantillaEditorial(family){
         fill(r,1,'',{bg});
         fill(r,2,f.name,{bg,bold:true,sz:10});
         fill(r,3,f.marca||'',{bg,sz:9,fg:'FF445066'});
-        fill(r,4,'',{bg});
+        fill(r,4,f.desc||'',{bg,sz:9});
         fill(r,5,f.ref||'',{bg,sz:8,italic:true,fg:'FF3B82C4'});
         fill(r,6,'',{bg,ha:'center'});
         fill(r,7,pautaFmtPlatLabel(f),{bg,sz:9,fg:'FF445066'});
-        fill(r,8,'',{bg,ha:'right'});
+        fill(r,8,pautaFmtDefaultImp(f)||'',{bg,ha:'right'});
+        ws.getRow(r).getCell(8).numFmt='#,##0';
         fill(r,9,'',{bg,ha:'center'});
         fill(r,10,f.id,{bg,sz:8,fg:'FF94A3B8'});
-        ws.getRow(r).height=22;
+        ws.getRow(r).height=36;
         dataRows.push(r);
         r++;
       });
@@ -6809,6 +6853,7 @@ async function descargarPlantillaEditorial(family){
     const extraStart=r;
     for(let i=0;i<8;i++){
       for(let c=1;c<=10;c++) fill(r,c,'',{bg:'FFFFFFFF'});
+      ws.getRow(r).getCell(8).numFmt='#,##0';
       dataRows.push(r);
       r++;
     }
@@ -6836,7 +6881,8 @@ async function descargarPlantillaEditorial(family){
     catSheet.getColumn(3).width=22;
     catSheet.getColumn(4).width=70;
     catSheet.getColumn(5).width=42;
-    [['Familia','Formato','Presencia de marca','Qué es (referencia)','Plataformas de referencia']].forEach((row,ri)=>{
+    catSheet.getColumn(6).width=18;
+    [['Familia','Formato','Presencia de marca','Qué es (referencia)','Plataformas de referencia','Impresiones / Impactos']].forEach((row,ri)=>{
       row.forEach((v,ci)=>{
         const cell=catSheet.getRow(1).getCell(ci+1);
         cell.value=v;
@@ -6851,12 +6897,13 @@ async function descargarPlantillaEditorial(family){
       const cat=CATS.find(c=>c.id===cid);
       if(!cat) return;
       cat.fmts.filter(f=>!isPautaComercialFmt(f)).forEach(f=>{
-        const vals=[excelSectionLabel(cat),f.name,f.marca||'',f.desc||'',pautaFmtPlatLabel(f)];
+        const vals=[excelSectionLabel(cat),f.name,f.marca||'',f.desc||'',pautaFmtPlatLabel(f),pautaFmtDefaultImp(f)||''];
         vals.forEach((v,ci)=>{
           const cell=catSheet.getRow(cr).getCell(ci+1);
           cell.value=v;
           cell.font={name:'Calibri',size:10,bold:ci===1};
-          cell.alignment={vertical:'top',wrapText:true};
+          cell.alignment={vertical:'top',wrapText:true,horizontal:ci===5?'right':'left'};
+          if(ci===5) cell.numFmt='#,##0';
         });
         catSheet.getRow(cr).height=36;
         cr++;
