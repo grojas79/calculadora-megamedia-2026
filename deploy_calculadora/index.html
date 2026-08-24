@@ -5602,6 +5602,16 @@ function pautaEditorialFmts(family){
   const catIds=family==='radios'?PAUTA_RADIOS_CAT_IDS:PAUTA_MEGA_CAT_IDS;
   return CATS.filter(c=>catIds.includes(c.id)).flatMap(c=>c.fmts).filter(f=>!isPautaComercialFmt(f));
 }
+function pautaEntryIsUsed(e){
+  if(e.tematica&&String(e.tematica).trim()) return true;
+  if((+e.totalAlc||0)>0) return true;
+  if(canonPautaOrigen(e.medio)) return true;
+  return false;
+}
+function pautaFmtPlatLabel(f){
+  if(f.pautaPlats&&f.pautaPlats.length) return f.pautaPlats.map(p=>p.plat).filter(Boolean).join(' · ');
+  return (f.plat&&f.plat!=='—')?f.plat:'';
+}
 function detectPautaHeaderMap(cells){
   const map={};
   cells.forEach((c,i)=>{
@@ -5618,6 +5628,7 @@ function detectPautaHeaderMap(cells){
       else map.platDetail=i;
     }
     else if(n.includes('alcance')) map.alc=i;
+    else if(n.includes('etapa')) map.etapa=i;
     else if(n==='formato id'||n==='formato_id'||n==='id formato'||n==='id') map.fmtId=i;
   });
   if(map.tipo==null) return null;
@@ -5731,7 +5742,8 @@ function parsePautaRows(rawRows){
       if(p0) plats.push({plat:p0,alc:a0});
       const origenRaw=pautaCellAt(cells,colMap.origen);
       const origen=canonPautaOrigen(origenRaw);
-      const etapa=canonPautaEtapa(currentEtapa)||currentEtapa||'';
+      const etapaCol=colMap.etapa!=null?canonPautaEtapa(pautaCellAt(cells,colMap.etapa)):'';
+      const etapa=etapaCol||canonPautaEtapa(currentEtapa)||currentEtapa||'';
       pending={
         etapa,
         medio:origen||origenRaw,
@@ -5762,7 +5774,8 @@ function parsePautaRows(rawRows){
     e.origenFamilia=e.origenFamilia||pautaOrigenFamiliaFromLabel(e.medio);
     return e;
   });
-  result.entries=consolidatePautaEntries(entries).filter(e=>!isPautaNoiseCell(e.tipoContenido));
+  result.entries=consolidatePautaEntries(entries)
+    .filter(e=>!isPautaNoiseCell(e.tipoContenido)&&pautaEntryIsUsed(e));
   result.etapas=ETAPAS_CANONICAS.filter(e=>result.etapas.includes(e)||result.entries.some(x=>x.etapa===e));
   const fams=result.entries.map(e=>e.origenFamilia).filter(Boolean);
   const nMega=fams.filter(f=>f==='mega').length;
@@ -5778,8 +5791,9 @@ function parsePautaCSV(text){
 async function parsePautaXLSX(buffer){
   const wb=new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
-  const ws=wb.worksheets[0];
+  const ws=wb.getWorksheet('Pauta editorial')||wb.worksheets.find(s=>s.state!=='hidden'&&s.name!=='_catalogo')||wb.worksheets[0];
   const rows=[];
+  if(!ws) return parsePautaRows([]);
   ws.eachRow(row=>{
     const cells=[];
     for(let i=1;i<=16;i++){
@@ -6701,17 +6715,17 @@ function abrirPlantillaEditorialModal(){
   PAUTA_PENDING_IMPORT=null;
   document.getElementById('pautaModalTitle').textContent='Descargar plantilla editorial';
   document.getElementById('pautaModalBody').innerHTML=
-    '<p>Elige la mesa. Es el mismo layout de la propuesta comercial, <strong>sin precios</strong>. '+
-    'Completen origen, formato (lista cerrada), temática de uso, plataformas y alcances.</p>'+
+    '<p>La plantilla <strong>ya trae todos los formatos de contenido</strong> de esa mesa, sin precios. '+
+    'Editorial solo completa las filas que van en la campaña (origen, etapa, temática de uso y alcances). Las demás se ignoran al importar.</p>'+
     '<div class="pauta-pick-card" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'mega\')">'+
       '<div class="pauta-pick-opt-name">Digital Mega</div>'+
-      '<div class="pauta-pick-opt-sub">Contenido Editorial, Vodcast, Live Shopping de contenido, Programas, Teleseries y Megadeportes. Orígenes: Mega, Meganoticias, Megadeportes, Mucho Gusto y combinaciones.</div>'+
+      '<div class="pauta-pick-opt-sub">Todos los formatos de Contenido Editorial, Vodcast, Live Shopping de contenido, Programas, Teleseries y Megadeportes.</div>'+
     '</div>'+
     '<div class="pauta-pick-card" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'radios\')">'+
       '<div class="pauta-pick-opt-name">Digital Radios</div>'+
-      '<div class="pauta-pick-opt-sub">Formatos RRSS Radios. Orígenes: Digital Carolina, Infinita, Romántica y Disney.</div>'+
+      '<div class="pauta-pick-opt-sub">Todos los formatos de RRSS Radios (Carolina, Infinita, Romántica y Disney).</div>'+
     '</div>'+
-    '<p style="margin-top:10px;color:var(--tx2);font-size:12px">CPM, display e influencers no van en esta plantilla: los agrega comercial después de importar Mega y Radios.</p>';
+    '<p style="margin-top:10px;color:var(--tx2);font-size:12px">Siguen fuera CPM, display e influencers: los agrega comercial. Mega y Radios se importan por separado y se acumulan.</p>';
   const confirmBtn=document.getElementById('pautaModalConfirm');
   if(confirmBtn) confirmBtn.style.display='none';
   document.getElementById('pautaOverlay').classList.add('show');
@@ -6720,70 +6734,132 @@ async function descargarPlantillaEditorial(family){
   if(!(await ensureExcelJS())) return;
   const isRadios=family==='radios';
   const origenes=isRadios?ORIGEN_RADIOS.slice():ORIGEN_MEGA.slice();
-  const fmts=pautaEditorialFmts(isRadios?'radios':'mega');
-  const names=fmts.map(f=>f.name);
+  const catIds=isRadios?PAUTA_RADIOS_CAT_IDS:PAUTA_MEGA_CAT_IDS;
   const title=isRadios?'Digital Radios':'Digital Mega';
   try{
     const wb=new ExcelJS.Workbook();
     wb.creator='Megamedia · Creador de Propuestas';
     const ws=wb.addWorksheet('Pauta editorial',{
-      views:[{state:'frozen',ySplit:8}],
+      views:[{state:'frozen',ySplit:8,xSplit:2}],
       pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,paperSize:9}
     });
-    const cat=wb.addWorksheet('_catalogo',{state:'hidden'});
-    names.forEach((nm,i)=>{cat.getCell(i+1,1).value=nm;});
-    fmts.forEach((f,i)=>{cat.getCell(i+1,2).value=f.id;});
-    origenes.forEach((o,i)=>{cat.getCell(i+1,4).value=o;});
-    const NCOLS=8;
-    const widths=[28,36,22,42,28,10,32,14];
+    const lists=wb.addWorksheet('_listas',{state:'hidden'});
+    origenes.forEach((o,i)=>{lists.getCell(i+1,1).value=o;});
+    ETAPAS_CANONICAS.forEach((e,i)=>{lists.getCell(i+1,2).value=e;});
+    const NCOLS=10;
+    const widths=[26,34,22,42,26,10,36,14,16,14];
     widths.forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+    ws.getColumn(10).hidden=true;
     const fill=(r,c,v,opts)=>{
+      opts=opts||{};
       const cell=ws.getRow(r).getCell(c);
-      cell.value=v;
+      cell.value=v==null?'':v;
       cell.font={name:'Calibri',size:opts.sz||10,bold:!!opts.bold,color:{argb:opts.fg||'FF1A1A1A'},italic:!!opts.italic};
       if(opts.bg) cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:opts.bg}};
-      cell.alignment={horizontal:opts.ha||'left',vertical:'middle',wrapText:!!opts.wrap};
-      if(opts.border) cell.border={top:{style:'thin',color:{argb:'FFCCCCCC'}},bottom:{style:'thin',color:{argb:'FFCCCCCC'}},left:{style:'thin',color:{argb:'FFCCCCCC'}},right:{style:'thin',color:{argb:'FFCCCCCC'}}};
+      cell.alignment={horizontal:opts.ha||'left',vertical:'middle',wrapText:opts.wrap!==false};
+      if(opts.border!==false) cell.border={top:{style:'thin',color:{argb:'FFD0D7E2'}},bottom:{style:'thin',color:{argb:'FFD0D7E2'}},left:{style:'thin',color:{argb:'FFD0D7E2'}},right:{style:'thin',color:{argb:'FFD0D7E2'}}};
     };
-    ws.mergeCells(1,1,1,NCOLS);
-    fill(1,1,'PAUTA EDITORIAL MEGAMEDIA — '+title,{bg:'FF003087',fg:'FFFFFFFF',bold:true,sz:14,ha:'center'});
+    ws.mergeCells(1,1,1,9);
+    fill(1,1,'PAUTA EDITORIAL MEGAMEDIA — '+title,{bg:'FF003087',fg:'FFFFFFFF',bold:true,sz:14,ha:'center',wrap:false});
     ws.getRow(1).height=24;
-    ws.mergeCells(2,1,2,NCOLS);
-    fill(2,1,'Sin precios. Comercial importa este archivo (se acumula con la otra mesa) y agrega CPM e influencers. Temática = uso del formato para el cliente.',{bg:'FFE8F4FC',fg:'FF1A3A6B',sz:9,wrap:true});
-    ws.getRow(2).height=28;
-    fill(4,1,'CLIENTE',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',border:true});
-    fill(4,2,'CAMPAÑA',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',border:true});
-    fill(4,3,'FECHAS',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',border:true});
-    fill(5,1,'',{border:true});
-    fill(5,2,'',{border:true});
-    fill(5,3,'',{border:true});
-    const hdrs=['ORIGEN','TIPO DE CONTENIDO','PRESENCIA DE MARCA','TEMÁTICA','REFERENCIA','CANT.','PLATAFORMA','ALCANCE'];
-    hdrs.forEach((h,i)=>fill(8,i+1,h,{bg:'FF003087',fg:'FFFFFFFF',bold:true,ha:'center',sz:9,wrap:true,border:true}));
-    ws.getRow(8).height=28;
-    const etapaRows=[9,18,27];
-    const dataStart=[10,19,28];
-    ETAPAS_CANONICAS.forEach((etapa,ei)=>{
-      const er=etapaRows[ei];
-      ws.mergeCells(er,1,er,NCOLS);
-      fill(er,1,etapa,{bg:'FF000000',fg:'FFFFFFFF',bold:true,ha:'center',sz:11});
-      ws.getRow(er).height=20;
-      for(let i=0;i<7;i++){
-        const r=dataStart[ei]+i;
-        ws.getRow(r).height=18;
-        for(let c=1;c<=NCOLS;c++) fill(r,c,'',{border:true});
-      }
+    ws.mergeCells(2,1,2,9);
+    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) En las filas que SÍ van en esta pauta, elijan ORIGEN y ETAPA y escriban la TEMÁTICA (uso del formato para el cliente) y el ALCANCE. 3) Las filas vacías no se importan. 4) Si el mismo formato va en dos etapas, copien la fila. Sin precios: comercial cotiza y suma CPM e influencers.',
+      {bg:'FFE8F4FC',fg:'FF1A3A6B',sz:9,wrap:true});
+    ws.getRow(2).height=42;
+    fill(4,1,'CLIENTE',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
+    fill(4,2,'CAMPAÑA',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
+    fill(4,3,'FECHAS',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
+    fill(5,1,'',{bg:'FFFFFFFF'});
+    fill(5,2,'',{bg:'FFFFFFFF'});
+    fill(5,3,'',{bg:'FFFFFFFF'});
+    const hdrs=['ORIGEN','TIPO DE CONTENIDO','PRESENCIA DE MARCA','TEMÁTICA (uso en esta campaña)','REFERENCIA','CANT.','PLATAFORMA','ALCANCE','ETAPA','formato_id'];
+    hdrs.forEach((h,i)=>fill(8,i+1,h,{bg:'FF003087',fg:'FFFFFFFF',bold:true,ha:'center',sz:8,wrap:true}));
+    ws.getRow(8).height=32;
+    let r=9;
+    const dataRows=[];
+    catIds.forEach(cid=>{
+      const cat=CATS.find(c=>c.id===cid);
+      if(!cat) return;
+      const fmts=cat.fmts.filter(f=>!isPautaComercialFmt(f));
+      if(!fmts.length) return;
+      ws.mergeCells(r,1,r,9);
+      fill(r,1,excelSectionLabel(cat),{bg:'FF0F2744',fg:'FFFFFFFF',bold:true,ha:'left',sz:10,wrap:false});
+      ws.getRow(r).height=18;
+      r++;
+      fmts.forEach(f=>{
+        const bg=dataRows.length%2?'FFF7FAFC':'FFFFFFFF';
+        fill(r,1,'',{bg});
+        fill(r,2,f.name,{bg,bold:true,sz:10});
+        fill(r,3,f.marca||'',{bg,sz:9,fg:'FF445066'});
+        fill(r,4,'',{bg});
+        fill(r,5,f.ref||'',{bg,sz:8,italic:true,fg:'FF3B82C4'});
+        fill(r,6,'',{bg,ha:'center'});
+        fill(r,7,pautaFmtPlatLabel(f),{bg,sz:9,fg:'FF445066'});
+        fill(r,8,'',{bg,ha:'right'});
+        fill(r,9,'',{bg,ha:'center'});
+        fill(r,10,f.id,{bg,sz:8,fg:'FF94A3B8'});
+        ws.getRow(r).height=22;
+        dataRows.push(r);
+        r++;
+      });
     });
-    const origenRange='_catalogo!$D$1:$D$'+origenes.length;
-    const fmtRange='_catalogo!$A$1:$A$'+Math.max(names.length,1);
-    dataStart.forEach((start,i)=>{
-      const end=start+6;
-      ws.dataValidations.add('A'+start+':A'+end,{
-        type:'list',allowBlank:true,formulae:[origenRange],
+    ws.mergeCells(r,1,r,9);
+    fill(r,1,'Filas extra — copiar un formato para otra etapa o un formato que no esté arriba',{bg:'FF000000',fg:'FFFFFFFF',bold:true,ha:'left',sz:10,wrap:false});
+    r++;
+    const extraStart=r;
+    for(let i=0;i<8;i++){
+      for(let c=1;c<=10;c++) fill(r,c,'',{bg:'FFFFFFFF'});
+      dataRows.push(r);
+      r++;
+    }
+    const last=dataRows[dataRows.length-1];
+    const first=dataRows[0];
+    if(first&&last){
+      ws.dataValidations.add('A'+first+':A'+last,{
+        type:'list',allowBlank:true,formulae:['_listas!$A$1:$A$'+origenes.length],
         showErrorMessage:true,errorTitle:'Origen',error:'Elige un origen de la lista'
       });
-      ws.dataValidations.add('B'+start+':B'+end,{
-        type:'list',allowBlank:true,formulae:[fmtRange],
+      ws.dataValidations.add('I'+first+':I'+last,{
+        type:'list',allowBlank:true,formulae:['_listas!$B$1:$B$'+ETAPAS_CANONICAS.length],
+        showErrorMessage:true,errorTitle:'Etapa',error:'Elige Etapa previa, Durante o Post'
+      });
+      const allNames=CATS.filter(c=>catIds.includes(c.id)).flatMap(c=>c.fmts).filter(f=>!isPautaComercialFmt(f)).map(f=>f.name);
+      allNames.forEach((nm,i)=>{lists.getCell(i+1,3).value=nm;});
+      ws.dataValidations.add('B'+extraStart+':B'+(extraStart+7),{
+        type:'list',allowBlank:true,formulae:['_listas!$C$1:$C$'+Math.max(allNames.length,1)],
         showErrorMessage:true,errorTitle:'Formato',error:'Elige un formato del catálogo'
+      });
+    }
+    const catSheet=wb.addWorksheet('Catálogo (referencia)');
+    catSheet.getColumn(1).width=28;
+    catSheet.getColumn(2).width=36;
+    catSheet.getColumn(3).width=22;
+    catSheet.getColumn(4).width=70;
+    catSheet.getColumn(5).width=42;
+    [['Familia','Formato','Presencia de marca','Qué es (referencia)','Plataformas de referencia']].forEach((row,ri)=>{
+      row.forEach((v,ci)=>{
+        const cell=catSheet.getRow(1).getCell(ci+1);
+        cell.value=v;
+        cell.font={name:'Calibri',bold:true,color:{argb:'FFFFFFFF'},size:9};
+        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF003087'}};
+        cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+      });
+    });
+    catSheet.getRow(1).height=22;
+    let cr=2;
+    catIds.forEach(cid=>{
+      const cat=CATS.find(c=>c.id===cid);
+      if(!cat) return;
+      cat.fmts.filter(f=>!isPautaComercialFmt(f)).forEach(f=>{
+        const vals=[excelSectionLabel(cat),f.name,f.marca||'',f.desc||'',pautaFmtPlatLabel(f)];
+        vals.forEach((v,ci)=>{
+          const cell=catSheet.getRow(cr).getCell(ci+1);
+          cell.value=v;
+          cell.font={name:'Calibri',size:10,bold:ci===1};
+          cell.alignment={vertical:'top',wrapText:true};
+        });
+        catSheet.getRow(cr).height=36;
+        cr++;
       });
     });
     const buf=await wb.xlsx.writeBuffer();
@@ -6794,7 +6870,7 @@ async function descargarPlantillaEditorial(family){
     a.click();
     URL.revokeObjectURL(a.href);
     cerrarPautaModal();
-    showToast('✓ Plantilla '+title+' descargada');
+    showToast('✓ Plantilla '+title+' descargada · todos los formatos listados');
   }catch(e){
     console.error(e);
     showToast('Error al generar plantilla: '+(e.message||'').slice(0,40));
