@@ -76,7 +76,33 @@ function getMem() {
   return globalThis.__mgTeamStore;
 }
 
-async function readJsonbin() {
+async function readKv() {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) throw new Error('sin kv');
+  const r = await fetchJson(url.replace(/\/$/, '') + '/get/megamedia:propuestas', {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+  if (!r.ok) throw new Error('kv ' + r.status);
+  const body = parseBody(r.text);
+  const raw = body && (body.result != null ? body.result : body);
+  const parsed = typeof raw === 'string' ? parseBody(raw) : raw;
+  const n = normalizeStore(parsed);
+  if (!n) throw new Error('kv formato');
+  return n;
+}
+
+async function writeKv(store) {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) throw new Error('sin kv');
+  const r = await fetchJson(url.replace(/\/$/, '') + '/set/megamedia:propuestas', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(store)
+  });
+  if (!r.ok) throw new Error('kv put ' + r.status);
+}
   const r = await fetchJson(JSONBIN_URL);
   if (!r.ok) throw new Error('jsonbin ' + r.status);
   const n = normalizeStore(parseBody(r.text));
@@ -176,6 +202,7 @@ async function readStore() {
     }
   };
   await tryRead('memoria', async () => mem.store);
+  await tryRead('kv', readKv);
   await tryRead('jsonbin', readJsonbin);
   await tryRead('github', async () => {
     const s = await readGithubRaw();
@@ -199,6 +226,10 @@ async function writeStore(store) {
   mem.store = store;
   const errors = [];
   let wrote = false;
+  try {
+    await writeKv(store);
+    wrote = true;
+  } catch (e) { errors.push((e && e.message) || e); }
   if (mem.jsonbinOk) {
     try {
       await writeJsonbin(store);
