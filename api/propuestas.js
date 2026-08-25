@@ -103,6 +103,8 @@ async function writeKv(store) {
   });
   if (!r.ok) throw new Error('kv put ' + r.status);
 }
+
+async function readJsonbin() {
   const r = await fetchJson(JSONBIN_URL);
   if (!r.ok) throw new Error('jsonbin ' + r.status);
   const n = normalizeStore(parseBody(r.text));
