@@ -2160,7 +2160,8 @@ const EMAIL_KEY='mg_email_ejec_v1';
 const EJEC_KEY='mg_ejecutivo_v1';
 const TEAM_LOCAL_KEY='mg_team_propuestas_v1';
 const TEAM_API='/api/propuestas';
-const TEAM_BIN_URL='https://jsonbin-zeta.vercel.app/api/bins/uMogXtk4Ar';
+const TEAM_SB_URL='https://uourzdgsruvnrnwhmgqf.supabase.co';
+const TEAM_SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVvdXJ6ZGdzcnV2bnJud2htZ3FmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NDcwNTUsImV4cCI6MjEwMjIyMzA1NX0.asRoJvjgKyL7Mx0GUNXufBKKeB5WCQJTklXMp8WJ6ZQ';
 const EJECUTIVOS=[
   'Alicia Campos',
   'Gabriela Araya',
@@ -2206,6 +2207,7 @@ function loginEjecutivo(nombre){
   document.documentElement.classList.remove('need-login');
   persistEmailPref();
   showToast('Hola, '+nombre.split(' ')[0]);
+  pushLocalHistToTeam();
 }
 function logoutEjecutivo(){
   try{localStorage.removeItem(EJEC_KEY);}catch(e){}
@@ -3842,10 +3844,69 @@ function writeLocalTeamStore(store){
 }
 function mergeTeamProposal(list,rec){
   const out=Array.isArray(list)?list.slice():[];
-  const i=out.findIndex(p=>p&&p.id===rec.id);
+  const key=String(rec.id);
+  const i=out.findIndex(p=>p&&String(p.id)===key);
   if(i>=0) out[i]=Object.assign({},out[i],rec);
   else out.unshift(rec);
   return out;
+}
+function teamSbHeaders(extra){
+  return Object.assign({
+    apikey:TEAM_SB_ANON,
+    Authorization:'Bearer '+TEAM_SB_ANON,
+    'Content-Type':'application/json'
+  },extra||{});
+}
+function teamFechaIso(p){
+  if(p&&p.fechaISO){
+    const t=Date.parse(p.fechaISO);
+    if(!isNaN(t)) return new Date(t).toISOString();
+  }
+  const n=+(p&&p.id);
+  if(n>1e12) return new Date(n).toISOString();
+  return null;
+}
+async function teamApiSupabase(method,body){
+  const base=TEAM_SB_URL+'/rest/v1/propuestas';
+  if(method==='GET'){
+    const r=await fetch(base+'?deleted=eq.false&select=data,updated_at&order=updated_at.desc&limit=500',{headers:teamSbHeaders(),cache:'no-store'});
+    if(!r.ok) throw new Error('sin conexión');
+    const rows=await r.json();
+    const list=Array.isArray(rows)?rows:[];
+    return{
+      proposals:list.map(row=>row&&row.data).filter(p=>p&&p.id!=null),
+      updatedAt:list.reduce((m,row)=>{const t=Date.parse(row&&row.updated_at)||0;return t>m?t:m;},0)
+    };
+  }
+  if(method==='POST'){
+    if(body&&body.action==='upsert'&&body.proposal&&body.proposal.id!=null){
+      const p=body.proposal;
+      const fechaIso=teamFechaIso(p);
+      const row={
+        id:String(p.id),
+        data:p,
+        ejecutivo:p.ejecutivo||null,
+        fecha_iso:fechaIso,
+        saved_at:fechaIso,
+        updated_at:new Date().toISOString(),
+        updated_by:p.ejecutivo||null,
+        deleted:false
+      };
+      const r=await fetch(base,{method:'POST',headers:teamSbHeaders({'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify(row)});
+      if(!r.ok) throw new Error('sin conexión');
+      return {ok:true};
+    }
+    if(body&&body.action==='delete'&&body.id!=null){
+      const r=await fetch(base+'?id=eq.'+encodeURIComponent(String(body.id)),{
+        method:'PATCH',
+        headers:teamSbHeaders({'Prefer':'return=minimal'}),
+        body:JSON.stringify({deleted:true,updated_at:new Date().toISOString()})
+      });
+      if(!r.ok) throw new Error('sin conexión');
+      return {ok:true};
+    }
+  }
+  throw new Error('sin conexión');
 }
 async function teamApi(method,body){
   const opts={method,headers:{'Content-Type':'application/json'},cache:'no-store'};
@@ -3854,21 +3915,7 @@ async function teamApi(method,body){
     const r=await fetch(TEAM_API,opts);
     if(r.ok) return r.json();
   }catch(e){}
-  if(method==='GET'){
-    const r=await fetch(TEAM_BIN_URL,{cache:'no-store'});
-    if(!r.ok) throw new Error('sin conexión');
-    return r.json();
-  }
-  if(method==='POST'){
-    const cur=await fetch(TEAM_BIN_URL,{cache:'no-store'}).then(r=>r.json());
-    const store={proposals:Array.isArray(cur.proposals)?cur.proposals:[],updatedAt:Date.now()};
-    if(body.action==='upsert') store.proposals=mergeTeamProposal(store.proposals,body.proposal);
-    if(body.action==='delete') store.proposals=store.proposals.filter(p=>p&&p.id!==body.id);
-    const wr=await fetch(TEAM_BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(store)});
-    if(!wr.ok) throw new Error('sin conexión');
-    return {ok:true,count:store.proposals.length};
-  }
-  throw new Error('sin conexión');
+  return teamApiSupabase(method,body);
 }
 async function syncTeamUpsert(rec){
   const local=readLocalTeamStore();
@@ -3880,20 +3927,15 @@ async function syncTeamUpsert(rec){
 }
 async function syncTeamDelete(id){
   const local=readLocalTeamStore();
-  local.proposals=local.proposals.filter(p=>p&&p.id!==id);
+  local.proposals=local.proposals.filter(p=>p&&String(p.id)!==String(id));
   local.updatedAt=Date.now();
   writeLocalTeamStore(local);
   try{await teamApi('POST',{action:'delete',id});}
   catch(e){console.warn('sync equipo',e);}
 }
-async function fetchTeamProposals(){
-  let remote=[];
-  try{
-    const data=await teamApi('GET');
-    if(data&&Array.isArray(data.proposals)) remote=data.proposals;
-  }catch(e){}
-  const local=readLocalTeamStore().proposals||[];
-  const fromHist=(HIST||[]).filter(h=>!isDraftItem(h)).map(h=>({
+function teamRecordFromHist(h){
+  const fechaISO=h.fechaISO||teamFechaIso(h)||'';
+  return{
     id:h.id,
     ejecutivo:h.ejecutivo||h.emailEjec||CURRENT_EJEC||'—',
     cliente:h.cli||h.cliente||'—',
@@ -3904,18 +3946,34 @@ async function fetchTeamProposals(){
     tFinal:+h.tN||+h.tFinal||0,
     dtoG:+h.dtoG||0,
     fecha:h.fecha||'',
-    fechaISO:h.fechaISO||'',
+    fechaISO,
     formatos:h.formatos||'',
     nFormatos:+h.nFormatos||0
-  }));
+  };
+}
+function pushLocalHistToTeam(){
+  const items=(HIST||[]).filter(h=>!isDraftItem(h));
+  if(!items.length) return;
+  items.reduce((p,h)=>p.then(()=>syncTeamUpsert(teamRecordFromHist(h))),Promise.resolve())
+    .catch(e=>console.warn('resync equipo',e));
+}
+async function fetchTeamProposals(){
+  let remote=[];
+  try{
+    const data=await teamApi('GET');
+    if(data&&Array.isArray(data.proposals)) remote=data.proposals;
+  }catch(e){}
+  const local=readLocalTeamStore().proposals||[];
+  const fromHist=(HIST||[]).filter(h=>!isDraftItem(h)).map(teamRecordFromHist);
   const byId=new Map();
   fromHist.concat(local).concat(remote).forEach(p=>{
     if(!p||p.id==null) return;
-    const prev=byId.get(p.id);
-    if(!prev){ byId.set(p.id,p); return; }
+    const key=String(p.id);
+    const prev=byId.get(key);
+    if(!prev){ byId.set(key,p); return; }
     const newer=(p.fechaISO||'')>=(prev.fechaISO||'');
     const richer=(p.formatos&&!prev.formatos)||(p.ejecutivo&&p.ejecutivo!=='—'&&(!prev.ejecutivo||prev.ejecutivo==='—'));
-    if(newer||richer) byId.set(p.id,Object.assign({},prev,p));
+    if(newer||richer) byId.set(key,Object.assign({},prev,p));
   });
   return [...byId.values()].sort((a,b)=>(b.fechaISO||b.fecha||'').localeCompare(a.fechaISO||a.fecha||''));
 }
@@ -4131,11 +4189,14 @@ function guardar(){
   const snap=campaignSnapshot();
   if(sessionFromDraft&&loadedDraftId!=null) HIST=HIST.filter(h=>h.id!==loadedDraftId);
   const id=Date.now();
+  const rec=teamRecordFromCurrent(id);
   HIST.unshift({
     id,
     cli:snap.cliente||'—',cam:snap.campania||'—',
     tN:inv.final,dtoG:inv.dtoG,moneda:MONEDA,
-    fecha:new Date().toLocaleDateString('es-CL'),
+    fecha:rec.fecha,
+    fechaISO:rec.fechaISO,
+    ejecutivo:rec.ejecutivo,
     state:JSON.parse(JSON.stringify(STATE)),
     pautaMeta:JSON.parse(JSON.stringify(PAUTA_IMPORT_META)),
     ...snap
@@ -4149,7 +4210,7 @@ function guardar(){
   sessionDirty=false;
   renderHist();
   showToast('✓ Propuesta guardada');
-  syncTeamUpsert(teamRecordFromCurrent(id));
+  syncTeamUpsert(rec);
 }
 
 function cargar(id){
@@ -6466,6 +6527,7 @@ loadEmailPref();
 const parkedDraft=parkSessionDraftIfAny();
 withDraftMuted(()=>{buildFmts();render();});
 renderHist();
+if(CURRENT_EJEC) pushLocalHistToTeam();
 if(parkedDraft) showToast('Borrador disponible en Propuestas');
 setReportePeriodo('month');
 ['cliente','campania','semanas','objetivo','emailEjec'].forEach(id=>{
