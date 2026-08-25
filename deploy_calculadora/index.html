@@ -405,6 +405,10 @@ td.inv{color:var(--cy);font-weight:700}
 .hist-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .hist-clear{font-size:11px;color:var(--tx3);cursor:pointer;background:none;border:none;padding:0}
 .hist-clear:hover{color:var(--tx2)}
+.hist-store-status{font-size:11px;color:var(--tx2);line-height:1.4;margin:8px 0 2px}
+.hist-store-status.err{color:var(--or)}
+.hist-store-status.ok{color:var(--gr)}
+.hist-backup-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .hist-item{display:flex;align-items:center;gap:8px;padding:7px 0;
   border-bottom:1px solid var(--bd);cursor:pointer;transition:.1s}
 .hist-item:last-child{border-bottom:none}
@@ -757,6 +761,12 @@ html[data-theme="day"] .login-card img{filter:none}
         </div>
       </div>
       <button class="btn btn-pri btn-full" onclick="exportarReporteEquipo()">Reporte equipo (Excel)</button>
+      <div id="teamStoreStatus" class="hist-store-status">Comprobando registro del equipo…</div>
+      <div class="hist-backup-row">
+        <button type="button" class="btn btn-sec" onclick="exportarRespaldoPropuestas()">Descargar respaldo</button>
+        <button type="button" class="btn btn-sec" onclick="document.getElementById('histBackupInput').click()">Restaurar respaldo</button>
+        <input type="file" id="histBackupInput" accept="application/json,.json" style="display:none" onchange="importarRespaldoPropuestas(this)"/>
+      </div>
     </div>
     <div id="histList"></div>
   </div>
@@ -3687,7 +3697,27 @@ function render(){
 // ── Historia + borrador ───────────────────────────────────────────────────
 const HKEY='mg_hist_v3';
 let HIST=[];
-try{HIST=JSON.parse(localStorage.getItem(HKEY)||'[]')}catch{}
+try{
+  HIST=loadHistFromStorage();
+}catch(e){HIST=[];}
+
+function loadHistFromStorage(){
+  const keys=['mg_hist_v3','mg_hist_v2','mg_hist_v1'];
+  for(let i=0;i<keys.length;i++){
+    try{
+      const raw=localStorage.getItem(keys[i]);
+      if(!raw) continue;
+      const v=JSON.parse(raw);
+      if(Array.isArray(v)&&v.length){
+        if(keys[i]!=='mg_hist_v3'){
+          try{localStorage.setItem('mg_hist_v3',JSON.stringify(v));}catch(e){}
+        }
+        return v;
+      }
+    }catch(e){}
+  }
+  return [];
+}
 
 function campaignSnapshot(){
   const tN=getRows().reduce((a,r)=>a+r.neto,0);
@@ -3872,23 +3902,42 @@ async function teamApi(method,body){
   if(body) opts.body=JSON.stringify(body);
   try{
     const r=await fetch(TEAM_API,opts);
-    if(r.ok) return r.json();
-  }catch(e){}
+    const data=await r.json().catch(()=>null);
+    if(r.ok) return data;
+    const msg=(data&&data.error)||('Registro del equipo no disponible ('+r.status+')');
+    const err=new Error(msg);
+    err.remote=true;
+    err.status=r.status;
+    err.details=data&&data.details;
+    if(r.status>=500||r.status===429||r.status===402||r.status===503) throw err;
+  }catch(e){
+    if(e&&e.remote) throw e;
+  }
   if(method==='GET'){
     const r=await fetch(TEAM_BIN_URL,{cache:'no-store'});
-    if(!r.ok) throw new Error('sin conexión');
-    return r.json();
+    if(!r.ok) throw new Error('Registro compartido no disponible');
+    const data=await r.json();
+    if(!data||!Array.isArray(data.proposals)) throw new Error('Registro compartido no disponible');
+    return data;
   }
   if(method==='POST'){
-    const cur=await fetch(TEAM_BIN_URL,{cache:'no-store'}).then(r=>r.json());
-    const store={proposals:Array.isArray(cur.proposals)?cur.proposals:[],updatedAt:Date.now()};
+    let cur;
+    try{
+      const r=await fetch(TEAM_BIN_URL,{cache:'no-store'});
+      if(!r.ok) throw new Error('skip');
+      cur=await r.json();
+      if(!cur||!Array.isArray(cur.proposals)) throw new Error('skip');
+    }catch(e){
+      throw new Error('Registro compartido no disponible');
+    }
+    const store={proposals:cur.proposals.slice(),updatedAt:Date.now()};
     if(body.action==='upsert') store.proposals=mergeTeamProposal(store.proposals,body.proposal);
     if(body.action==='delete') store.proposals=store.proposals.filter(p=>p&&p.id!==body.id);
     const wr=await fetch(TEAM_BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(store)});
-    if(!wr.ok) throw new Error('sin conexión');
+    if(!wr.ok) throw new Error('Registro compartido no disponible');
     return {ok:true,count:store.proposals.length};
   }
-  throw new Error('sin conexión');
+  throw new Error('Registro compartido no disponible');
 }
 async function syncTeamUpsert(rec){
   const local=readLocalTeamStore();
@@ -3896,7 +3945,7 @@ async function syncTeamUpsert(rec){
   local.updatedAt=Date.now();
   writeLocalTeamStore(local);
   try{await teamApi('POST',{action:'upsert',proposal:rec});}
-  catch(e){console.warn('sync equipo',e);}
+  catch(e){console.warn('sync equipo',e);showToast('Guardada aquí · no se pudo sincronizar el equipo');}
 }
 async function syncTeamDelete(id){
   const local=readLocalTeamStore();
@@ -3908,10 +3957,13 @@ async function syncTeamDelete(id){
 }
 async function fetchTeamProposals(){
   let remote=[];
+  let remoteError='';
   try{
     const data=await teamApi('GET');
     if(data&&Array.isArray(data.proposals)) remote=data.proposals;
-  }catch(e){}
+  }catch(e){
+    remoteError=(e&&e.message)||'Registro compartido no disponible';
+  }
   const local=readLocalTeamStore().proposals||[];
   const fromHist=(HIST||[]).filter(h=>!isDraftItem(h)).map(h=>({
     id:h.id,
@@ -3937,7 +3989,77 @@ async function fetchTeamProposals(){
     const richer=(p.formatos&&!prev.formatos)||(p.ejecutivo&&p.ejecutivo!=='—'&&(!prev.ejecutivo||prev.ejecutivo==='—'));
     if(newer||richer) byId.set(p.id,Object.assign({},prev,p));
   });
-  return [...byId.values()].sort((a,b)=>(b.fechaISO||b.fecha||'').localeCompare(a.fechaISO||a.fecha||''));
+  const list=[...byId.values()].sort((a,b)=>(b.fechaISO||b.fecha||'').localeCompare(a.fechaISO||a.fecha||''));
+  return {list,remoteError,remoteCount:remote.length};
+}
+
+async function refreshTeamStoreStatus(){
+  const el=document.getElementById('teamStoreStatus');
+  if(!el) return;
+  try{
+    const r=await fetch(TEAM_API,{cache:'no-store'});
+    const data=await r.json().catch(()=>null);
+    if(r.ok&&data&&Array.isArray(data.proposals)){
+      el.className='hist-store-status ok';
+      const n=data.proposals.length;
+      el.textContent='Registro del equipo conectado · '+n+' propuesta'+(n===1?'':'s')+' compartidas.';
+      return;
+    }
+    throw new Error((data&&data.error)||('HTTP '+r.status));
+  }catch(e){
+    el.className='hist-store-status err';
+    el.textContent='Registro compartido no disponible. El listado y el reporte usan solo este navegador. Si guardaste en otra URL (preview) o el servicio externo estaba caído, esas propuestas no aparecen aquí.';
+  }
+}
+
+function exportarRespaldoPropuestas(){
+  const payload={
+    version:1,
+    exportedAt:new Date().toISOString(),
+    hist:HIST||[],
+    team:readLocalTeamStore()
+  };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='respaldo_propuestas_megamedia.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('✓ Respaldo descargado');
+}
+
+async function importarRespaldoPropuestas(input){
+  const file=input.files&&input.files[0];
+  input.value='';
+  if(!file) return;
+  try{
+    const data=JSON.parse(await file.text());
+    const incoming=Array.isArray(data)?data:(Array.isArray(data.hist)?data.hist:[]);
+    if(!incoming.length&&!(data.team&&Array.isArray(data.team.proposals)&&data.team.proposals.length)){
+      showToast('El archivo no tiene propuestas');
+      return;
+    }
+    const byId=new Map((HIST||[]).map(h=>[h.id,h]));
+    incoming.forEach(h=>{
+      if(!h||h.id==null) return;
+      const prev=byId.get(h.id);
+      if(!prev) byId.set(h.id,h);
+      else if(String(h.fechaISO||h.fecha||'')>=String(prev.fechaISO||prev.fecha||'')) byId.set(h.id,Object.assign({},prev,h));
+    });
+    HIST=[...byId.values()].sort((a,b)=>(b.id||0)-(a.id||0));
+    trimHist();
+    persistHist();
+    if(data.team&&Array.isArray(data.team.proposals)){
+      const local=readLocalTeamStore();
+      data.team.proposals.forEach(p=>{if(p&&p.id!=null) local.proposals=mergeTeamProposal(local.proposals,p);});
+      local.updatedAt=Date.now();
+      writeLocalTeamStore(local);
+    }
+    renderHist();
+    showToast('✓ Respaldo restaurado · '+HIST.length+' en este navegador');
+  }catch(e){
+    showToast('No se pudo leer el respaldo');
+  }
 }
 
 function isoDateLocal(d){
@@ -4027,8 +4149,14 @@ async function exportarReporteEquipo(){
   const btn=document.querySelector('[onclick="exportarReporteEquipo()"]');
   if(btn){btn.textContent='Generando…';btn.disabled=true;}
   try{
-    const all=await fetchTeamProposals();
-    if(!all.length){showToast('Aún no hay propuestas del equipo');return;}
+    const fetched=await fetchTeamProposals();
+    const all=fetched.list||[];
+    if(!all.length){
+      showToast(fetched.remoteError
+        ?'No hay propuestas en este navegador y el registro compartido no responde'
+        :'Aún no hay propuestas del equipo');
+      return;
+    }
     const {from,to}=getReporteRango();
     const list=filtrarPropuestasPorPeriodo(all,from,to);
     const periodoTxt=labelReportePeriodo(from,to);
@@ -7004,6 +7132,7 @@ loadEmailPref();
 const parkedDraft=parkSessionDraftIfAny();
 withDraftMuted(()=>{buildFmts();render();});
 renderHist();
+refreshTeamStoreStatus();
 if(parkedDraft) showToast('Borrador disponible en Propuestas');
 setReportePeriodo('month');
 ['cliente','campania','semanas','objetivo','emailEjec'].forEach(id=>{
