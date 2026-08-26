@@ -1688,7 +1688,11 @@ function initFmtState(f){
     base.paqueteMode=false;base.paqueteTotal=0;
   }
   if(esTipoWeb(f)) base.webPlats=[newWebPlatEntry(f,WEB_PLAT_DEFAULT)];
-  if(f.pautaPlats&&f.pautaPlats.length) base.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:p.alc}));
+  if(f.pautaPlats&&f.pautaPlats.length){
+    base.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:+p.alc||0}));
+    const total=base.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
+    if(total>0){ base.imp=total; setPautaImpBase(base,total); }
+  }
   STATE[f.id]=base;
 }
 function syncStatePautaPlatsFromCatalog(forceIds){
@@ -1702,7 +1706,7 @@ function syncStatePautaPlatsFromCatalog(forceIds){
     if(!missing&&!mustForce) return;
     s.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:+p.alc||0}));
     const total=s.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
-    if(total>0) s.imp=total;
+    if(total>0){ s.imp=total; setPautaImpBase(s,total); }
   });
 }
 function addCustomFormat(fmt){
@@ -1983,6 +1987,21 @@ function calcAlcSainsburyFromValues(values){
 }
 function pautaPlatsLabel(plats){
   return (plats||[]).map(p=>String(p.plat||'').trim()).filter(Boolean).join(' · ');
+}
+function setPautaImpBase(s,imp){
+  if(!s) return;
+  s.pautaImpBase=Math.max(0,Math.round(+imp||0));
+}
+function pautaImpBaseline(f,s){
+  if(s.pautaImpBase!=null) return +s.pautaImpBase||0;
+  if(f.pautaPlats&&f.pautaPlats.length)
+    return f.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
+  if(f.imp!=null) return +f.imp||0;
+  return +s.imp||0;
+}
+function isPautaImpModified(f,s){
+  if(!s||!s.pautaPlats||!s.pautaPlats.length) return false;
+  return Math.abs((+s.imp||0)-pautaImpBaseline(f,s))>=1;
 }
 function calcPautaPlatsMetrics(f,s){
   const plats=s.pautaPlats||[];
@@ -3334,6 +3353,7 @@ function getRows(){
     if(s.pautaPlats&&s.pautaPlats.length){
       row.pautaPlats=s.pautaPlats;
       row.pautaPlatVal=pautaM.platVal;
+      row.impModified=isPautaImpModified(f,s);
     }
     if(s.pautaEtapa) row.pautaEtapa=s.pautaEtapa;
     out.push(row);
@@ -4838,7 +4858,7 @@ async function exportarExcel(){
         sc(r,6,row.s.qty,{bg,fg:C.black,bold:true,sz:9,ha:'center'});
         sc(r,7,platVal,{bg:bgS,fg:(row.webPlatRadio||row.radioStation)?'FFCC6600':C.black,sz:9,ha:'left',wrap:true,va:'top'});
         sc(r,8,row.alc>0?row.alc:'',{bg:bgS,fg:C.black,sz:9,ha:'right',nfmt:'#,##0'});
-        sc(r,9,row.imp>0?row.imp:'',{bg,fg:C.black,sz:9,ha:'right',nfmt:'#,##0'});
+        sc(r,9,row.imp>0?row.imp:'',{bg,fg:C.black,sz:9,ha:'right',nfmt:'#,##0',bold:!!row.impModified});
         // CTR / VTR por formato
         const _id=row.f.id;
         const ctrVal=(()=>{
@@ -5210,7 +5230,7 @@ async function exportarPDF(){
           td(row.s.qty,{bg,bold:true,align:'center'}),
           td(esc(platVal),{bg:bgS,fg:platFg,align:'left',va:'top'}),
           td(row.alc>0?f0(row.alc):'',{bg:bgS,align:'right'}),
-          td(row.imp>0?f0(row.imp):'',{bg,align:'right'}),
+          td(row.imp>0?f0(row.imp):'',{bg,align:'right',bold:!!row.impModified}),
           td(money(row.bruto),{bg,fg:C.money,align:'right'}),
           td(row.s.dto>0?row.s.dto+' %':'',{bg,fg:row.s.dto>0?C.dto:C.grayDark,align:'center'}),
           td(ctrVal==='—'?'':ctrVal,{bg,fg:ctrVal!=='—'?C.ctr:C.grayDark,align:'center'}),
@@ -6368,13 +6388,13 @@ function mergePautaPlats(s,entry){
       s.pautaPlats.push({plat:p.plat,alc:p.alc});
   });
   const total=s.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
-  if(total>0) s.imp=total;
+  if(total>0){ s.imp=total; setPautaImpBase(s,total); }
 }
 function applyCatalogPautaPlats(f,s){
   if(!f||!s||!f.pautaPlats||!f.pautaPlats.length) return false;
   s.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:+p.alc||0}));
   const total=s.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
-  if(total>0) s.imp=total;
+  if(total>0){ s.imp=total; setPautaImpBase(s,total); }
   return true;
 }
 function applyPautaEntry(entry,matchInfo,customName){
@@ -6412,7 +6432,7 @@ function applyPautaEntry(entry,matchInfo,customName){
     // métricas fijas del catálogo: FB Mega 10.000 + YouTube Mega 2.000
   } else {
     s.pautaPlats=entry.plats.length?entry.plats.slice():[];
-    if(entry.totalAlc>0) s.imp=entry.totalAlc;
+    if(entry.totalAlc>0){ s.imp=entry.totalAlc; setPautaImpBase(s,entry.totalAlc); }
     else if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
   }
   if(entry.marca&&f.customType) f.marca=entry.marca;
