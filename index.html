@@ -5817,7 +5817,7 @@ function pautaFmtPlatLabel(f){
 }
 function pautaPlatPartsFromText(s){
   return String(s||'')
-    .split(/[·•|,;/]+/)
+    .split(/\s+\bo\s+|[·•|,;/]+/i)
     .map(x=>String(x||'').trim())
     .filter(Boolean);
 }
