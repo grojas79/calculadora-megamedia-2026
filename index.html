@@ -5795,7 +5795,8 @@ function pautaCatalogFmtForEntry(e){
   return allFmts().find(f=>!f.customType&&normPauta(f.name)===n)||null;
 }
 function pautaEntryIsUsed(e){
-  if(canonPautaOrigen(e.medio)) return true;
+  // ORIGEN puede venir prellenado desde plataformas: no basta para importar.
+  // Se importa si hay ETAPA, o si editorial cambió temática / impresiones.
   if(canonPautaEtapa(e.etapa)) return true;
   const f=pautaCatalogFmtForEntry(e);
   const tema=String(e.tematica||'').trim();
@@ -5813,6 +5814,77 @@ function pautaEntryIsUsed(e){
 function pautaFmtPlatLabel(f){
   if(f.pautaPlats&&f.pautaPlats.length) return f.pautaPlats.map(p=>p.plat).filter(Boolean).join(' · ');
   return (f.plat&&f.plat!=='—')?f.plat:'';
+}
+function pautaPlatPartsFromText(s){
+  return String(s||'')
+    .split(/[·•|,;/]+/)
+    .map(x=>String(x||'').trim())
+    .filter(Boolean);
+}
+function platLineHasMuchoGusto(p){
+  return /mucho gusto/.test(normPauta(p));
+}
+function platLineRadioOrigen(p){
+  const n=normPauta(p);
+  if(/\bcarolina\b/.test(n)) return 'Digital Carolina';
+  if(/\binfinita\b/.test(n)) return 'Digital Infinita';
+  if(/\bromantica\b/.test(n)) return 'Digital Romántica';
+  if(/\bdisney\b/.test(n)) return 'Digital Disney';
+  return '';
+}
+/** Infiere ORIGEN canónico a partir del texto de plataformas (plantilla editorial). */
+function inferPautaOrigenFromPlatText(platText){
+  const whole=normPauta(platText);
+  if(!whole) return '';
+  if(/meganoticias y megadeportes|megadeportes y meganoticias/.test(whole))
+    return 'Meganoticias y Megadeportes';
+  if(/mega y mucho gusto|mucho gusto y mega/.test(whole))
+    return 'Mega y Mucho Gusto';
+  if(/mega y meganoticias|meganoticias y mega/.test(whole))
+    return 'Mega y Meganoticias';
+
+  const parts=pautaPlatPartsFromText(platText);
+  let hasMega=false,hasMn=false,hasMd=false,hasMg=false;
+  const radios=new Set();
+  parts.forEach(p=>{
+    const n=normPauta(p);
+    // "meganoticias" contiene "mega": sacar MN y ver si queda Mega como marca aparte
+    if(/meganoticias/.test(n)){
+      hasMn=true;
+      const sinMn=n.replace(/meganoticias/g,' ');
+      if(/\bmega\b/.test(sinMn)) hasMega=true;
+    }
+    if(/megadeportes/.test(n)){
+      hasMd=true;
+      const sinMd=n.replace(/megadeportes|mega deportes/g,' ');
+      if(/\bmega\b/.test(sinMd)) hasMega=true;
+      if(/meganoticias/.test(sinMd)||/meganoticias/.test(n)) hasMn=true;
+    }
+    if(platLineHasMuchoGusto(p)) hasMg=true;
+    if(platLineHasMega(p)) hasMega=true;
+    const radio=platLineRadioOrigen(p);
+    if(radio) radios.add(radio);
+  });
+  if(radios.size===1) return [...radios][0];
+  if(radios.size>1) return '';
+  if(hasMn&&hasMd) return 'Meganoticias y Megadeportes';
+  if(hasMega&&hasMg) return 'Mega y Mucho Gusto';
+  if(hasMega&&hasMn) return 'Mega y Meganoticias';
+  if(hasMg) return 'Mucho Gusto';
+  if(hasMd) return 'Megadeportes';
+  if(hasMn) return 'Meganoticias';
+  if(hasMega) return 'Mega';
+  return '';
+}
+function inferPautaOrigenFromFmt(f){
+  if(!f) return '';
+  const fromPlat=inferPautaOrigenFromPlatText(pautaFmtPlatLabel(f));
+  if(fromPlat) return fromPlat;
+  if(f.id==='prog_corte_mg_mega') return 'Mega y Mucho Gusto';
+  if(f.id==='prog_corte_mg') return 'Mucho Gusto';
+  const cat=CATS.find(c=>c.fmts.some(x=>x.id===f.id));
+  if(cat&&cat.id==='megadeportes') return 'Megadeportes';
+  return '';
 }
 function detectPautaHeaderMap(cells){
   const map={};
@@ -6981,8 +7053,8 @@ function abrirPlantillaEditorialModal(){
   document.getElementById('pautaModalTitle').textContent='Descargar plantilla editorial';
   document.getElementById('pautaModalBody').innerHTML=
     '<p>La plantilla <strong>ya trae todos los formatos de contenido</strong> de esa mesa, sin precios. '+
-    'Cada fila incluye la temática por defecto (editable) y las impresiones/impactos de referencia. '+
-    'Editorial completa ORIGEN y ETAPA en las filas de la campaña. El mismo formato en otra etapa se copia en una fila nueva (cambia ETAPA). El alcance lo calcula comercial con Sainsbury sobre esas impresiones.</p>'+
+    'Cada fila incluye ORIGEN sugerido según plataformas, temática e impresiones/impactos de referencia. '+
+    'Editorial completa ETAPA en las filas de la campaña (ORIGEN es editable). El mismo formato en otra etapa se copia en una fila nueva. El alcance lo calcula comercial con Sainsbury sobre esas impresiones.</p>'+
     '<div class="pauta-pick-card" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'mega\')">'+
       '<div class="pauta-pick-opt-name">Digital Mega</div>'+
       '<div class="pauta-pick-opt-sub">Todos los formatos de Contenido Editorial, Vodcast, Live Shopping de contenido, Programas, Teleseries y Megadeportes.</div>'+
@@ -7030,7 +7102,7 @@ async function descargarPlantillaEditorial(family){
     fill(1,1,'PAUTA EDITORIAL MEGAMEDIA — '+title,{bg:'FF003087',fg:'FFFFFFFF',bold:true,sz:14,ha:'center',wrap:false});
     ws.getRow(1).height=24;
     ws.mergeCells(2,1,2,9);
-    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) En las filas que SÍ van en esta pauta, elijan ORIGEN y ETAPA. 3) La TEMÁTICA viene con el texto del formato: edítenla si el uso en esta campaña es distinto. 4) IMPRESIONES / IMPACTOS es la suma de impactos de referencia (editable). El alcance neto lo calcula comercial con Sainsbury. 5) Si no marcan origen ni etapa, la fila no se importa. 6) Si el mismo formato va en dos etapas (ej. Live orgánico en Previa y Durante), copien la fila y cambien ETAPA: al importar quedan dos líneas, cada una con su tarifa.',
+    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) ORIGEN viene sugerido según las plataformas (editable). 3) En las filas que SÍ van en esta pauta, elijan ETAPA. 4) La TEMÁTICA viene con el texto del formato: edítenla si el uso en esta campaña es distinto. 5) IMPRESIONES / IMPACTOS es la suma de impactos de referencia (editable). El alcance neto lo calcula comercial con Sainsbury. 6) Si no marcan etapa (ni cambian temática/impresiones), la fila no se importa. 7) Si el mismo formato va en dos etapas, copien la fila y cambien ETAPA.',
       {bg:'FFE8F4FC',fg:'FF1A3A6B',sz:9,wrap:true});
     ws.getRow(2).height=56;
     fill(4,1,'CLIENTE',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
@@ -7055,7 +7127,7 @@ async function descargarPlantillaEditorial(family){
       r++;
       fmts.forEach(f=>{
         const bg=dataRows.length%2?'FFF7FAFC':'FFFFFFFF';
-        fill(r,1,'',{bg});
+        fill(r,1,inferPautaOrigenFromFmt(f)||'',{bg});
         fill(r,2,f.name,{bg,bold:true,sz:10});
         fill(r,3,f.marca||'',{bg,sz:9,fg:'FF445066'});
         fill(r,4,f.desc||'',{bg,sz:9});
