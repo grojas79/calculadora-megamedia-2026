@@ -1724,6 +1724,8 @@ function initFmtState(f){
     base.pautaPlats=f.pautaPlats.map(p=>({plat:p.plat,alc:+p.alc||0}));
     const total=base.pautaPlats.reduce((a,p)=>a+(+p.alc||0),0);
     if(total>0){ base.imp=total; setPautaImpBase(base,total); }
+  } else if(esTipoRRSS(f)&&(+base.imp||0)>0){
+    setPautaImpBase(base,base.imp);
   }
   STATE[f.id]=base;
 }
@@ -2032,8 +2034,8 @@ function pautaImpBaseline(f,s){
   if(f.imp!=null) return +f.imp||0;
   return +s.imp||0;
 }
-function isPautaImpModified(f,s){
-  if(!s||!s.pautaPlats||!s.pautaPlats.length) return false;
+function isFmtImpModified(f,s){
+  if(!s||!f||!esTipoRRSS(f)) return false;
   return Math.abs((+s.imp||0)-pautaImpBaseline(f,s))>=1;
 }
 function calcPautaPlatsMetrics(f,s){
@@ -3400,9 +3402,9 @@ function getRows(){
     if(s.pautaPlats&&s.pautaPlats.length){
       row.pautaPlats=s.pautaPlats;
       row.pautaPlatVal=pautaM.platVal;
-      row.impModified=isPautaImpModified(f,s);
     }
     if(s.pautaEtapa) row.pautaEtapa=s.pautaEtapa;
+    if(esTipoRRSS(f)) row.impModified=isFmtImpModified(f,s);
     out.push(row);
   });
   return out;
