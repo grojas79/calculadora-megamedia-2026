@@ -1924,11 +1924,6 @@ function partitionComercialSections(comercialRows){
   if(other.length) out.push({label:'Formatos comerciales',rows:other,kind:'cat'});
   return out;
 }
-function appendLsPackExportSections(lsPackRows,appendHeader,appendSub){
-  if(!lsPackRows||!lsPackRows.length) return;
-  appendHeader(LS_DISPLAY_PAID_MEDIA_TITLE);
-  lsDisplayPaidMediaSubsections(lsPackRows).forEach(sub=>appendSub(sub.label,sub.rows));
-}
 function iterateComercialExportSections(comercial,handlers){
   partitionComercialSections(comercial).forEach(sec=>{
     if(sec.kind==='web'){handlers.onWeb&&handlers.onWeb(sec);return;}
