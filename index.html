@@ -1770,6 +1770,20 @@ function excelSectionLabel(cat){
   if(cat.id==='rrss') return 'Contenido Editorial';
   return cat.label;
 }
+function isPautaCategorySectionLabel(s){
+  const n=normPauta(s);
+  if(!n) return false;
+  if(/^(contenido editorial|vodcast|live shopping|programa o rostro|programas|teleseries|megadeportes|rrss radios|filas extra|formatos comerciales|contenido \(?sin etapa\)?)$/.test(n))
+    return true;
+  if(/filas extra|formatos comerciales|contenido sin etapa|web display|plataformas de radio/.test(n))
+    return true;
+  try{
+    if(typeof CATS!=='undefined'&&Array.isArray(CATS)){
+      if(CATS.some(c=>normPauta(excelSectionLabel(c))===n||normPauta(c.label)===n)) return true;
+    }
+  }catch(_e){}
+  return false;
+}
 function excelRowKey(r){
   return [
     r.f&&r.f.id,
@@ -5723,7 +5737,12 @@ function pautaCellStr(v){
 }
 function isPautaNoiseCell(s){
   const t=pautaCellStr(s);
-  return !t||t==='[object Object]'||/^\[object\s/i.test(t);
+  if(!t||t==='[object Object]'||/^\[object\s/i.test(t)) return true;
+  // Títulos de sección de la plantilla (no son formatos)
+  if(isPautaCategorySectionLabel(t)) return true;
+  if(/^pauta editorial megamedia/.test(normPauta(t))) return true;
+  if(/^como usarla/.test(normPauta(t))) return true;
+  return false;
 }
 function normPauta(s){
   return String(s||'').toLowerCase()
@@ -6069,6 +6088,13 @@ function isPautaSectionRow(row,map){
   const c0=(row[0]||'').trim();
   const tipoIdx=map&&map.tipo!=null?map.tipo:1;
   const cTipo=pautaCellStr(row[tipoIdx]||'');
+  // Filas de categoría de la plantilla (celdas mergeadas: mismo texto en ORIGEN y TIPO)
+  if(c0&&isPautaCategorySectionLabel(c0)) return true;
+  if(cTipo&&isPautaCategorySectionLabel(cTipo)&&(!c0||normPauta(c0)===normPauta(cTipo))) return true;
+  if(c0&&cTipo&&normPauta(c0)===normPauta(cTipo)&&!canonPautaEtapa(c0)){
+    // Fila mergeada genérica (mismo valor en col 1 y 2): tratar como sección, no como formato
+    return true;
+  }
   if(!c0||cTipo) return false;
   if(canonPautaEtapa(c0)) return true;
   return /previa|durante|posterior|post\b|auspicio|organica|etapa|fase/i.test(c0);
@@ -6223,6 +6249,11 @@ async function parsePautaXLSX(buffer){
     const cells=[];
     for(let i=1;i<=16;i++){
       const cell=row.getCell(i);
+      // En celdas mergeadas ExcelJS repite el valor en todas; solo conservar la maestra
+      if(cell.isMerged&&cell.master&&cell.master.address!==cell.address){
+        cells.push('');
+        continue;
+      }
       let v=cell.value;
       cells.push(pautaCellStr(v));
     }
