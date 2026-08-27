@@ -1837,9 +1837,31 @@ function isPautaCategorySectionLabel(s){
   try{
     if(typeof CATS!=='undefined'&&Array.isArray(CATS)){
       if(CATS.some(c=>normPauta(excelSectionLabel(c))===n||normPauta(c.label)===n)) return true;
+      if(normPauta('Live Shopping — Display & Paid Media')===n) return true;
     }
   }catch(_e){}
   return false;
+}
+function partitionComercialSections(comercialRows){
+  const webRows=(comercialRows||[]).filter(r=>esTipoWeb(r.f));
+  const lsRows=(comercialRows||[]).filter(r=>/^ls_banners|^ls_pm_/.test(r.f.id));
+  const other=(comercialRows||[]).filter(r=>!webRows.includes(r)&&!lsRows.includes(r));
+  const out=[];
+  if(webRows.length) out.push({label:'Web, Display & Señal en Vivo',rows:webRows,kind:'web'});
+  if(lsRows.length) out.push({label:'Live Shopping — Display & Paid Media',rows:lsRows,kind:'ls'});
+  if(other.length) out.push({label:'Formatos comerciales',rows:other,kind:'cat'});
+  return out;
+}
+function appendLayoutByCategory(catRows,appendWeb,appendCat){
+  catsInExportOrder().forEach(cat=>{
+    const rows=catRows.filter(r=>cat.fmts.find(f=>f.id===r.f.id));
+    if(!rows.length) return;
+    if(cat.id==='web'){
+      appendWeb(rows.filter(r=>!r.webPlatRadio),rows.filter(r=>r.webPlatRadio));
+      return;
+    }
+    appendCat(excelSectionLabel(cat),rows);
+  });
 }
 function excelRowKey(r){
   return [
@@ -3702,15 +3724,27 @@ function render(){
       </tr>`;
     });
   }
-  CATS.forEach(cat=>{
-    const catRows=rows.filter(r=>cat.fmts.find(f=>f.id===r.f.id));
-    if(!catRows.length) return;
-    if(cat.id==='web'){
-      appendResultRows('Web — Mega / Meganoticias',catRows.filter(r=>!r.webPlatRadio));
-      appendResultRows('Web — Plataformas de Radio (formatos web)',catRows.filter(r=>r.webPlatRadio));
-      return;
+  const {byEtapa,editorialSinEtapa,comercial}=partitionExportRows(rows);
+  byEtapa.forEach(({etapa,rows:etapaRows})=>appendResultRows(etapa,etapaRows));
+  if(byEtapa.length&&editorialSinEtapa.length){
+    appendResultRows('Contenido (sin etapa)',editorialSinEtapa);
+  } else if(!byEtapa.length){
+    const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f));
+    if(editorialOnly.length){
+      appendLayoutByCategory(editorialOnly,(mega,radio)=>{
+        appendResultRows('Web — Mega / Meganoticias',mega);
+        appendResultRows('Web — Plataformas de Radio (formatos web)',radio);
+      },(label,catRows)=>appendResultRows(label,catRows));
     }
-    appendResultRows(cat.label,catRows);
+  }
+  partitionComercialSections(comercial).forEach(sec=>{
+    if(sec.kind==='web'){
+      appendResultRows(sec.label,sec.rows.filter(r=>!r.webPlatRadio));
+      const radio=sec.rows.filter(r=>r.webPlatRadio);
+      if(radio.length) appendResultRows('Web — Plataformas de Radio (formatos web)',radio);
+    } else {
+      appendResultRows(sec.label,sec.rows);
+    }
   });
 
   // Filas de totales
@@ -5097,14 +5131,24 @@ async function exportarExcel(){
             (label,catRows)=>excelAppendRows(label,catRows)
           );
         }
-        if(comercial.length){
+        partitionComercialSections(comercial).forEach(sec=>{
           {const r=ws.addRow([]); r.height=22;
             merge(ws,dataRowN,1,dataRowN,NCOLS);
-            sc(r,1,'Formatos comerciales',{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
+            sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
             borderRange(ws,dataRowN,1,dataRowN,NCOLS);
             dataRowN++;}
+          if(sec.kind==='web'){
+            excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipSectionHeader:true});
+            excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipSectionHeader:true});
+          } else {
+            excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
+          }
+        });
+      } else {
+        const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f));
+        if(editorialOnly.length){
           appendExportByCategory(
-            comercial,
+            editorialOnly,
             (mega,radio)=>{
               excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
               excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
@@ -5112,15 +5156,19 @@ async function exportarExcel(){
             (label,catRows)=>excelAppendRows(label,catRows)
           );
         }
-      } else {
-        appendExportByCategory(
-          rows,
-          (mega,radio)=>{
-            excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
-            excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
-          },
-          (label,catRows)=>excelAppendRows(label,catRows)
-        );
+        partitionComercialSections(comercial).forEach(sec=>{
+          {const r=ws.addRow([]); r.height=22;
+            merge(ws,dataRowN,1,dataRowN,NCOLS);
+            sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
+            borderRange(ws,dataRowN,1,dataRowN,NCOLS);
+            dataRowN++;}
+          if(sec.kind==='web'){
+            excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipSectionHeader:true});
+            excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipSectionHeader:true});
+          } else {
+            excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
+          }
+        });
       }
     }
 
@@ -5488,10 +5536,20 @@ async function exportarPDF(){
             (label,catRows)=>appendSection(label,catRows)
           );
         }
-        if(comercial.length){
-          sectionHeader('Formatos comerciales',{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
+        partitionComercialSections(comercial).forEach(sec=>{
+          sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
+          if(sec.kind==='web'){
+            appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipHeader:true});
+            appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipHeader:true});
+          } else {
+            appendSection(sec.label,sec.rows,{skipHeader:true});
+          }
+        });
+      } else {
+        const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f));
+        if(editorialOnly.length){
           appendExportByCategory(
-            comercial,
+            editorialOnly,
             (mega,radio)=>{
               appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
               appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
@@ -5499,15 +5557,15 @@ async function exportarPDF(){
             (label,catRows)=>appendSection(label,catRows)
           );
         }
-      } else {
-        appendExportByCategory(
-          rows,
-          (mega,radio)=>{
-            appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
-            appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
-          },
-          (label,catRows)=>appendSection(label,catRows)
-        );
+        partitionComercialSections(comercial).forEach(sec=>{
+          sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
+          if(sec.kind==='web'){
+            appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipHeader:true});
+            appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipHeader:true});
+          } else {
+            appendSection(sec.label,sec.rows,{skipHeader:true});
+          }
+        });
       }
     }
 
@@ -7223,16 +7281,25 @@ function applyPautaImpsFromEntry(f,s,entry){
     return;
   }
   if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
+  const impTarget=Math.max(0,+(entry.totalAlc||0))||pautaFmtDefaultImp(f);
+  if(esTipoWeb(f)&&impTarget>0){
+    migrateWebPlats(s,f);
+    if(s.webPlats&&s.webPlats.length){
+      s.webPlats[0].imp=impTarget;
+      s.webPlats[0].qty=Math.max(1,+entry.qty||1);
+      s.imp=impTarget;
+      setPautaImpBase(s,impTarget);
+    }
+    return;
+  }
+  if(isPautaWebDisplayImportFmt(f)&&impTarget>0){
+    s.imp=impTarget;
+    setPautaImpBase(s,impTarget);
+    return;
+  }
   if(entry.totalAlc>0){
     s.imp=entry.totalAlc;
     setPautaImpBase(s,entry.totalAlc);
-    if(esTipoWeb(f)){
-      migrateWebPlats(s,f);
-      if(s.webPlats&&s.webPlats.length){
-        s.webPlats[0].imp=entry.totalAlc;
-        s.webPlats[0].qty=Math.max(1,+entry.qty||1);
-      }
-    }
   }
 }
 function applyPautaEntry(entry,matchInfo,customName){
@@ -7294,7 +7361,15 @@ function confirmarImportPauta(){
     if(el&&!el.value.trim()) el.value=parsed.campania;
   }
   mergePautaImportMeta(parsed);
-  matches.forEach((m,idx)=>applyPautaEntry(m.entry,getPautaSelectedMatchInfo(idx,m),getPautaCustomName(idx,m.entry)));
+  const importedIds=new Set();
+  matches.forEach((m,idx)=>{
+    const r=applyPautaEntry(m.entry,getPautaSelectedMatchInfo(idx,m),getPautaCustomName(idx,m.entry));
+    if(r&&r.fmt) importedIds.add(r.fmt.id);
+  });
+  importedIds.forEach(id=>{
+    const f=allFmts().find(x=>x.id===id);
+    if(f&&esTipoWeb(f)) updWebFmt(id);
+  });
   cerrarPautaModal();
   buildFmts();
   render();
