@@ -1854,22 +1854,100 @@ function pautaFmtByTemplateOrId(entry){
   }
   const n=normPauta(entry&&entry.tipoContenido);
   if(!n) return null;
+  const etapa=canonPautaEtapa(entry&&entry.etapa)||'';
   const ls=CATS.find(c=>c.id==='liveshopping');
-  if(ls){
-    for(const f of ls.fmts){
-      if(isLsDisplayPaidMediaFmt(f)&&normPauta(pautaFmtTemplateName(f))===n) return f;
-    }
+  if(!ls) return null;
+  const candidates=ls.fmts.filter(f=>isLsDisplayPaidMediaFmt(f)&&normPauta(pautaFmtTemplateName(f))===n);
+  if(!candidates.length) return null;
+  if(candidates.length===1) return candidates[0];
+  if(etapa){
+    const byEtapa=candidates.find(f=>pautaDefaultEtapaForFmt(f,{})===etapa);
+    if(byEtapa) return byEtapa;
   }
+  if(/reel/.test(n)&&/stor/.test(n)){
+    const pm=resolveLsPaidMediaMatch(entry,n);
+    if(pm&&pm.fmt) return pm.fmt;
+  }
+  if(/carrusel/.test(n)&&!/productos/.test(n)) return candidates.find(f=>f.id==='ls_pm_post_carrusel')||candidates[0];
+  if(/like ads/.test(n)) return candidates.find(f=>f.id==='ls_pm_durante_like')||candidates[0];
+  if(/short yt|short youtube/.test(n)) return candidates.find(f=>f.id==='ls_pm_previa_yt')||candidates[0];
+  return candidates[0];
+}
+function fmtIsLsEditorialContent(f){
+  if(!f||isLsDisplayPaidMediaFmt(f)) return false;
+  const cat=CATS.find(c=>c.fmts.some(x=>x.id===f.id));
+  return !!(cat&&cat.id==='liveshopping');
+}
+function pautaResolveLsEditorialFmt(entry){
+  const id=String(entry&&entry.fmtId||'').trim();
+  if(id){
+    const byId=allFmts().find(x=>x.id===id);
+    if(fmtIsLsEditorialContent(byId)) return byId;
+  }
+  const n=normPauta(entry&&entry.tipoContenido);
+  if(n){
+    const direct=PAUTA_ALIASES[n];
+    if(typeof direct==='string'&&!direct.startsWith('__')&&!isLsPackFmtId(direct)){
+      const f=allFmts().find(x=>x.id===direct);
+      if(fmtIsLsEditorialContent(f)) return f;
+    }
+    const keys=Object.keys(PAUTA_ALIASES).filter(k=>k.length>=6&&(n.includes(k)||(n.length>=8&&k.includes(n)))).sort((a,b)=>b.length-a.length);
+    for(const key of keys){
+      const aid=PAUTA_ALIASES[key];
+      if(typeof aid!=='string'||aid.startsWith('__')||isLsPackFmtId(aid)) continue;
+      const f=allFmts().find(x=>x.id===aid);
+      if(fmtIsLsEditorialContent(f)) return f;
+    }
+    const byName=allFmts().find(f=>!f.customType&&normPauta(f.name)===n);
+    if(fmtIsLsEditorialContent(byName)) return byName;
+  }
+  const byTemplate=pautaFmtByTemplateOrId(entry);
+  if(fmtIsLsEditorialContent(byTemplate)) return byTemplate;
   return null;
+}
+function entryIsLsEditorialEntry(e){
+  if(!e) return false;
+  if(isLsPackFmtId(e.fmtId)) return false;
+  if(pautaResolveLsEditorialFmt(e)) return true;
+  return /live shopping/.test(normPauta([e.tipoContenido,e.tematica,e.marca,e.referencia].join(' ')));
+}
+function entryIsLsEditorialMatch(m){
+  return fmtIsLsEditorialContent(m&&m.matchInfo&&m.matchInfo.fmt);
+}
+function buildLsPackEntriesForConfirm(parsed,matches){
+  const hasLsEditorial=(matches||[]).some(entryIsLsEditorialMatch)
+    ||(parsed.entries||[]).some(entryIsLsEditorialEntry);
+  const hasPackRows=(parsed.entries||[]).some(e=>isLsPackFmtId(e.fmtId)&&pautaEntryIsUsed(e,{lsPackImport:true,hasLsEditorial:true}));
+  if(!hasLsEditorial&&!hasPackRows&&!pautaDetectLsPackImport(parsed.entries||[])) return [];
+  const byId=new Map();
+  (parsed.entries||[]).filter(e=>isLsPackFmtId(e.fmtId)).forEach(e=>{
+    const id=String(e.fmtId||'').trim();
+    if(id) byId.set(id,e);
+  });
+  if(hasLsEditorial){
+    ensureLsPackEntries([]).forEach(e=>{
+      const id=String(e.fmtId||'').trim();
+      if(id&&!byId.has(id)) byId.set(id,e);
+    });
+  }
+  return [...byId.values()];
+}
+function augmentMatchesWithLsPack(parsed,matches){
+  const out=(matches||[]).slice();
+  const seen=new Set(out.map(m=>String(m.entry.fmtId||'').trim()+'\0'+normPauta(m.entry.tipoContenido)));
+  buildLsPackEntriesForConfirm(parsed,out).forEach(entry=>{
+    const key=String(entry.fmtId||'').trim()+'\0'+normPauta(entry.tipoContenido);
+    if(seen.has(key)) return;
+    seen.add(key);
+    const r=matchFormatoEntry(entry);
+    out.push({entry,matchInfo:r.matchInfo,alternatives:r.alternatives||[],needsReview:!!r.needsReview});
+  });
+  return out;
 }
 function pautaDetectLsPackImport(entries){
   const list=entries||[];
   if(list.some(e=>isLsPackFmtId(e.fmtId))) return true;
-  if(list.some(e=>{
-    const id=String(e.fmtId||'').trim();
-    if(isLsPackFmtId(id)) return false;
-    return /^ls_/.test(id)||/live shopping/.test(normPauta([e.tipoContenido,e.tematica].join(' ')));
-  })) return true;
+  if(list.some(entryIsLsEditorialEntry)) return true;
   const blob=normPauta(list.map(e=>[e.tipoContenido,e.tematica,e.medio].join(' ')).join(' '));
   return /display y paid media|display & paid media|display y paid/.test(blob);
 }
@@ -6176,10 +6254,10 @@ function pautaFmtPlatSetKey(f){
 function pautaEntryIsUsed(e,ctx){
   ctx=ctx||{};
   const fmtId=String(e.fmtId||'').trim();
-  if(isLsPackFmtId(fmtId)&&ctx.lsPackImport) return true;
+  if(isLsPackFmtId(fmtId)&&(ctx.lsPackImport||ctx.hasLsEditorial)) return true;
   if(isLsPackFmtId(fmtId)&&String(e.qtyRaw||'').trim()!=='') return true;
   const byTemplate=pautaFmtByTemplateOrId(e);
-  if(byTemplate&&isLsDisplayPaidMediaFmt(byTemplate)&&ctx.lsPackImport) return true;
+  if(byTemplate&&isLsDisplayPaidMediaFmt(byTemplate)&&(ctx.lsPackImport||ctx.hasLsEditorial)) return true;
   // ORIGEN viene prellenado: no basta para importar.
   // ETAPA es opcional (campañas sin etapas). Se importa si hay señal de uso:
   // ETAPA, CANT., o cambios en temática / impresiones / plataformas.
@@ -6416,16 +6494,18 @@ function detectPautaHeaderMap(cells){
     }
     else if(n.includes('impresion')||n.includes('impacto')||n.includes('alcance')) map.alc=i;
     else if(n.includes('etapa')) map.etapa=i;
-    else if(n==='formato id'||n==='formato_id'||n==='id formato'||n==='id') map.fmtId=i;
+    else if(/formato[\s_]*id|^id formato/.test(n)) map.fmtId=i;
   });
   if(map.tipo==null) return null;
   if(map.origen==null) map.origen=0;
   if(map.marca==null) map.marca=2;
   if(map.tematica==null) map.tematica=4;
   if(map.ref==null) map.ref=5;
-  if(map.cant==null) map.cant=6;
-  if(map.plat==null) map.plat=7;
-  if(map.alc==null) map.alc=8;
+  if(map.cant==null) map.cant=5;
+  if(map.plat==null) map.plat=6;
+  if(map.alc==null) map.alc=7;
+  if(map.etapa==null) map.etapa=8;
+  if(map.fmtId==null) map.fmtId=9;
   return map;
 }
 function pautaCellAt(cells,idx){
@@ -6554,7 +6634,7 @@ function parsePautaRows(rawRows){
         tematica:pautaCellAt(cells,colMap.tematica),
         referencia:pautaCellAt(cells,colMap.ref),
         qtyRaw:pautaCellAt(cells,colMap.cant)||'',
-        fmtId:pautaCellAt(cells,colMap.fmtId),
+        fmtId:(pautaCellAt(cells,colMap.fmtId)||pautaCellAt(cells,9)||'').trim(),
         plats
       };
       if(!pending.plats.length&&pending.plataforma){
@@ -6576,15 +6656,11 @@ function parsePautaRows(rawRows){
     return e;
   });
   const lsPackImport=pautaDetectLsPackImport(entries);
-  const hasLsEditorial=entries.some(e=>{
-    const id=String(e.fmtId||'').trim();
-    if(isLsPackFmtId(id)) return false;
-    return /^ls_/.test(id)||(!isLsPackFmtId(id)&&/live shopping/.test(normPauta([e.tipoContenido,e.tematica].join(' '))));
-  });
+  const hasLsEditorial=entries.some(entryIsLsEditorialEntry);
   let packEntries=entries;
-  if(lsPackImport&&hasLsEditorial) packEntries=ensureLsPackEntries(entries);
+  if(hasLsEditorial) packEntries=ensureLsPackEntries(entries);
   result.entries=consolidatePautaEntries(packEntries)
-    .filter(e=>!isPautaNoiseCell(e.tipoContenido)&&pautaEntryIsUsed(e,{lsPackImport}));
+    .filter(e=>!isPautaNoiseCell(e.tipoContenido)&&pautaEntryIsUsed(e,{lsPackImport,hasLsEditorial}));
   result.etapas=ETAPAS_CANONICAS.filter(e=>result.etapas.includes(e)||result.entries.some(x=>x.etapa===e));
   const fams=result.entries.map(e=>e.origenFamilia).filter(Boolean);
   const nMega=fams.filter(f=>f==='mega').length;
@@ -7446,6 +7522,8 @@ function findActivePautaInstance(srcFmt,entry){
   })||null;
 }
 function stampPautaEntryOnFmt(f,entry){
+  if(!f||!f.id) return;
+  if(!STATE[f.id]) initFmtState(f);
   const s=STATE[f.id];
   s.active=true;
   if(entry.qty) s.qty=entry.qty;
@@ -7579,9 +7657,23 @@ function confirmarImportPauta(){
     if(el&&!el.value.trim()) el.value=parsed.campania;
   }
   mergePautaImportMeta(parsed);
+  PAUTA_MATCH_CTX=pautaDetectPackageContext(parsed);
   const importedIds=new Set();
-  matches.forEach((m,idx)=>{
-    const r=applyPautaEntry(m.entry,getPautaSelectedMatchInfo(idx,m),getPautaCustomName(idx,m.entry));
+  const allMatches=augmentMatchesWithLsPack(parsed,matches);
+  allMatches.forEach((m,idx)=>{
+    const pickInfo=getPautaSelectedMatchInfo(idx,m);
+    let matchInfo=pickInfo;
+    if((!matchInfo||!matchInfo.fmt)&&isLsPackFmtId(m.entry.fmtId)){
+      matchInfo=matchFormatoEntry(m.entry).matchInfo;
+    }
+    const r=applyPautaEntry(m.entry,matchInfo,getPautaCustomName(idx,m.entry));
+    if(r&&r.fmt) importedIds.add(r.fmt.id);
+  });
+  buildLsPackEntriesForConfirm(parsed,allMatches).forEach(entry=>{
+    if(allMatches.some(m=>String(m.entry.fmtId||'').trim()===String(entry.fmtId||'').trim())) return;
+    const mi=matchFormatoEntry(entry);
+    if(!mi.matchInfo||!mi.matchInfo.fmt) return;
+    const r=applyPautaEntry(entry,mi.matchInfo,null);
     if(r&&r.fmt) importedIds.add(r.fmt.id);
   });
   importedIds.forEach(id=>{
@@ -7624,7 +7716,7 @@ async function importarPautaEditorial(input){
       return;
     }
     PAUTA_MATCH_CTX=pautaDetectPackageContext(parsed);
-    const matches=parsed.entries.map(entry=>{
+    let matches=parsed.entries.map(entry=>{
       const r=matchFormatoEntry(entry);
       // Si hay alias confiable, igual enriquecer alternativas con ranking por plataformas
       let alternatives=r.alternatives||[];
@@ -7639,6 +7731,7 @@ async function importarPautaEditorial(input){
       }
       return{entry,matchInfo:r.matchInfo,alternatives,needsReview:r.needsReview};
     });
+    matches=augmentMatchesWithLsPack(parsed,matches);
     PAUTA_PENDING_IMPORT={parsed,matches,ctx:PAUTA_MATCH_CTX};
     PAUTA_MODAL_MODE='import';
     const confirmBtn=document.getElementById('pautaModalConfirm');
