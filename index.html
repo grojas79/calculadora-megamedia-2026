@@ -1589,10 +1589,10 @@ const CATS=[
        ref:'',
        tipo:'fijo', precio:1900000, imp:47000},
       // ── DISPLAY & PAID MEDIA ─────────────────────────────────────────────
-      {id:'ls_banners_mix', name:'Display: Mix de Banners (CPC)',        tag:'CPM / CPC', tagCls:'tag-cpm',
+      {id:'ls_banners_mix', name:'Display: Mix de Banners (Live Shopping)', tag:'CPM', tagCls:'tag-cpm',
        plat:'Mega.cl · Meganoticias.cl',
        marca:'Banners de marca con derivación a landing',
-       desc:'Mix de banners de marca en Mega.cl y Meganoticias.cl que derivan a la landing de compra del cliente. Modelo de compra: CPC.',
+       desc:'Mix de banners de marca en Mega.cl y Meganoticias.cl que derivan a la landing de compra del cliente. Modelo de compra: CPM (tarifario Live Shopping).',
        ref:'',
        tipo:'cpm', precio:1500, imp:1000000},
       {id:'ls_banners_itt', name:'Display: Banners ITT Desktop + Mobile', tag:'CPM', tagCls:'tag-cpm',
@@ -1661,6 +1661,12 @@ const CATS=[
        desc:'Banners estándar en posiciones premium del sitio (header, sidebar, interstitial). Cobro por CPM.',
        ref:'',
        tipo:'cpm', precio:3500, imp:500000},
+      {id:'banners_mix',     name:'Mix de Banners',                     tag:'CPM', tagCls:'tag-cpm',
+       plat:'Mega.cl · Meganoticias.cl',
+       marca:'Banners de marca con derivación a landing',
+       desc:'Mix de banners de marca en Mega.cl y Meganoticias.cl. Modelo de compra: CPM.',
+       ref:'',
+       tipo:'cpm', precio:2500, imp:1000000},
       {id:'dai_sev',         name:'DAI SEV (Spot en señal en vivo)',    tag:'CPM', tagCls:'tag-cpm',
        plat:'Señal en vivo streaming · Player web Mega y Meganoticias',
        marca:'Spot en tanda señal en vivo',
@@ -4694,6 +4700,7 @@ async function ensureHtml2Pdf(){
 const OT_WEB_FMT_MAP={
   advideo:'Ad Video (Pre-Mid-Pos)',
   banner_display:'Banners Tradicionales (desktop y mobile)',
+  banners_mix:'Mix de Banners',
   dai_sev:'DAI',
   ig_social_extend:'Instagram Social Extend',
   itt:'ITT (desktop + mobile)',
@@ -5903,9 +5910,9 @@ const PAUTA_ALIASES={
   'grafica patrocinada concurso live shopping':'ls_grafica_concurso',
   'grafica patrocinada live shopping':'ls_grafica_anuncio',
   'transmision live shopping':'ls_transmision',
-  'display mix de banners':'ls_banners_mix',
-  'mix de banners':'ls_banners_mix',
-  'mix de banner':'ls_banners_mix',
+  'display mix de banners':'__mix_banners__',
+  'mix de banners':'__mix_banners__',
+  'mix de banner':'__mix_banners__',
   'banners itt':'ls_banners_itt',
   'banners itt desktop mobile':'ls_banners_itt',
   'banners header':'ls_banners_header',
@@ -6908,6 +6915,12 @@ function pautaRankAlternatives(entry,limit){
   }
   return out;
 }
+function resolveMixBannersMatch(entry,n){
+  const id=PAUTA_MATCH_CTX.allowLiveShopping?'ls_banners_mix':'banners_mix';
+  const f=allFmts().find(x=>x.id===id);
+  if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
+  return{fmt:f,score:.95,method:'alias'};
+}
 function resolveLsPaidMediaMatch(entry,n){
   if(!PAUTA_MATCH_CTX.allowLiveShopping) return null;
   const etapa=canonPautaEtapa(entry&&entry.etapa)||'';
@@ -6928,6 +6941,7 @@ function resolveLsPaidMediaMatch(entry,n){
 }
 function pautaAliasMatch(n,entry){
   function resolveAliasId(id){
+    if(id==='__mix_banners__') return resolveMixBannersMatch(entry,n);
     if(id==='__ls_paid_media__') return resolveLsPaidMediaMatch(entry,n);
     if(id==='__grafica_feed__') return resolveGraficaFeedMatch(entry,n);
     if(id==='__nota_web__') return resolveNotaWebMatch(entry,n);
