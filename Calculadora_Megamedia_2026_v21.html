@@ -1837,6 +1837,7 @@ function isPautaCategorySectionLabel(s){
   try{
     if(typeof CATS!=='undefined'&&Array.isArray(CATS)){
       if(CATS.some(c=>normPauta(excelSectionLabel(c))===n||normPauta(c.label)===n)) return true;
+      if(normPauta('Live Shopping — Display & Paid Media')===n) return true;
     }
   }catch(_e){}
   return false;
