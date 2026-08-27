@@ -1840,8 +1840,38 @@ const LS_DISPLAY_PAID_MEDIA_SECTIONS=[
   {label:'DURANTE',fmtIds:['ls_pm_durante_like','ls_pm_durante_reels'],etapa:'Durante'},
   {label:'POST',fmtIds:['ls_pm_post_carrusel','ls_pm_post_reels'],etapa:'Post'}
 ];
+function isLsPackFmtId(id){
+  return /^ls_(banners|pm)_/.test(String(id||''));
+}
 function isLsDisplayPaidMediaFmt(f){
-  return !!(f&&(/^ls_banners/.test(f.id)||/^ls_pm_/.test(f.id)));
+  return !!(f&&isLsPackFmtId(f.id));
+}
+function pautaFmtByTemplateOrId(entry){
+  const fmtId=String(entry&&entry.fmtId||'').trim();
+  if(fmtId){
+    const byId=allFmts().find(x=>x.id===fmtId);
+    if(byId) return byId;
+  }
+  const n=normPauta(entry&&entry.tipoContenido);
+  if(!n) return null;
+  const ls=CATS.find(c=>c.id==='liveshopping');
+  if(ls){
+    for(const f of ls.fmts){
+      if(isLsDisplayPaidMediaFmt(f)&&normPauta(pautaFmtTemplateName(f))===n) return f;
+    }
+  }
+  return null;
+}
+function pautaDetectLsPackImport(entries){
+  const list=entries||[];
+  if(list.some(e=>isLsPackFmtId(e.fmtId))) return true;
+  if(list.some(e=>{
+    const id=String(e.fmtId||'').trim();
+    if(isLsPackFmtId(id)) return false;
+    return /^ls_/.test(id)||/live shopping/.test(normPauta([e.tipoContenido,e.tematica].join(' ')));
+  })) return true;
+  const blob=normPauta(list.map(e=>[e.tipoContenido,e.tematica,e.medio].join(' ')).join(' '));
+  return /display y paid media|display & paid media|display y paid/.test(blob);
 }
 function pautaFmtTemplateName(f){
   const map={
@@ -1888,23 +1918,28 @@ function isPautaCategorySectionLabel(s){
 }
 function partitionComercialSections(comercialRows){
   const webRows=(comercialRows||[]).filter(r=>esTipoWeb(r.f));
-  const lsRows=(comercialRows||[]).filter(r=>isLsDisplayPaidMediaFmt(r.f));
-  const other=(comercialRows||[]).filter(r=>!webRows.includes(r)&&!lsRows.includes(r));
+  const other=(comercialRows||[]).filter(r=>!webRows.includes(r));
   const out=[];
   if(webRows.length) out.push({label:'Web, Display & Señal en Vivo',rows:webRows,kind:'web'});
-  if(lsRows.length){
-    out.push({label:LS_DISPLAY_PAID_MEDIA_TITLE,rows:[],kind:'ls-display',headerOnly:true});
-    lsDisplayPaidMediaSubsections(lsRows).forEach(sub=>out.push({label:sub.label,rows:sub.rows,kind:'ls-sub'}));
-  }
   if(other.length) out.push({label:'Formatos comerciales',rows:other,kind:'cat'});
   return out;
 }
+function appendLsPackExportSections(lsPackRows,appendHeader,appendSub){
+  if(!lsPackRows||!lsPackRows.length) return;
+  appendHeader(LS_DISPLAY_PAID_MEDIA_TITLE);
+  lsDisplayPaidMediaSubsections(lsPackRows).forEach(sub=>appendSub(sub.label,sub.rows));
+}
 function iterateComercialExportSections(comercial,handlers){
   partitionComercialSections(comercial).forEach(sec=>{
-    if(sec.headerOnly){handlers.onMainHeader&&handlers.onMainHeader(sec);return;}
     if(sec.kind==='web'){handlers.onWeb&&handlers.onWeb(sec);return;}
-    if(sec.kind==='ls-sub'){handlers.onLsSub&&handlers.onLsSub(sec);return;}
     handlers.onDefault&&handlers.onDefault(sec);
+  });
+}
+function iterateLsPackExportSections(lsPack,handlers){
+  if(!lsPack||!lsPack.length) return;
+  handlers.onMainHeader&&handlers.onMainHeader({label:LS_DISPLAY_PAID_MEDIA_TITLE});
+  lsDisplayPaidMediaSubsections(lsPack).forEach(sub=>{
+    handlers.onLsSub&&handlers.onLsSub({label:sub.label,rows:sub.rows});
   });
 }
 function appendLayoutByCategory(catRows,appendWeb,appendCat){
@@ -1939,15 +1974,17 @@ function partitionExportRows(rows){
     if(present.has(e)||metaEtapas.includes(e)) etapas.push(e);
   });
   etapas.forEach(etapa=>{
-    const etapaRows=rows.filter(r=>isPautaEditorialFmt(r.f)&&etapaOf(r)===etapa);
+    const etapaRows=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f)&&etapaOf(r)===etapa);
     if(!etapaRows.length) return;
     etapaRows.forEach(r=>used.add(excelRowKey(r)));
     byEtapa.push({etapa,rows:etapaRows});
   });
+  const lsPack=rows.filter(r=>isLsDisplayPaidMediaFmt(r.f));
+  lsPack.forEach(r=>used.add(excelRowKey(r)));
   const leftover=rows.filter(r=>!used.has(excelRowKey(r)));
   const editorialSinEtapa=leftover.filter(r=>isPautaEditorialFmt(r.f));
   const comercial=leftover.filter(r=>!isPautaEditorialFmt(r.f));
-  return{byEtapa,leftover,editorialSinEtapa,comercial};
+  return{byEtapa,leftover,editorialSinEtapa,comercial,lsPack};
 }
 function appendExportByCategory(catRowsSource,appendWeb,appendCat){
   catsInExportOrder().forEach(cat=>{
@@ -3782,12 +3819,12 @@ function render(){
       </tr>`;
     });
   }
-  const {byEtapa,editorialSinEtapa,comercial}=partitionExportRows(rows);
+  const {byEtapa,editorialSinEtapa,comercial,lsPack}=partitionExportRows(rows);
   byEtapa.forEach(({etapa,rows:etapaRows})=>appendResultRows(etapa,etapaRows));
   if(byEtapa.length&&editorialSinEtapa.length){
     appendResultRows('Contenido (sin etapa)',editorialSinEtapa);
   } else if(!byEtapa.length){
-    const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f));
+    const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f));
     if(editorialOnly.length){
       appendLayoutByCategory(editorialOnly,(mega,radio)=>{
         appendResultRows('Web — Mega / Meganoticias',mega);
@@ -3795,18 +3832,17 @@ function render(){
       },(label,catRows)=>appendResultRows(label,catRows));
     }
   }
-  partitionComercialSections(comercial).forEach(sec=>{
-    if(sec.headerOnly){
-      appendResultRows(sec.label,[],{headerOnly:true});
-      return;
-    }
-    if(sec.kind==='web'){
+  iterateComercialExportSections(comercial,{
+    onWeb(sec){
       appendResultRows(sec.label,sec.rows.filter(r=>!r.webPlatRadio));
       const radio=sec.rows.filter(r=>r.webPlatRadio);
       if(radio.length) appendResultRows('Web — Plataformas de Radio (formatos web)',radio);
-    } else {
-      appendResultRows(sec.label,sec.rows,{subHeader:sec.kind==='ls-sub'});
-    }
+    },
+    onDefault(sec){ appendResultRows(sec.label,sec.rows); }
+  });
+  iterateLsPackExportSections(lsPack,{
+    onMainHeader(sec){ appendResultRows(sec.label,[],{headerOnly:true}); },
+    onLsSub(sec){ appendResultRows(sec.label,sec.rows,{subHeader:true}); }
   });
 
   // Filas de totales
@@ -5168,8 +5204,46 @@ async function exportarExcel(){
         dataRowN++; idx++;
       });
     }
+    function excelComercialAndLsPack(comercialRows,lsPackRows){
+      iterateComercialExportSections(comercialRows,{
+        onWeb(sec){
+          {const r=ws.addRow([]); r.height=22;
+            merge(ws,dataRowN,1,dataRowN,NCOLS);
+            sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
+            borderRange(ws,dataRowN,1,dataRowN,NCOLS);
+            dataRowN++;}
+          excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipSectionHeader:true});
+          excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipSectionHeader:true});
+        },
+        onDefault(sec){
+          {const r=ws.addRow([]); r.height=22;
+            merge(ws,dataRowN,1,dataRowN,NCOLS);
+            sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
+            borderRange(ws,dataRowN,1,dataRowN,NCOLS);
+            dataRowN++;}
+          excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
+        }
+      });
+      iterateLsPackExportSections(lsPackRows,{
+        onMainHeader(sec){
+          {const r=ws.addRow([]); r.height=22;
+            merge(ws,dataRowN,1,dataRowN,NCOLS);
+            sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
+            borderRange(ws,dataRowN,1,dataRowN,NCOLS);
+            dataRowN++;}
+        },
+        onLsSub(sec){
+          {const r=ws.addRow([]); r.height=18;
+            merge(ws,dataRowN,1,dataRowN,NCOLS);
+            sc(r,1,sec.label,{bg:'FF0F2744',fg:C.white,bold:true,sz:9,ha:'left'});
+            borderRange(ws,dataRowN,1,dataRowN,NCOLS);
+            dataRowN++;}
+          excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
+        }
+      });
+    }
     {
-      const{byEtapa,editorialSinEtapa,comercial}=partitionExportRows(rows);
+      const{byEtapa,editorialSinEtapa,comercial,lsPack}=partitionExportRows(rows);
       byEtapa.forEach(({etapa,rows:etapaRows})=>{
         {const r=ws.addRow([]); r.height=22;
           merge(ws,dataRowN,1,dataRowN,NCOLS);
@@ -5194,42 +5268,9 @@ async function exportarExcel(){
             (label,catRows)=>excelAppendRows(label,catRows)
           );
         }
-        iterateComercialExportSections(comercial,{
-          onMainHeader(sec){
-            {const r=ws.addRow([]); r.height=22;
-              merge(ws,dataRowN,1,dataRowN,NCOLS);
-              sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
-              borderRange(ws,dataRowN,1,dataRowN,NCOLS);
-              dataRowN++;}
-          },
-          onWeb(sec){
-            {const r=ws.addRow([]); r.height=22;
-              merge(ws,dataRowN,1,dataRowN,NCOLS);
-              sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
-              borderRange(ws,dataRowN,1,dataRowN,NCOLS);
-              dataRowN++;}
-            excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipSectionHeader:true});
-            excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipSectionHeader:true});
-          },
-          onLsSub(sec){
-            {const r=ws.addRow([]); r.height=18;
-              merge(ws,dataRowN,1,dataRowN,NCOLS);
-              sc(r,1,sec.label,{bg:'FF0F2744',fg:C.white,bold:true,sz:9,ha:'left'});
-              borderRange(ws,dataRowN,1,dataRowN,NCOLS);
-              dataRowN++;}
-            excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
-          },
-          onDefault(sec){
-            {const r=ws.addRow([]); r.height=22;
-              merge(ws,dataRowN,1,dataRowN,NCOLS);
-              sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
-              borderRange(ws,dataRowN,1,dataRowN,NCOLS);
-              dataRowN++;}
-            excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
-          }
-        });
+        excelComercialAndLsPack(comercial,lsPack);
       } else {
-        const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f));
+        const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f));
         if(editorialOnly.length){
           appendExportByCategory(
             editorialOnly,
@@ -5240,40 +5281,7 @@ async function exportarExcel(){
             (label,catRows)=>excelAppendRows(label,catRows)
           );
         }
-        iterateComercialExportSections(comercial,{
-          onMainHeader(sec){
-            {const r=ws.addRow([]); r.height=22;
-              merge(ws,dataRowN,1,dataRowN,NCOLS);
-              sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
-              borderRange(ws,dataRowN,1,dataRowN,NCOLS);
-              dataRowN++;}
-          },
-          onWeb(sec){
-            {const r=ws.addRow([]); r.height=22;
-              merge(ws,dataRowN,1,dataRowN,NCOLS);
-              sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
-              borderRange(ws,dataRowN,1,dataRowN,NCOLS);
-              dataRowN++;}
-            excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipSectionHeader:true});
-            excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipSectionHeader:true});
-          },
-          onLsSub(sec){
-            {const r=ws.addRow([]); r.height=18;
-              merge(ws,dataRowN,1,dataRowN,NCOLS);
-              sc(r,1,sec.label,{bg:'FF0F2744',fg:C.white,bold:true,sz:9,ha:'left'});
-              borderRange(ws,dataRowN,1,dataRowN,NCOLS);
-              dataRowN++;}
-            excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
-          },
-          onDefault(sec){
-            {const r=ws.addRow([]); r.height=22;
-              merge(ws,dataRowN,1,dataRowN,NCOLS);
-              sc(r,1,sec.label,{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
-              borderRange(ws,dataRowN,1,dataRowN,NCOLS);
-              dataRowN++;}
-            excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
-          }
-        });
+        excelComercialAndLsPack(comercial,lsPack);
       }
     }
 
@@ -5613,6 +5621,26 @@ async function exportarPDF(){
       if(!opts.skipHeader) sectionHeader(label,opts.headerStyle);
       catRows.forEach(r=>dataRow(r,label));
     }
+    function pdfComercialAndLsPack(comercialRows,lsPackRows){
+      iterateComercialExportSections(comercialRows,{
+        onWeb(sec){
+          sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
+          appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipHeader:true});
+          appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipHeader:true});
+        },
+        onDefault(sec){
+          sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
+          appendSection(sec.label,sec.rows,{skipHeader:true});
+        }
+      });
+      iterateLsPackExportSections(lsPackRows,{
+        onMainHeader(sec){sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});},
+        onLsSub(sec){
+          sectionHeader(sec.label,{bg:'#0F2744',fg:C.white,align:'left',bold:true,size:8});
+          appendSection(sec.label,sec.rows,{skipHeader:true});
+        }
+      });
+    }
 
     // Encabezados de tabla
     const hdrs=['MEDIO','TIPO DE CONTENIDO','PRESENCIA DE MARCA','TEMÁTICA / DESCRIPCIÓN',
@@ -5624,7 +5652,7 @@ async function exportarPDF(){
 
     // Filas de datos por secciones (misma lógica que Excel)
     {
-      const{byEtapa,editorialSinEtapa,comercial}=partitionExportRows(rows);
+      const{byEtapa,editorialSinEtapa,comercial,lsPack}=partitionExportRows(rows);
       byEtapa.forEach(({etapa,rows:etapaRows})=>{
         sectionHeader(etapa,{bg:'#000000',fg:C.white,align:'center',bold:true,size:9});
         appendSection(etapa,etapaRows,{skipHeader:true});
@@ -5641,24 +5669,9 @@ async function exportarPDF(){
             (label,catRows)=>appendSection(label,catRows)
           );
         }
-        iterateComercialExportSections(comercial,{
-          onMainHeader(sec){sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});},
-          onWeb(sec){
-            sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
-            appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipHeader:true});
-            appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipHeader:true});
-          },
-          onLsSub(sec){
-            sectionHeader(sec.label,{bg:'#0F2744',fg:C.white,align:'left',bold:true,size:8});
-            appendSection(sec.label,sec.rows,{skipHeader:true});
-          },
-          onDefault(sec){
-            sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
-            appendSection(sec.label,sec.rows,{skipHeader:true});
-          }
-        });
+        pdfComercialAndLsPack(comercial,lsPack);
       } else {
-        const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f));
+        const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f));
         if(editorialOnly.length){
           appendExportByCategory(
             editorialOnly,
@@ -5669,22 +5682,7 @@ async function exportarPDF(){
             (label,catRows)=>appendSection(label,catRows)
           );
         }
-        iterateComercialExportSections(comercial,{
-          onMainHeader(sec){sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});},
-          onWeb(sec){
-            sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
-            appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',sec.rows.filter(r=>!r.webPlatRadio),{skipHeader:true});
-            appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',sec.rows.filter(r=>r.webPlatRadio),{skipHeader:true});
-          },
-          onLsSub(sec){
-            sectionHeader(sec.label,{bg:'#0F2744',fg:C.white,align:'left',bold:true,size:8});
-            appendSection(sec.label,sec.rows,{skipHeader:true});
-          },
-          onDefault(sec){
-            sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
-            appendSection(sec.label,sec.rows,{skipHeader:true});
-          }
-        });
+        pdfComercialAndLsPack(comercial,lsPack);
       }
     }
 
@@ -6090,7 +6088,14 @@ function isPautaWebDisplayImportFmt(f){
 function isPautaComercialFmt(f){
   if(!f) return false;
   if(isPautaImportExcludedFmt(f)) return true;
-  return isPautaWebDisplayImportFmt(f);
+  if(isLsDisplayPaidMediaFmt(f)) return false;
+  const cat=CATS.find(c=>c.fmts.some(x=>x.id===f.id));
+  return !!(cat&&cat.id==='web');
+}
+function isPautaTemplateMainFmt(f){
+  if(!f||isPautaImportExcludedFmt(f)) return false;
+  if(isLsDisplayPaidMediaFmt(f)) return false;
+  return !isPautaComercialFmt(f);
 }
 function pautaWebDisplayImportAllowed(fmt,entry){
   const family=pautaOrigenFamilia(entry);
@@ -6116,7 +6121,7 @@ function isPautaEditorialFmt(f){
 }
 function pautaEditorialFmts(family){
   const catIds=family==='radios'?PAUTA_RADIOS_CAT_IDS:PAUTA_MEGA_CAT_IDS;
-  return CATS.filter(c=>catIds.includes(c.id)).flatMap(c=>c.fmts).filter(f=>!isPautaComercialFmt(f));
+  return CATS.filter(c=>catIds.includes(c.id)).flatMap(c=>c.fmts).filter(f=>isPautaTemplateMainFmt(f));
 }
 function pautaComercialImportSections(family){
   if(family==='radios') return [];
@@ -6145,6 +6150,8 @@ function pautaFmtDefaultImp(f){
 }
 function pautaCatalogFmtForEntry(e){
   if(!e) return null;
+  const byTemplate=pautaFmtByTemplateOrId(e);
+  if(byTemplate) return byTemplate;
   const id=String(e.fmtId||'').trim();
   if(id){
     const byId=allFmts().find(f=>f.id===id);
@@ -6171,13 +6178,19 @@ function pautaFmtPlatSetKey(f){
     return pautaPlatSetKeyFromParts(f.pautaPlats.map(p=>p.plat));
   return pautaPlatSetKeyFromParts(pautaPlatPartsFromText(f.plat||''));
 }
-function pautaEntryIsUsed(e){
+function pautaEntryIsUsed(e,ctx){
+  ctx=ctx||{};
+  const fmtId=String(e.fmtId||'').trim();
+  if(isLsPackFmtId(fmtId)&&ctx.lsPackImport) return true;
+  if(isLsPackFmtId(fmtId)&&String(e.qtyRaw||'').trim()!=='') return true;
+  const byTemplate=pautaFmtByTemplateOrId(e);
+  if(byTemplate&&isLsDisplayPaidMediaFmt(byTemplate)&&ctx.lsPackImport) return true;
   // ORIGEN viene prellenado: no basta para importar.
   // ETAPA es opcional (campañas sin etapas). Se importa si hay señal de uso:
   // ETAPA, CANT., o cambios en temática / impresiones / plataformas.
   if(canonPautaEtapa(e.etapa)) return true;
   if(String(e.qtyRaw||'').trim()!=='') return true;
-  const f=pautaCatalogFmtForEntry(e);
+  const f=byTemplate||pautaCatalogFmtForEntry(e);
   const tema=String(e.tematica||'').trim();
   if(tema){
     const def=String(f&&f.desc||'').trim();
@@ -6194,6 +6207,33 @@ function pautaEntryIsUsed(e){
     if(!f||platKey!==defKey) return true;
   }
   return false;
+}
+function ensureLsPackEntries(entries){
+  const out=(entries||[]).slice();
+  const have=new Set(out.map(e=>String(e.fmtId||'').trim()).filter(Boolean));
+  LS_DISPLAY_PAID_MEDIA_SECTIONS.forEach(sec=>{
+    sec.fmtIds.forEach(id=>{
+      if(have.has(id)) return;
+      const f=allFmts().find(x=>x.id===id);
+      if(!f) return;
+      out.push({
+        etapa:sec.etapa||pautaDefaultEtapaForFmt(f,{})||'',
+        medio:inferPautaOrigenFromFmt(f)||'Mega',
+        origenFamilia:'mega',
+        tipoContenido:pautaFmtTemplateName(f),
+        marca:f.marca||'',
+        tematica:f.desc||'',
+        referencia:'',
+        qtyRaw:'1',
+        qty:1,
+        fmtId:id,
+        plats:(f.plat||'').split('·').map(p=>p.trim()).filter(Boolean).map(p=>({plat:p,alc:0})),
+        totalAlc:pautaFmtDefaultImp(f)
+      });
+      have.add(id);
+    });
+  });
+  return out;
 }
 /** Parte celdas tipo "IG · TikTok · FB" en plataformas individuales. */
 function expandPautaEntryPlats(e){
@@ -6518,14 +6558,14 @@ function parsePautaRows(rawRows){
         plataforma:colMap.plat!=null&&colMap.platDetail!=null?pautaCellAt(cells,colMap.plat):pautaCellAt(cells,platIdx),
         tematica:pautaCellAt(cells,colMap.tematica),
         referencia:pautaCellAt(cells,colMap.ref),
-        qtyRaw:pautaCellAt(cells,colMap.cant)||'1',
+        qtyRaw:pautaCellAt(cells,colMap.cant)||'',
         fmtId:pautaCellAt(cells,colMap.fmtId),
         plats
       };
       if(!pending.plats.length&&pending.plataforma){
         pending.plats.push({plat:pending.plataforma,alc:0});
       }
-      pending.qty=parsePautaQty(pending.qtyRaw);
+      pending.qty=parsePautaQty(pending.qtyRaw||'1');
       result.entries.push(pending);
       return;
     }
@@ -6540,8 +6580,16 @@ function parsePautaRows(rawRows){
     expandPautaEntryPlats(e);
     return e;
   });
-  result.entries=consolidatePautaEntries(entries)
-    .filter(e=>!isPautaNoiseCell(e.tipoContenido)&&pautaEntryIsUsed(e));
+  const lsPackImport=pautaDetectLsPackImport(entries);
+  const hasLsEditorial=entries.some(e=>{
+    const id=String(e.fmtId||'').trim();
+    if(isLsPackFmtId(id)) return false;
+    return /^ls_/.test(id)||(!isLsPackFmtId(id)&&/live shopping/.test(normPauta([e.tipoContenido,e.tematica].join(' '))));
+  });
+  let packEntries=entries;
+  if(lsPackImport&&hasLsEditorial) packEntries=ensureLsPackEntries(entries);
+  result.entries=consolidatePautaEntries(packEntries)
+    .filter(e=>!isPautaNoiseCell(e.tipoContenido)&&pautaEntryIsUsed(e,{lsPackImport}));
   result.etapas=ETAPAS_CANONICAS.filter(e=>result.etapas.includes(e)||result.entries.some(x=>x.etapa===e));
   const fams=result.entries.map(e=>e.origenFamilia).filter(Boolean);
   const nMega=fams.filter(f=>f==='mega').length;
@@ -6603,7 +6651,11 @@ function pautaDetectPackageContext(parsed){
   const nRad=fams.filter(f=>f==='radios').length;
   return{
     allowVodcast:/vodcast/.test(blob)||parsed.origenFamily==='mega',
-    allowLiveShopping:/live\s*shopping|liveshopping/.test(blob)||parsed.origenFamily==='mega',
+    allowLiveShopping:/live\s*shopping|liveshopping|display y paid media|display & paid/.test(blob)
+      ||(parsed.entries||[]).some(e=>isLsPackFmtId(e.fmtId))
+      ||(parsed.entries||[]).some(e=>/^ls_/.test(String(e.fmtId||'')))
+      ||pautaDetectLsPackImport(parsed.entries)
+      ||parsed.origenFamily==='mega',
     origenFamily:parsed.origenFamily||(nRad>nMega?'radios':(nMega>0?'mega':null))
   };
 }
@@ -7174,6 +7226,10 @@ function matchFormatoEntry(entry){
       return{matchInfo:{fmt:byId,score:1,method:'id'},alternatives:[{fmt:byId,score:1,method:'id'}],needsReview:false};
     }
   }
+  const byTemplate=pautaFmtByTemplateOrId(entry);
+  if(byTemplate&&pautaFmtImportAllowed(byTemplate,entry)){
+    return{matchInfo:{fmt:byTemplate,score:1,method:'id'},alternatives:[{fmt:byTemplate,score:1,method:'id'}],needsReview:false};
+  }
   if(!n) return{matchInfo:null,alternatives:pautaRankAlternatives(entry),needsReview:true};
   const alias=pautaAliasMatch(n,entry);
   if(alias){
@@ -7707,7 +7763,7 @@ async function descargarPlantillaEditorial(family){
     catIds.forEach(cid=>{
       const cat=CATS.find(c=>c.id===cid);
       if(!cat) return;
-      const fmts=cat.fmts.filter(f=>!isPautaComercialFmt(f));
+      const fmts=cat.fmts.filter(f=>isPautaTemplateMainFmt(f));
       appendFmtRows(excelSectionLabel(cat),fmts);
     });
     if(!isRadios){
@@ -7767,7 +7823,7 @@ async function descargarPlantillaEditorial(family){
     catIds.forEach(cid=>{
       const cat=CATS.find(c=>c.id===cid);
       if(!cat) return;
-      cat.fmts.filter(f=>!isPautaComercialFmt(f)).forEach(f=>{
+      cat.fmts.filter(f=>isPautaTemplateMainFmt(f)).forEach(f=>{
         const vals=[excelSectionLabel(cat),f.name,f.marca||'',f.desc||'',pautaFmtPlatLabel(f),pautaFmtDefaultImp(f)||''];
         vals.forEach((v,ci)=>{
           const cell=catSheet.getRow(cr).getCell(ci+1);
