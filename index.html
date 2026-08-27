@@ -1797,7 +1797,9 @@ function partitionExportRows(rows){
     byEtapa.push({etapa,rows:etapaRows});
   });
   const leftover=rows.filter(r=>!used.has(excelRowKey(r)));
-  return{byEtapa,leftover};
+  const editorialSinEtapa=leftover.filter(r=>isPautaEditorialFmt(r.f));
+  const comercial=leftover.filter(r=>!isPautaEditorialFmt(r.f));
+  return{byEtapa,leftover,editorialSinEtapa,comercial};
 }
 function appendExportByCategory(catRowsSource,appendWeb,appendCat){
   catsInExportOrder().forEach(cat=>{
@@ -4999,7 +5001,7 @@ async function exportarExcel(){
       });
     }
     {
-      const{byEtapa,leftover}=partitionExportRows(rows);
+      const{byEtapa,editorialSinEtapa,comercial}=partitionExportRows(rows);
       byEtapa.forEach(({etapa,rows:etapaRows})=>{
         {const r=ws.addRow([]); r.height=22;
           merge(ws,dataRowN,1,dataRowN,NCOLS);
@@ -5009,14 +5011,29 @@ async function exportarExcel(){
         excelAppendRows(etapa,etapaRows,{skipSectionHeader:true});
       });
       if(byEtapa.length){
-        if(leftover.length){
+        if(editorialSinEtapa.length){
+          {const r=ws.addRow([]); r.height=22;
+            merge(ws,dataRowN,1,dataRowN,NCOLS);
+            sc(r,1,'Contenido (sin etapa)',{bg:'FF0F2744',fg:C.white,bold:true,sz:10,ha:'center'});
+            borderRange(ws,dataRowN,1,dataRowN,NCOLS);
+            dataRowN++;}
+          appendExportByCategory(
+            editorialSinEtapa,
+            (mega,radio)=>{
+              excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
+              excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
+            },
+            (label,catRows)=>excelAppendRows(label,catRows)
+          );
+        }
+        if(comercial.length){
           {const r=ws.addRow([]); r.height=22;
             merge(ws,dataRowN,1,dataRowN,NCOLS);
             sc(r,1,'Formatos comerciales',{bg:'FF1A3A6B',fg:C.white,bold:true,sz:10,ha:'center'});
             borderRange(ws,dataRowN,1,dataRowN,NCOLS);
             dataRowN++;}
           appendExportByCategory(
-            leftover,
+            comercial,
             (mega,radio)=>{
               excelAppendRows('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
               excelAppendRows('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
@@ -5383,16 +5400,27 @@ async function exportarPDF(){
 
     // Filas de datos por secciones (misma lógica que Excel)
     {
-      const{byEtapa,leftover}=partitionExportRows(rows);
+      const{byEtapa,editorialSinEtapa,comercial}=partitionExportRows(rows);
       byEtapa.forEach(({etapa,rows:etapaRows})=>{
         sectionHeader(etapa,{bg:'#000000',fg:C.white,align:'center',bold:true,size:9});
         appendSection(etapa,etapaRows,{skipHeader:true});
       });
       if(byEtapa.length){
-        if(leftover.length){
+        if(editorialSinEtapa.length){
+          sectionHeader('Contenido (sin etapa)',{bg:'#0F2744',fg:C.white,align:'center',bold:true,size:9});
+          appendExportByCategory(
+            editorialSinEtapa,
+            (mega,radio)=>{
+              appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
+              appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
+            },
+            (label,catRows)=>appendSection(label,catRows)
+          );
+        }
+        if(comercial.length){
           sectionHeader('Formatos comerciales',{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
           appendExportByCategory(
-            leftover,
+            comercial,
             (mega,radio)=>{
               appendSection('Web, Display & Señal en Vivo — Mega / Meganoticias',mega);
               appendSection('Web, Display & Señal en Vivo — Plataformas de Radio',radio);
@@ -5794,10 +5822,29 @@ function pautaCatalogFmtForEntry(e){
   if(!n) return null;
   return allFmts().find(f=>!f.customType&&normPauta(f.name)===n)||null;
 }
+function pautaPlatSetKeyFromParts(parts){
+  return [...new Set((parts||[]).map(p=>normPauta(p)).filter(Boolean))].sort().join('|');
+}
+function pautaEntryPlatSetKey(e){
+  const parts=[];
+  (e.plats||[]).forEach(p=>{
+    pautaPlatPartsFromText(p.plat).forEach(x=>parts.push(x));
+  });
+  if(!parts.length&&e.plataforma) pautaPlatPartsFromText(e.plataforma).forEach(x=>parts.push(x));
+  return pautaPlatSetKeyFromParts(parts);
+}
+function pautaFmtPlatSetKey(f){
+  if(!f) return '';
+  if(f.pautaPlats&&f.pautaPlats.length)
+    return pautaPlatSetKeyFromParts(f.pautaPlats.map(p=>p.plat));
+  return pautaPlatSetKeyFromParts(pautaPlatPartsFromText(f.plat||''));
+}
 function pautaEntryIsUsed(e){
-  // ORIGEN puede venir prellenado desde plataformas: no basta para importar.
-  // Se importa si hay ETAPA, o si editorial cambió temática / impresiones.
+  // ORIGEN viene prellenado: no basta para importar.
+  // ETAPA es opcional (campañas sin etapas). Se importa si hay señal de uso:
+  // ETAPA, CANT., o cambios en temática / impresiones / plataformas.
   if(canonPautaEtapa(e.etapa)) return true;
+  if(String(e.qtyRaw||'').trim()!=='') return true;
   const f=pautaCatalogFmtForEntry(e);
   const tema=String(e.tematica||'').trim();
   if(tema){
@@ -5809,7 +5856,106 @@ function pautaEntryIsUsed(e){
     const defImp=pautaFmtDefaultImp(f);
     if(!f||imp!==defImp) return true;
   }
+  const platKey=pautaEntryPlatSetKey(e);
+  if(platKey){
+    const defKey=pautaFmtPlatSetKey(f);
+    if(!f||platKey!==defKey) return true;
+  }
   return false;
+}
+/** Parte celdas tipo "IG · TikTok · FB" en plataformas individuales. */
+function expandPautaEntryPlats(e){
+  if(!e) return e;
+  const prevTotal=+e.totalAlc||0;
+  const next=[];
+  const seen=new Set();
+  (e.plats||[]).forEach(p=>{
+    const parts=pautaPlatPartsFromText(p.plat);
+    const alc=+p.alc||0;
+    if(parts.length<=1){
+      const name=String(p.plat||'').trim();
+      if(!name) return;
+      const k=normPauta(name);
+      if(seen.has(k)){
+        const ex=next.find(x=>normPauta(x.plat)===k);
+        if(ex&&alc>0) ex.alc=(+ex.alc||0)+alc;
+        return;
+      }
+      seen.add(k);
+      next.push({plat:name,alc});
+      return;
+    }
+    // Celda combinada: nombres separados; el total queda en totalAlc
+    parts.forEach(name=>{
+      const k=normPauta(name);
+      if(!k||seen.has(k)) return;
+      seen.add(k);
+      next.push({plat:name,alc:0});
+    });
+  });
+  e.plats=next;
+  const sum=next.reduce((a,p)=>a+(+p.alc||0),0);
+  e.totalAlc=sum>0?sum:prevTotal;
+  return e;
+}
+/** Arma pautaPlats desde el Excel (respeta altas/bajas) y reusa alcances del catálogo cuando calzan. */
+function buildPautaPlatsFromExcelAndCatalog(f,entry){
+  const names=[];
+  const seen=new Set();
+  (entry&&entry.plats||[]).forEach(p=>{
+    pautaPlatPartsFromText(p.plat).forEach(name=>{
+      const k=normPauta(name);
+      if(!k||seen.has(k)) return;
+      seen.add(k);
+      names.push(name);
+    });
+  });
+  if(!names.length&&entry&&entry.plataforma){
+    pautaPlatPartsFromText(entry.plataforma).forEach(name=>{
+      const k=normPauta(name);
+      if(!k||seen.has(k)) return;
+      seen.add(k);
+      names.push(name);
+    });
+  }
+  if(!names.length) return null;
+
+  const catalog=(f&&f.pautaPlats)||[];
+  const catMap=new Map(catalog.map(p=>[normPauta(p.plat),p]));
+  function findCat(name){
+    return catMap.get(normPauta(name))||null;
+  }
+  let plats=names.map(name=>{
+    const cat=findCat(name);
+    return{plat:name,alc:cat?(+cat.alc||0):0};
+  });
+  const target=+((entry&&entry.totalAlc)||0);
+  const knownSum=plats.reduce((a,p)=>a+(+p.alc||0),0);
+  const unknown=plats.filter(p=>!(+p.alc>0));
+  if(target>0){
+    if(unknown.length&&knownSum<=0)
+      plats=plats.map(p=>({plat:p.plat,alc:1}));
+    else if(unknown.length){
+      // Plataformas nuevas: reparte el remanente; si el catálogo ya sumaba el total, reescala todo
+      let rem=target-knownSum;
+      if(rem<=0){
+        plats=plats.map(p=>({plat:p.plat,alc:(+p.alc>0)?p.alc:1}));
+      } else {
+        const each=Math.floor(rem/unknown.length);
+        let left=rem-each*unknown.length;
+        plats=plats.map(p=>{
+          if(+p.alc>0) return p;
+          const extra=left>0?(left--,1):0;
+          return{plat:p.plat,alc:each+extra};
+        });
+      }
+    }
+    return scalePautaPlatsToImp(plats,target);
+  }
+  if(knownSum>0) return plats;
+  const catTotal=catalog.reduce((a,p)=>a+(+p.alc||0),0);
+  if(catTotal>0) return scalePautaPlatsToImp(plats.map(p=>({plat:p.plat,alc:1})),catTotal);
+  return plats;
 }
 function pautaFmtPlatLabel(f){
   if(f.pautaPlats&&f.pautaPlats.length) return f.pautaPlats.map(p=>p.plat).filter(Boolean).join(' · ');
@@ -6050,6 +6196,7 @@ function parsePautaRows(rawRows){
     e.etapa=canonPautaEtapa(e.etapa)||e.etapa||'';
     e.medio=canonPautaOrigen(e.medio)||e.medio||'';
     e.origenFamilia=e.origenFamilia||pautaOrigenFamiliaFromLabel(e.medio);
+    expandPautaEntryPlats(e);
     return e;
   });
   result.entries=consolidatePautaEntries(entries)
@@ -6901,20 +7048,29 @@ function pautaEntryHasDetailedPlats(entry){
   return !!(entry&&entry.plats&&entry.plats.filter(p=>p.plat&&+p.alc>0).length>1);
 }
 function applyPautaImpsFromEntry(f,s,entry){
+  // Detalle por fila (una plataforma + impresión por línea)
   if(pautaEntryHasDetailedPlats(entry)){
     s.pautaPlats=entry.plats.map(p=>({plat:p.plat,alc:+p.alc||0}));
     if(entry.totalAlc>0){ s.imp=entry.totalAlc; setPautaImpBase(s,entry.totalAlc); }
     return;
   }
+  // Plataformas del Excel mandan (altas/bajas); alcances del catálogo se reusan si calzan
+  const fromExcel=buildPautaPlatsFromExcelAndCatalog(f,entry);
+  if(fromExcel&&fromExcel.length){
+    s.pautaPlats=fromExcel;
+    const total=entry.totalAlc>0?entry.totalAlc:fromExcel.reduce((a,p)=>a+(+p.alc||0),0);
+    if(total>0){ s.imp=total; setPautaImpBase(s,total); }
+    else if(f.id==='spots_licenciados'&&applyCatalogPautaPlats(f,s)){ /* ok */ }
+    return;
+  }
+  if(f.id==='spots_licenciados'&&applyCatalogPautaPlats(f,s)) return;
   if(f.pautaPlats&&f.pautaPlats.length&&entry.totalAlc>0){
     s.pautaPlats=scalePautaPlatsToImp(f.pautaPlats,entry.totalAlc);
     s.imp=entry.totalAlc;
     setPautaImpBase(s,entry.totalAlc);
     return;
   }
-  if(f.id==='spots_licenciados'&&applyCatalogPautaPlats(f,s)) return;
-  if(entry.plats&&entry.plats.length) s.pautaPlats=entry.plats.slice();
-  else if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
+  if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
   if(entry.totalAlc>0){ s.imp=entry.totalAlc; setPautaImpBase(s,entry.totalAlc); }
 }
 function applyPautaEntry(entry,matchInfo,customName){
@@ -7054,7 +7210,9 @@ function abrirPlantillaEditorialModal(){
   document.getElementById('pautaModalBody').innerHTML=
     '<p>La plantilla <strong>ya trae todos los formatos de contenido</strong> de esa mesa, sin precios. '+
     'Cada fila incluye ORIGEN sugerido según plataformas, temática e impresiones/impactos de referencia. '+
-    'Editorial completa ETAPA en las filas de la campaña (ORIGEN es editable). El mismo formato en otra etapa se copia en una fila nueva. El alcance lo calcula comercial con Sainsbury sobre esas impresiones.</p>'+
+    'Marquen las filas de la campaña con <strong>CANT.</strong> (ej. 1) o editando plataformas/temática/impresiones. '+
+    '<strong>ETAPA es opcional</strong>: si la campaña tiene etapas, elíjanla y la pauta se separará al importar; el mismo formato en otra etapa se copia en una fila nueva. '+
+    'Si agregan o quitan redes en PLATAFORMA, eso se respeta al importar. El alcance lo calcula comercial con Sainsbury.</p>'+
     '<div class="pauta-pick-card" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'mega\')">'+
       '<div class="pauta-pick-opt-name">Digital Mega</div>'+
       '<div class="pauta-pick-opt-sub">Todos los formatos de Contenido Editorial, Vodcast, Live Shopping de contenido, Programas, Teleseries y Megadeportes.</div>'+
@@ -7102,9 +7260,9 @@ async function descargarPlantillaEditorial(family){
     fill(1,1,'PAUTA EDITORIAL MEGAMEDIA — '+title,{bg:'FF003087',fg:'FFFFFFFF',bold:true,sz:14,ha:'center',wrap:false});
     ws.getRow(1).height=24;
     ws.mergeCells(2,1,2,9);
-    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) ORIGEN viene sugerido según las plataformas (editable). 3) En las filas que SÍ van en esta pauta, elijan ETAPA. 4) La TEMÁTICA viene con el texto del formato: edítenla si el uso en esta campaña es distinto. 5) IMPRESIONES / IMPACTOS es la suma de impactos de referencia (editable). El alcance neto lo calcula comercial con Sainsbury. 6) Si no marcan etapa (ni cambian temática/impresiones), la fila no se importa. 7) Si el mismo formato va en dos etapas, copien la fila y cambien ETAPA.',
+    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) ORIGEN viene sugerido según las plataformas (editable). 3) En las filas que SÍ van en esta pauta, indiquen CANT. (ej. 1) y/o editen PLATAFORMA, temática o impresiones. 4) ETAPA es opcional: solo si la campaña tiene etapas; si el mismo formato va en dos etapas, copien la fila y cambien ETAPA. 5) Si agregan o quitan plataformas en PLATAFORMA, la importación usa exactamente esas redes. 6) Filas sin CANT./ETAPA ni cambios no se importan. 7) El alcance neto lo calcula comercial con Sainsbury.',
       {bg:'FFE8F4FC',fg:'FF1A3A6B',sz:9,wrap:true});
-    ws.getRow(2).height=56;
+    ws.getRow(2).height=68;
     fill(4,1,'CLIENTE',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
     fill(4,2,'CAMPAÑA',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
     fill(4,3,'FECHAS',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
