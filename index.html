@@ -1830,9 +1830,9 @@ function excelSectionLabel(cat){
 function isPautaCategorySectionLabel(s){
   const n=normPauta(s);
   if(!n) return false;
-  if(/^(contenido editorial|vodcast|live shopping|programa o rostro|programas|teleseries|megadeportes|rrss radios|filas extra|formatos comerciales|contenido \(?sin etapa\)?)$/.test(n))
+  if(/^(contenido editorial|vodcast|live shopping|programa o rostro|programas|teleseries|megadeportes|rrss radios|filas extra|formatos comerciales|contenido \(?sin etapa\)?|web display|senal en vivo|paid media)$/.test(n))
     return true;
-  if(/filas extra|formatos comerciales|contenido sin etapa|web display|plataformas de radio/.test(n))
+  if(/filas extra|formatos comerciales|contenido sin etapa|web display|senal en vivo|paid media|display & paid|plataformas de radio/.test(n))
     return true;
   try{
     if(typeof CATS!=='undefined'&&Array.isArray(CATS)){
@@ -5733,6 +5733,16 @@ const PAUTA_ALIASES={
   'grafica patrocinada concurso live shopping':'ls_grafica_concurso',
   'grafica patrocinada live shopping':'ls_grafica_anuncio',
   'transmision live shopping':'ls_transmision',
+  'display mix de banners':'ls_banners_mix',
+  'mix de banners':'ls_banners_mix',
+  'banners itt':'ls_banners_itt',
+  'banners header':'ls_banners_header',
+  'paid media previa reels':'ls_pm_previa_meta',
+  'paid media previa short youtube':'ls_pm_previa_yt',
+  'banner display web':'banner_display',
+  'advideo':'advideo',
+  'itt':'itt',
+  'skin branding':'skin',
   'nota web':'__nota_web__',
   'vivencial de marca':'vivencial',
   'vivencial en terreno':'vivencial',
@@ -5875,12 +5885,36 @@ function pautaOrigenFamilia(entry){
   if(fromLabel) return fromLabel;
   return PAUTA_MATCH_CTX.origenFamily||null;
 }
-function isPautaComercialFmt(f){
+function isPautaImportExcludedFmt(f){
   if(!f) return false;
-  if(f.tipo==='cpm'||f.infType||f.prodType==='produccion') return true;
-  if(/^ls_banners/.test(f.id)) return true;
+  if(f.infType||f.prodType==='produccion') return true;
+  const cat=CATS.find(c=>c.fmts.some(x=>x.id===f.id));
+  return !!(cat&&cat.id==='influencers');
+}
+function isPautaWebDisplayImportFmt(f){
+  if(!f||isPautaImportExcludedFmt(f)) return false;
+  if(/^ls_banners/.test(f.id)||/^ls_pm_/.test(f.id)) return true;
   const cat=CATS.find(c=>c.fmts.some(x=>x.id===f.id));
   return !!(cat&&cat.id==='web');
+}
+function isPautaComercialFmt(f){
+  if(!f) return false;
+  if(isPautaImportExcludedFmt(f)) return true;
+  return isPautaWebDisplayImportFmt(f);
+}
+function pautaWebDisplayImportAllowed(fmt,entry){
+  const family=pautaOrigenFamilia(entry);
+  if(family==='radios') return false;
+  if(/^ls_/.test(fmt.id))
+    return PAUTA_MATCH_CTX.allowLiveShopping||normPauta(String(entry&&entry.tipoContenido||'')).includes('live shopping');
+  return true;
+}
+function pautaFmtImportAllowed(fmt,entry){
+  if(isPautaImportExcludedFmt(fmt)) return false;
+  const fmtId=String(entry&&entry.fmtId||'').trim();
+  if(fmtId&&fmt.id===fmtId) return true;
+  if(isPautaWebDisplayImportFmt(fmt)) return pautaWebDisplayImportAllowed(fmt,entry);
+  return pautaFmtAllowedInCtx(fmt,entry);
 }
 function isPautaEditorialFmt(f){
   if(!f) return false;
@@ -5893,6 +5927,21 @@ function isPautaEditorialFmt(f){
 function pautaEditorialFmts(family){
   const catIds=family==='radios'?PAUTA_RADIOS_CAT_IDS:PAUTA_MEGA_CAT_IDS;
   return CATS.filter(c=>catIds.includes(c.id)).flatMap(c=>c.fmts).filter(f=>!isPautaComercialFmt(f));
+}
+function pautaComercialImportSections(family){
+  if(family==='radios') return [];
+  const web=CATS.find(c=>c.id==='web');
+  const ls=CATS.find(c=>c.id==='liveshopping');
+  const out=[];
+  if(web&&web.fmts.length) out.push({label:web.label,fmts:web.fmts.slice()});
+  if(ls){
+    const lsCom=ls.fmts.filter(f=>/^ls_banners|^ls_pm_/.test(f.id));
+    if(lsCom.length) out.push({label:'Live Shopping — Display & Paid Media',fmts:lsCom});
+  }
+  return out;
+}
+function pautaTemplateAllFmts(family){
+  return pautaEditorialFmts(family).concat(pautaComercialImportSections(family).flatMap(s=>s.fmts));
 }
 function pautaFmtDefaultImp(f){
   if(!f) return 0;
@@ -6365,8 +6414,8 @@ function pautaDetectPackageContext(parsed){
   };
 }
 function pautaFmtAllowedInCtx(fmt,entry){
-  if(!fmt) return false;
-  if(isPautaComercialFmt(fmt)) return false;
+  if(!fmt||isPautaImportExcludedFmt(fmt)) return false;
+  if(isPautaWebDisplayImportFmt(fmt)) return pautaWebDisplayImportAllowed(fmt,entry);
   const cat=CATS.find(c=>c.fmts.some(x=>x.id===fmt.id));
   const family=pautaOrigenFamilia(entry);
   if(family==='radios'){
@@ -6897,7 +6946,7 @@ function matchFormatoEntry(entry){
   const fmtId=(entry.fmtId||'').trim();
   if(fmtId){
     const byId=allFmts().find(x=>x.id===fmtId);
-    if(byId&&pautaFmtAllowedInCtx(byId,entry)){
+    if(byId&&pautaFmtImportAllowed(byId,entry)){
       return{matchInfo:{fmt:byId,score:1,method:'id'},alternatives:[{fmt:byId,score:1,method:'id'}],needsReview:false};
     }
   }
@@ -7038,7 +7087,7 @@ function buildPautaPreviewHtml(parsed,matches){
     matches.forEach((m,idx)=>{if(m.needsReview) html+=buildPautaPickCard(idx,m);});
     html+='</div>';
   }
-  html+='<p style="margin-top:10px;color:var(--tx2);font-size:12px">Los formatos personalizados se guardan en «Formatos personalizados». El precio unitario queda en $0 para completarlo manualmente. CPM e influencers no se importan desde editorial.</p>';
+  html+='<p style="margin-top:10px;color:var(--tx2);font-size:12px">Los formatos personalizados se guardan en «Formatos personalizados». El precio unitario queda en $0 para completarlo manualmente. Influencers no se importan desde editorial; Web/Display y Paid Media de Live Shopping sí.</p>';
   return html;
 }
 function pautaSelectCustom(idx){
@@ -7174,10 +7223,19 @@ function applyPautaImpsFromEntry(f,s,entry){
     return;
   }
   if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
-  if(entry.totalAlc>0){ s.imp=entry.totalAlc; setPautaImpBase(s,entry.totalAlc); }
+  if(entry.totalAlc>0){
+    s.imp=entry.totalAlc;
+    setPautaImpBase(s,entry.totalAlc);
+    if(esTipoWeb(f)){
+      migrateWebPlats(s,f);
+      if(s.webPlats&&s.webPlats.length){
+        s.webPlats[0].imp=entry.totalAlc;
+        s.webPlats[0].qty=Math.max(1,+entry.qty||1);
+      }
+    }
+  }
 }
 function applyPautaEntry(entry,matchInfo,customName){
-  if(matchInfo&&matchInfo.fmt&&isPautaComercialFmt(matchInfo.fmt)) matchInfo=null;
   let f,created=false;
   if(matchInfo&&matchInfo.fmt){
     const src=catalogRootFmt(matchInfo.fmt);
@@ -7314,8 +7372,8 @@ function abrirPlantillaEditorialModal(){
     '<p>La plantilla <strong>ya trae todos los formatos de contenido</strong> de esa mesa, sin precios. '+
     'Cada fila incluye ORIGEN sugerido según plataformas, temática e impresiones/impactos de referencia. '+
     'Marquen las filas de la campaña con <strong>CANT.</strong> (ej. 1) o editando plataformas/temática/impresiones. '+
-    '<strong>ETAPA es opcional</strong>: si la campaña tiene etapas, elíjanla y la pauta se separará al importar; el mismo formato en otra etapa se copia en una fila nueva. '+
-    'Si agregan o quitan redes en PLATAFORMA, eso se respeta al importar. El alcance lo calcula comercial con Sainsbury.</p>'+
+    '<strong>ETAPA es opcional</strong>. Al final de la plantilla están <strong>Web/Display</strong> y <strong>Paid Media LS</strong>, también importables. '+
+    'Si agregan o quitan redes en PLATAFORMA, eso se respeta al importar.</p>'+
     '<div class="pauta-pick-card" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'mega\')">'+
       '<div class="pauta-pick-opt-name">Digital Mega</div>'+
       '<div class="pauta-pick-opt-sub">Todos los formatos de Contenido Editorial, Vodcast, Live Shopping de contenido, Programas, Teleseries y Megadeportes.</div>'+
@@ -7324,7 +7382,7 @@ function abrirPlantillaEditorialModal(){
       '<div class="pauta-pick-opt-name">Digital Radios</div>'+
       '<div class="pauta-pick-opt-sub">Todos los formatos de RRSS Radios (Carolina, Infinita, Romántica y Disney).</div>'+
     '</div>'+
-    '<p style="margin-top:10px;color:var(--tx2);font-size:12px">Siguen fuera CPM, display e influencers: los agrega comercial. Mega y Radios se importan por separado y se acumulan.</p>';
+    '<p style="margin-top:10px;color:var(--tx2);font-size:12px">Incluye al final Web/Display y Paid Media de Live Shopping (importables con CANT.). Influencers siguen fuera. Mega y Radios se importan por separado y se acumulan.</p>';
   const confirmBtn=document.getElementById('pautaModalConfirm');
   if(confirmBtn) confirmBtn.style.display='none';
   document.getElementById('pautaOverlay').classList.add('show');
@@ -7363,9 +7421,9 @@ async function descargarPlantillaEditorial(family){
     fill(1,1,'PAUTA EDITORIAL MEGAMEDIA — '+title,{bg:'FF003087',fg:'FFFFFFFF',bold:true,sz:14,ha:'center',wrap:false});
     ws.getRow(1).height=24;
     ws.mergeCells(2,1,2,9);
-    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) ORIGEN viene sugerido según las plataformas (editable). 3) En las filas que SÍ van en esta pauta, indiquen CANT. (ej. 1) y/o editen PLATAFORMA, temática o impresiones. 4) ETAPA es opcional: solo si la campaña tiene etapas; si el mismo formato va en dos etapas, copien la fila y cambien ETAPA. 5) Si agregan o quitan plataformas en PLATAFORMA, la importación usa exactamente esas redes. 6) Filas sin CANT./ETAPA ni cambios no se importan. 7) El alcance neto lo calcula comercial con Sainsbury.',
+    fill(2,1,'Cómo usarla: 1) Completen CLIENTE y CAMPAÑA. 2) ORIGEN sugerido según plataformas (editable). 3) Marquen filas con CANT. (ej. 1) y/o editen plataformas, temática o impresiones. 4) ETAPA opcional. 5) Al final están Web/Display y Paid Media de Live Shopping: también se importan con CANT. 6) Influencers siguen fuera. 7) Alcance neto: comercial con Sainsbury.',
       {bg:'FFE8F4FC',fg:'FF1A3A6B',sz:9,wrap:true});
-    ws.getRow(2).height=68;
+    ws.getRow(2).height=72;
     fill(4,1,'CLIENTE',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
     fill(4,2,'CAMPAÑA',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
     fill(4,3,'FECHAS',{bg:'FF1A3A6B',fg:'FFFFFFFF',bold:true,ha:'center',wrap:false});
@@ -7377,13 +7435,10 @@ async function descargarPlantillaEditorial(family){
     ws.getRow(8).height=32;
     let r=9;
     const dataRows=[];
-    catIds.forEach(cid=>{
-      const cat=CATS.find(c=>c.id===cid);
-      if(!cat) return;
-      const fmts=cat.fmts.filter(f=>!isPautaComercialFmt(f));
+    const appendFmtRows=(sectionLabel,fmts,sectionBg)=>{
       if(!fmts.length) return;
       ws.mergeCells(r,1,r,9);
-      fill(r,1,excelSectionLabel(cat),{bg:'FF0F2744',fg:'FFFFFFFF',bold:true,ha:'left',sz:10,wrap:false});
+      fill(r,1,sectionLabel,{bg:sectionBg||'FF0F2744',fg:'FFFFFFFF',bold:true,ha:'left',sz:10,wrap:false});
       ws.getRow(r).height=18;
       r++;
       fmts.forEach(f=>{
@@ -7403,7 +7458,18 @@ async function descargarPlantillaEditorial(family){
         dataRows.push(r);
         r++;
       });
+    };
+    catIds.forEach(cid=>{
+      const cat=CATS.find(c=>c.id===cid);
+      if(!cat) return;
+      const fmts=cat.fmts.filter(f=>!isPautaComercialFmt(f));
+      appendFmtRows(excelSectionLabel(cat),fmts);
     });
+    if(!isRadios){
+      pautaComercialImportSections(family).forEach(sec=>{
+        appendFmtRows(sec.label,sec.fmts,'FF1A3A6B');
+      });
+    }
     ws.mergeCells(r,1,r,9);
     fill(r,1,'Filas extra — copiar un formato para otra etapa o un formato que no esté arriba',{bg:'FF000000',fg:'FFFFFFFF',bold:true,ha:'left',sz:10,wrap:false});
     r++;
@@ -7425,7 +7491,7 @@ async function descargarPlantillaEditorial(family){
         type:'list',allowBlank:true,formulae:['_listas!$B$1:$B$'+ETAPAS_CANONICAS.length],
         showErrorMessage:true,errorTitle:'Etapa',error:'Elige Etapa previa, Durante o Post'
       });
-      const allNames=CATS.filter(c=>catIds.includes(c.id)).flatMap(c=>c.fmts).filter(f=>!isPautaComercialFmt(f)).map(f=>f.name);
+      const allNames=pautaTemplateAllFmts(family).map(f=>f.name);
       allNames.forEach((nm,i)=>{lists.getCell(i+1,3).value=nm;});
       ws.dataValidations.add('B'+extraStart+':B'+(extraStart+7),{
         type:'list',allowBlank:true,formulae:['_listas!$C$1:$C$'+Math.max(allNames.length,1)],
@@ -7466,6 +7532,22 @@ async function descargarPlantillaEditorial(family){
         cr++;
       });
     });
+    if(!isRadios){
+      pautaComercialImportSections(family).forEach(sec=>{
+        sec.fmts.forEach(f=>{
+          const vals=[sec.label,f.name,f.marca||'',f.desc||'',pautaFmtPlatLabel(f),pautaFmtDefaultImp(f)||''];
+          vals.forEach((v,ci)=>{
+            const cell=catSheet.getRow(cr).getCell(ci+1);
+            cell.value=v;
+            cell.font={name:'Calibri',size:10,bold:ci===1};
+            cell.alignment={vertical:'top',wrapText:true,horizontal:ci===5?'right':'left'};
+            if(ci===5) cell.numFmt='#,##0';
+          });
+          catSheet.getRow(cr).height=36;
+          cr++;
+        });
+      });
+    }
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const a=document.createElement('a');
