@@ -744,7 +744,7 @@ html[data-theme="day"] .login-card img{filter:none}
       <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
       <button class="btn btn-sec btn-full" onclick="exportarOTWeb()">Crear OT WEB</button>
     </div>
-    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Cambiar macheo opcional</p>
+    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Repositorio de capítulos</p>
   </div>
   <div class="hist-card">
     <div class="hist-header">
@@ -1096,6 +1096,16 @@ const CATS=[
        pautaPlats:[
          {plat:'Mega.cl',alc:150},
          {plat:'Meganoticias.cl',alc:200}
+       ]},
+      {id:'repo_capitulos',  name:'Repositorio de capítulos',           tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Facebook Mega · YouTube Mega',
+       marca:'Logo + mención',
+       desc:'Repositorio de capítulos publicados en Facebook y YouTube de Mega. Cantidad según número de capítulos de la campaña.',
+       ref:'',
+       tipo:'fijo', precio:800000, imp:13000,
+       pautaPlats:[
+         {plat:'YouTube Mega',alc:3000},
+         {plat:'Facebook Mega',alc:10000}
        ]},
       {id:'review_tec',      name:'Review Tecnológico',                 tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'Instagram · YouTube Shorts · TikTok · Facebook Mega y Meganoticias',
@@ -6026,6 +6036,8 @@ const PAUTA_ALIASES={
   'informativo en terreno':'info_terreno',
   'radar mega':'radar_mega',
   'repositorio vodcast':'vod_repositorio',
+  'repositorio de capitulos':'repo_capitulos',
+  'repositorio de capitulos mega':'repo_capitulos',
   'corte vertical':'corte_vertical',
   'contenidos digitales':'corte_vertical',
   'corte vertical a partir de vodcast mejores momentos':'vod_corte_mm',
@@ -6948,6 +6960,8 @@ function pautaScoreName(entry,fmt){
   if(/informativo/.test(n)&&/vertical/.test(n)&&/mega/.test(n)&&/meganoticias/.test(n)&&fmt.id==='info_vertical_hito') s=Math.max(s,1);
   if(n==='corte vertical'&&fmt.id==='corte_vertical') s=Math.max(s,1);
   if(/contenidos digitales/.test(n)&&fmt.id==='corte_vertical') s=Math.max(s,.95);
+  if((n==='repositorio de capitulos'||(/repositorio/.test(n)&&/capitulo/.test(n)&&!/vodcast/.test(n)))&&fmt.id==='repo_capitulos') s=Math.max(s,1);
+  if(/repositorio/.test(n)&&/capitulo/.test(n)&&!/vodcast/.test(n)&&fmt.id==='vod_repositorio') s=Math.min(s,.2);
   if(/informativo/.test(n)&&/previo|previa/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.88);
   if(/capsula/.test(n)&&/informativ/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.9);
   if((/capsula/.test(n)&&/vertical|rostro/.test(n)||/dinamica/.test(n)&&/rostro/.test(n))&&fmt.id==='dinamicas') s=Math.max(s,.92);
