@@ -502,6 +502,11 @@ html[data-theme="day"] .login-card img{filter:none}
 .pauta-pick-custom{border-style:dashed}
 .pauta-pick-custom .pauta-pick-opt-name{color:var(--am)}
 .pauta-pick-field-lbl{display:block;font-size:10px;color:var(--tx2);margin-top:6px;font-weight:600}
+.pauta-auto-list{list-style:none;margin:8px 0 0;padding:0}
+.pauta-auto-list li{margin:0 0 8px;padding:8px 10px;border:1px solid var(--bd);border-radius:6px;background:var(--dk)}
+.pauta-change-btn{margin-left:8px;padding:2px 8px;border:1px solid var(--bd2);border-radius:4px;background:transparent;color:var(--cy);font-size:10px;font-weight:600;cursor:pointer}
+.pauta-change-btn:hover{border-color:var(--cy);background:rgba(105,174,236,.08)}
+.pauta-pick-wrap{margin-top:8px}
 .pauta-custom-name{width:100%;margin-top:4px;background:var(--dk2);border:1px solid var(--am);border-radius:4px;padding:5px 8px;color:var(--tx);font-size:12.5px;font-weight:600;outline:none}
 .pauta-custom-name:focus{border-color:var(--cy)}
 .custom-fmt-name{width:100%;background:var(--dk);border:1px solid var(--am);border-radius:4px;padding:4px 8px;color:var(--tx);font-size:13px;font-weight:700;outline:none}
@@ -739,7 +744,7 @@ html[data-theme="day"] .login-card img{filter:none}
       <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
       <button class="btn btn-sec btn-full" onclick="exportarOTWeb()">Crear OT WEB</button>
     </div>
-    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Corte Vertical + macheo manual</p>
+    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Cambiar macheo opcional</p>
   </div>
   <div class="hist-card">
     <div class="hist-header">
@@ -7407,24 +7412,25 @@ function pautaEntryMetaLine(entry){
   if(entry.totalAlc>0) bits.push(f0(entry.totalAlc)+' imp.');
   return bits.join(' · ');
 }
-function buildPautaPickCard(idx,m){
+function buildPautaPickCard(idx,m,cardOpts){
+  cardOpts=cardOpts||{};
   const e=m.entry;
   const selectedId=m.matchInfo&&m.matchInfo.fmt?m.matchInfo.fmt.id:'';
-  let opts=(m.alternatives||[]).slice();
-  if(selectedId&&!opts.some(c=>c.fmt.id===selectedId)){
+  let altList=(m.alternatives||[]).slice();
+  if(selectedId&&!altList.some(c=>c.fmt.id===selectedId)){
     const fmt=allFmts().find(f=>f.id===selectedId);
-    if(fmt) opts.unshift({fmt,score:m.matchInfo.score||1,method:m.matchInfo.method||'auto'});
+    if(fmt) altList.unshift({fmt,score:m.matchInfo.score||1,method:m.matchInfo.method||'auto'});
   }
   const seen=new Set();
-  opts=opts.filter(c=>{if(seen.has(c.fmt.id))return false;seen.add(c.fmt.id);return true;});
-  opts.sort((a,b)=>(b.score||0)-(a.score||0));
+  altList=altList.filter(c=>{if(seen.has(c.fmt.id))return false;seen.add(c.fmt.id);return true;});
+  altList.sort((a,b)=>(b.score||0)-(a.score||0));
   if(selectedId){
-    const selIdx=opts.findIndex(c=>c.fmt.id===selectedId);
-    if(selIdx>0){const[s]=opts.splice(selIdx,1);opts.unshift(s);}
+    const selIdx=altList.findIndex(c=>c.fmt.id===selectedId);
+    if(selIdx>0){const[s]=altList.splice(selIdx,1);altList.unshift(s);}
   }
-  opts=opts.slice(0,PAUTA_ALTERNATIVES_MAX);
+  altList=altList.slice(0,PAUTA_ALTERNATIVES_MAX);
   let radios='';
-  opts.forEach((c,i)=>{
+  altList.forEach((c,i)=>{
     const pct=Math.round((c.score||0)*100);
     const hint=pautaFmtHint(c.fmt,c.breakdown);
     const checked=(selectedId&&c.fmt.id===selectedId)||(!selectedId&&i===0);
@@ -7441,7 +7447,7 @@ function buildPautaPickCard(idx,m){
   const customDesc=pautaCellStr(e.tematica)||'(sin descripción)';
   const customPlats=pautaEntryPlatSummary(e)||'(sin plataformas)';
   radios+=`<label class="pauta-pick-opt pauta-pick-custom">
-    <input type="radio" name="pautaPick_${idx}" value="__custom__"${!opts.length?' checked':''}>
+    <input type="radio" name="pautaPick_${idx}" value="__custom__"${!altList.length?' checked':''}>
     <span class="pauta-pick-opt-body">
       <div class="pauta-pick-opt-name">＋ Crear formato nuevo</div>
       <label class="pauta-pick-field-lbl" for="pautaCustomName_${idx}">Nombre del formato (editable)</label>
@@ -7457,22 +7463,32 @@ function buildPautaPickCard(idx,m){
   const tag=m.needsReview
     ?'<span class="pauta-tag pauta-tag-pick">Revisar</span>'
     :'<span class="pauta-tag pauta-tag-ok">Sugerido</span>';
-  const altHint=opts.length
-    ?'Elige el formato del catálogo o crea uno nuevo. La opción marcada es la sugerencia automática:'
-    :'No se encontraron alternativas cercanas. Puedes crear un formato nuevo; el nombre es editable:';
+  const altHint=cardOpts.compact
+    ?'Elige otro formato del catálogo o crea uno nuevo:'
+    :(altList.length
+      ?'Elige el formato del catálogo o crea uno nuevo. La opción marcada es la sugerencia automática:'
+      :'No se encontraron alternativas cercanas. Puedes crear un formato nuevo; el nombre es editable:');
   return`<div class="pauta-pick-card" data-pauta-idx="${idx}">
-    <div class="pauta-pick-src"><strong>${escHtml(pautaCellStr(e.tipoContenido)||'(sin nombre)')}</strong>
-      ${tag}</div>
-    ${meta?`<div class="pauta-pick-meta">${meta}</div>`:''}
+    ${cardOpts.compact?'':`<div class="pauta-pick-src"><strong>${escHtml(pautaCellStr(e.tipoContenido)||'(sin nombre)')}</strong> ${tag}</div>`}
+    ${!cardOpts.compact&&meta?`<div class="pauta-pick-meta">${meta}</div>`:''}
     <p class="pauta-pick-hint">${altHint}</p>
     <div class="pauta-pick-opts">${radios}</div>
   </div>`;
 }
+function pautaTogglePick(idx){
+  const wrap=document.getElementById('pautaPickWrap_'+idx);
+  const btn=document.querySelector('.pauta-change-btn[data-pauta-idx="'+idx+'"]');
+  if(!wrap) return;
+  const open=wrap.style.display!=='none';
+  wrap.style.display=open?'none':'block';
+  if(btn) btn.textContent=open?'Cambiar':'Ocultar alternativas';
+}
 function buildPautaPreviewHtml(parsed,matches){
+  const auto=matches.filter(m=>!m.needsReview);
+  const review=matches.filter(m=>m.needsReview);
   const fam=parsed.origenFamily==='radios'?'Digital Radios':(parsed.origenFamily==='mega'?'Digital Mega':'');
   const origines=[...new Set((parsed.entries||[]).map(e=>e.medio).filter(Boolean))];
   const already=allFmts().some(f=>STATE[f.id]&&STATE[f.id].active);
-  const review=matches.filter(m=>m.needsReview).length;
   let html='<p>Se detectaron <strong>'+parsed.entries.length+'</strong> formatos'
     +(parsed.etapas.length?' en <strong>'+parsed.etapas.length+'</strong> etapas':'')
     +(fam?' · origen <strong>'+escHtml(fam)+'</strong>':'')+'.</p>';
@@ -7485,14 +7501,35 @@ function buildPautaPreviewHtml(parsed,matches){
   if(already){
     html+='<p style="color:var(--cy);font-size:12px;margin-top:8px">Se <strong>sumarán</strong> a la propuesta actual. No se reemplazan los formatos ya activos.</p>';
   }
-  html+='<p style="color:var(--or);font-size:12px;margin-top:8px"><strong>Revisa cada fila antes de importar.</strong> Puedes cambiar cualquier asignación sugerida eligiendo otro formato del catálogo.</p>';
-  if(review){
-    html+='<p style="font-size:12px;color:var(--tx2)">'+review+' formato'+(review!==1?'s':'')+' con coincidencia incierta (etiqueta Revisar).</p>';
+  if(review.length){
+    html+='<p style="color:var(--or);font-size:12px;margin-top:6px"><strong>'+review.length+'</strong> formato'+(review.length!==1?'s requieren':' requiere')+' que confirmes la asignación.</p>';
   }
-  html+='<div style="margin-top:12px">';
-  matches.forEach((m,idx)=>{html+=buildPautaPickCard(idx,m);});
-  html+='</div>';
-  html+='<p style="margin-top:10px;color:var(--tx2);font-size:12px">Los formatos personalizados se guardan en «Formatos personalizados». El precio unitario queda en $0 para completarlo manualmente. Influencers no se importan desde editorial; DISPLAY Y PAID MEDIA de Live Shopping sí (CPM e impresiones del tarifario).</p>';
+  if(auto.length){
+    html+='<p style="margin-top:10px;font-size:12px;color:var(--tx2)">Coincidencias automáticas ('+auto.length+'):</p><ul class="pauta-auto-list">';
+    matches.forEach((m,idx)=>{
+      if(m.needsReview) return;
+      const e=m.entry;
+      const tipoLabel=pautaCellStr(e.tipoContenido)||'(sin nombre)';
+      const destName=m.matchInfo&&m.matchInfo.fmt?m.matchInfo.fmt.name:tipoLabel;
+      const tag=m.matchInfo&&m.matchInfo.score>=PAUTA_MATCH_CONFIDENT
+        ?'<span class="pauta-tag pauta-tag-ok">Coincidencia</span>'
+        :'<span class="pauta-tag pauta-tag-warn">Aproximado</span>';
+      html+='<li><strong>'+escHtml(tipoLabel)+'</strong> → '+escHtml(destName)
+        +(e.etapa?' <span class="pauta-tag">'+escHtml(e.etapa)+'</span>':'')
+        +tag
+        +' <button type="button" class="pauta-change-btn" data-pauta-idx="'+idx+'" onclick="pautaTogglePick('+idx+')">Cambiar</button>'
+        +'<div id="pautaPickWrap_'+idx+'" class="pauta-pick-wrap" style="display:none">'
+        +buildPautaPickCard(idx,m,{compact:true})
+        +'</div></li>';
+    });
+    html+='</ul>';
+  }
+  if(review.length){
+    html+='<div style="margin-top:12px">';
+    matches.forEach((m,idx)=>{if(m.needsReview) html+=buildPautaPickCard(idx,m);});
+    html+='</div>';
+  }
+  html+='<p style="margin-top:10px;color:var(--tx2);font-size:12px">Si una coincidencia automática no es la correcta, usa <strong>Cambiar</strong> para elegir otro formato. Los formatos personalizados se guardan en «Formatos personalizados». Influencers no se importan desde editorial; DISPLAY Y PAID MEDIA de Live Shopping sí (CPM e impresiones del tarifario).</p>';
   return html;
 }
 function pautaSelectCustom(idx){
@@ -7510,6 +7547,8 @@ function getPautaSelectedMatchInfo(idx,m){
   if(pick.value==='__custom__') return null;
   const fmt=allFmts().find(f=>f.id===pick.value);
   if(!fmt) return m.matchInfo;
+  const autoId=m.matchInfo&&m.matchInfo.fmt?m.matchInfo.fmt.id:'';
+  if(pick.value===autoId&&(!m.matchInfo||m.matchInfo.method!=='user-selected')) return m.matchInfo;
   return{fmt,score:+(pick.dataset.score||0),method:'user-selected'};
 }
 function createCustomFromEntry(entry,nameOverride){
@@ -7737,13 +7776,13 @@ function confirmarImportPauta(){
   buildFmts();
   render();
   const nuevos=allMatches.filter((m,idx)=>!getPautaSelectedMatchInfo(idx,m)).length;
-  const revisados=allMatches.filter((m,idx)=>{
+  const cambiados=allMatches.filter((m,idx)=>{
     const sel=getPautaSelectedMatchInfo(idx,m);
-    return m.needsReview||!sel||sel.method==='user-selected';
+    return sel&&sel.method==='user-selected';
   }).length;
   showToast('✓ Pauta importada: '+parsed.entries.length+' formatos'
     +(nuevos?' ('+nuevos+' personalizados)':'')
-    +(revisados?' · '+revisados+' asignados manualmente':''));
+    +(cambiados?' · '+cambiados+' cambiados manualmente':''));
 }
 async function importarPautaEditorial(input){
   const file=input.files&&input.files[0];
