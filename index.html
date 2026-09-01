@@ -744,7 +744,7 @@ html[data-theme="day"] .login-card img{filter:none}
       <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
       <button class="btn btn-sec btn-full" onclick="exportarOTWeb()">Crear OT WEB</button>
     </div>
-    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Repositorio de capítulos</p>
+    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Resumen neto + unitario</p>
   </div>
   <div class="hist-card">
     <div class="hist-header">
@@ -2140,6 +2140,20 @@ function calcFmtNeto(f,s){
   if(f.radioType==='radio'){ migrateRadioEntries(s,f); return calcRadioFmtTotals(f,s).neto; }
   return unitNetoFromTarget(s,fmtMediaBruto(f,s)).neto+fmtCostoProdExtra(f,s);
 }
+function fmtImpTotal(f,s){
+  if(!f||!s) return 0;
+  if(f.infType==='influencer') return calcInfluencerTotals(s).sumReach||0;
+  const pautaM=s.pautaPlats&&s.pautaPlats.length?calcPautaPlatsMetrics(f,s):null;
+  if(esTipoRRSS(f)) return calcRRSSFmtImp(f,s);
+  if(pautaM) return pautaM.imp;
+  if(esTipoWeb(f)) return calcWebFmtTotals(f,s).imp;
+  if(f.radioType==='radio') return calcRadioFmtTotals(f,s).imp;
+  return (+s.imp||0)*(+s.qty||1);
+}
+function sumRowFinalAmount(r,tNeto,tFinal){
+  if(tNeto<=0) return 0;
+  return Math.round((r.neto/tNeto)*tFinal);
+}
 function visibleFmtRoot(id){
   const sr=document.getElementById('sr_'+id);
   if(sr&&sr.offsetParent!==null) return sr;
@@ -2226,9 +2240,15 @@ function setFmtPricePreview(id,f,s){
   const costoExtra=fmtCostoProdExtra(f,s);
   const {neto,desc}=unitNetoFromTarget(s,bruto);
   const netoFinal=neto+costoExtra;
+  const qty=Math.max(1,+s.qty||1);
+  const unitNeto=Math.round(netoFinal/qty);
+  const impTotal=fmtImpTotal(f,s);
+  const detailBits=[`<span style="color:var(--tx2)">Unit. c/dto: <strong style="color:var(--cy)">$${f0(unitNeto)}</strong></span>`];
+  if(impTotal>0) detailBits.push(`<span style="color:var(--tx2)">Impresiones: <strong style="color:var(--tx)">${f0(impTotal)}</strong></span>`);
+  const detailLine=`<div style="font-size:10.5px;margin-top:4px">${detailBits.join(' · ')}</div>`;
   const html=s.dto>0||costoExtra>0
-    ?`<span style="color:var(--tx2);font-size:10.5px">Bruto: <s style="color:var(--tx3)">$${f0(bruto+costoExtra)}</s> &nbsp;·&nbsp; Dto: <span style="color:var(--or)">-$${f0(desc)}</span>${costoExtra>0?` &nbsp;·&nbsp; Prod.: <span style="color:var(--or)">+$${f0(costoExtra)}</span>`:''} &nbsp;·&nbsp; </span><span style="color:var(--cy);font-weight:700;font-size:11px">Neto: $${f0(netoFinal)}</span>`
-    :`<span style="color:var(--cy);font-weight:700;font-size:11px">Inversión: $${f0(netoFinal)}</span>`;
+    ?`<span style="color:var(--tx2);font-size:10.5px">Bruto: <s style="color:var(--tx3)">$${f0(bruto+costoExtra)}</s> &nbsp;·&nbsp; Dto: <span style="color:var(--or)">-$${f0(desc)}</span>${costoExtra>0?` &nbsp;·&nbsp; Prod.: <span style="color:var(--or)">+$${f0(costoExtra)}</span>`:''} &nbsp;·&nbsp; </span><span style="color:var(--cy);font-weight:700;font-size:11px">Neto: $${f0(netoFinal)}</span>${detailLine}`
+    :`<span style="color:var(--cy);font-weight:700;font-size:11px">Inversión: $${f0(netoFinal)}</span>${detailLine}`;
   const el=document.getElementById('price_'+id);
   const srEl=document.getElementById('srprice_'+id);
   if(el) el.innerHTML=html;
@@ -4011,17 +4031,17 @@ function render(){
   </tr>`;
   document.getElementById('tBody').innerHTML=tbody;
 
-  // Sidebar
+  // Sidebar — montos netos (dto. por formato + prorrateo dto. volumen) para ver share
   const tBrutoTotal=rows.reduce((a,r)=>a+r.bruto,0);
   document.getElementById('sumRows').innerHTML=
-    rows.filter(r=>!r.infDetailRow).map(r=>`<div class="sum-row">
+    rows.filter(r=>!r.infDetailRow).map(r=>{
+      const amt=sumRowFinalAmount(r,tNeto,tFinal);
+      const share=tFinal>0?((amt/tFinal)*100).toFixed(1):'0.0';
+      return `<div class="sum-row">
       <span class="sum-label">${sumFmtLink(r)}</span>
-      <span class="sum-val" style="color:var(--tx)">${fM(r.bruto)}</span>
-    </div>`).join('')
-    +(tDescUnit>0?`<div class="sum-dto-row">
-      <span class="sum-dto-label">Dtos. por formato</span>
-      <span class="sum-dto-val">-${fM(tDescUnit)}</span>
-    </div>`:'')
+      <span class="sum-val"><span style="color:var(--cy)">${fM(amt)}</span><span style="font-size:9px;color:var(--tx3);margin-left:5px">${share}%</span></span>
+    </div>`;
+    }).join('')
     +(dtoG>0?`<div class="sum-dto-row">
       <span class="sum-dto-label">Dto. volumen (${formatDtoPct(dtoG)}%)${DTO_CONTROL==='final'?' · manual':''}</span>
       <span class="sum-dto-val">-${fM(dtoGM)}</span>
@@ -4056,6 +4076,9 @@ function render(){
   } else {
     psStrip.style.display='none';
   }
+  allFmts().filter(f=>STATE[f.id]&&STATE[f.id].active).forEach(f=>{
+    setFmtPricePreview(f.id,f,STATE[f.id]);
+  });
   scheduleDraftSave();
 }
 
