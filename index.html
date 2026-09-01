@@ -739,7 +739,7 @@ html[data-theme="day"] .login-card img{filter:none}
       <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
       <button class="btn btn-sec btn-full" onclick="exportarOTWeb()">Crear OT WEB</button>
     </div>
-    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Informativo Vertical Mega+MN</p>
+    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Corte Vertical + macheo manual</p>
   </div>
   <div class="hist-card">
     <div class="hist-header">
@@ -865,6 +865,18 @@ const CATS=[
        marca:'Logo + mención',
        desc:'Publicación de comunicado de prensa patrocinado en sitio web de Mega o Meganoticias.',
        ref:'', tipo:'fijo', precio:600000, imp:150},
+      {id:'corte_vertical',  name:'Corte Vertical',                     tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Instagram Mega · Facebook Mega · Shorts Mega · TikTok Mega',
+       marca:'Logo + mención',
+       desc:'Repositorio de contenidos digitales en formato vertical para RRSS. Distribución multiplataforma Mega.',
+       ref:'https://www.instagram.com/p/Dcuyq6yjq6S/',
+       tipo:'fijo', precio:2500000, imp:52000,
+       pautaPlats:[
+         {plat:'Instagram Mega',alc:30000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
       {id:'capsula_info_mn', name:'Cápsula Informativa Meganoticias',   tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'TikTok Meganoticias · Instagram Meganoticias · Shorts Meganoticias · Facebook Meganoticias',
        marca:'Caluga con logos + mención',
@@ -6009,6 +6021,8 @@ const PAUTA_ALIASES={
   'informativo en terreno':'info_terreno',
   'radar mega':'radar_mega',
   'repositorio vodcast':'vod_repositorio',
+  'corte vertical':'corte_vertical',
+  'contenidos digitales':'corte_vertical',
   'corte vertical a partir de vodcast mejores momentos':'vod_corte_mm',
   'backstage de la grabacion':'__backstage__',
   'backstage':'__backstage__',
@@ -6927,6 +6941,8 @@ function pautaScoreName(entry,fmt){
   let s=matchScore(n,fn);
   if(n&&fn&&(n.includes(fn)||fn.includes(n))) s=Math.max(s,.85);
   if(/informativo/.test(n)&&/vertical/.test(n)&&/mega/.test(n)&&/meganoticias/.test(n)&&fmt.id==='info_vertical_hito') s=Math.max(s,1);
+  if(n==='corte vertical'&&fmt.id==='corte_vertical') s=Math.max(s,1);
+  if(/contenidos digitales/.test(n)&&fmt.id==='corte_vertical') s=Math.max(s,.95);
   if(/informativo/.test(n)&&/previo|previa/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.88);
   if(/capsula/.test(n)&&/informativ/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.9);
   if((/capsula/.test(n)&&/vertical|rostro/.test(n)||/dinamica/.test(n)&&/rostro/.test(n))&&fmt.id==='dinamicas') s=Math.max(s,.92);
@@ -7106,6 +7122,7 @@ function pautaAliasMatch(n,entry){
     .filter(key=>key.length>=6&&(n.includes(key)||(n.length>=8&&key.includes(n))))
     .sort((a,b)=>b.length-a.length);
   for(const key of partialKeys){
+    if(n==='corte vertical'&&PAUTA_ALIASES[key]==='vod_corte_mm') continue;
     const hit=resolveAliasId(PAUTA_ALIASES[key]);
     if(hit) return{...hit,score:hit.score>=1?.95:hit.score,method:hit.method==='alias'?'alias-partial':hit.method};
   }
@@ -7392,13 +7409,27 @@ function pautaEntryMetaLine(entry){
 }
 function buildPautaPickCard(idx,m){
   const e=m.entry;
-  const opts=(m.alternatives||[]).slice().sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,PAUTA_ALTERNATIVES_MAX);
+  const selectedId=m.matchInfo&&m.matchInfo.fmt?m.matchInfo.fmt.id:'';
+  let opts=(m.alternatives||[]).slice();
+  if(selectedId&&!opts.some(c=>c.fmt.id===selectedId)){
+    const fmt=allFmts().find(f=>f.id===selectedId);
+    if(fmt) opts.unshift({fmt,score:m.matchInfo.score||1,method:m.matchInfo.method||'auto'});
+  }
+  const seen=new Set();
+  opts=opts.filter(c=>{if(seen.has(c.fmt.id))return false;seen.add(c.fmt.id);return true;});
+  opts.sort((a,b)=>(b.score||0)-(a.score||0));
+  if(selectedId){
+    const selIdx=opts.findIndex(c=>c.fmt.id===selectedId);
+    if(selIdx>0){const[s]=opts.splice(selIdx,1);opts.unshift(s);}
+  }
+  opts=opts.slice(0,PAUTA_ALTERNATIVES_MAX);
   let radios='';
   opts.forEach((c,i)=>{
     const pct=Math.round((c.score||0)*100);
     const hint=pautaFmtHint(c.fmt,c.breakdown);
+    const checked=(selectedId&&c.fmt.id===selectedId)||(!selectedId&&i===0);
     radios+=`<label class="pauta-pick-opt">
-      <input type="radio" name="pautaPick_${idx}" value="${escHtml(c.fmt.id)}" data-score="${c.score||0}"${i===0?' checked':''}>
+      <input type="radio" name="pautaPick_${idx}" value="${escHtml(c.fmt.id)}" data-score="${c.score||0}"${checked?' checked':''}>
       <span class="pauta-pick-opt-body">
         <div class="pauta-pick-opt-name">${escHtml(c.fmt.name)}</div>
         ${hint?`<div class="pauta-pick-opt-sub">${escHtml(hint)}</div>`:''}
@@ -7423,23 +7454,25 @@ function buildPautaPickCard(idx,m){
     </span>
   </label>`;
   const meta=pautaEntryMetaLine(e);
+  const tag=m.needsReview
+    ?'<span class="pauta-tag pauta-tag-pick">Revisar</span>'
+    :'<span class="pauta-tag pauta-tag-ok">Sugerido</span>';
   const altHint=opts.length
-    ?'Alternativas ordenadas por <strong>porcentaje de coincidencia</strong> (de mayor a menor). Elige una del catálogo o crea un formato nuevo y edita su nombre:'
+    ?'Elige el formato del catálogo o crea uno nuevo. La opción marcada es la sugerencia automática:'
     :'No se encontraron alternativas cercanas. Puedes crear un formato nuevo; el nombre es editable:';
   return`<div class="pauta-pick-card" data-pauta-idx="${idx}">
     <div class="pauta-pick-src"><strong>${escHtml(pautaCellStr(e.tipoContenido)||'(sin nombre)')}</strong>
-      <span class="pauta-tag pauta-tag-pick">Revisar</span></div>
+      ${tag}</div>
     ${meta?`<div class="pauta-pick-meta">${meta}</div>`:''}
     <p class="pauta-pick-hint">${altHint}</p>
     <div class="pauta-pick-opts">${radios}</div>
   </div>`;
 }
 function buildPautaPreviewHtml(parsed,matches){
-  const auto=matches.filter(m=>!m.needsReview);
-  const review=matches.filter(m=>m.needsReview);
   const fam=parsed.origenFamily==='radios'?'Digital Radios':(parsed.origenFamily==='mega'?'Digital Mega':'');
   const origines=[...new Set((parsed.entries||[]).map(e=>e.medio).filter(Boolean))];
   const already=allFmts().some(f=>STATE[f.id]&&STATE[f.id].active);
+  const review=matches.filter(m=>m.needsReview).length;
   let html='<p>Se detectaron <strong>'+parsed.entries.length+'</strong> formatos'
     +(parsed.etapas.length?' en <strong>'+parsed.etapas.length+'</strong> etapas':'')
     +(fam?' · origen <strong>'+escHtml(fam)+'</strong>':'')+'.</p>';
@@ -7452,29 +7485,13 @@ function buildPautaPreviewHtml(parsed,matches){
   if(already){
     html+='<p style="color:var(--cy);font-size:12px;margin-top:8px">Se <strong>sumarán</strong> a la propuesta actual. No se reemplazan los formatos ya activos.</p>';
   }
-  if(review.length){
-    html+='<p style="color:var(--or);font-size:12px;margin-top:6px"><strong>'+review.length+'</strong> formato'+(review.length!==1?'s requieren':' requiere')+' que confirmes la asignación.</p>';
+  html+='<p style="color:var(--or);font-size:12px;margin-top:8px"><strong>Revisa cada fila antes de importar.</strong> Puedes cambiar cualquier asignación sugerida eligiendo otro formato del catálogo.</p>';
+  if(review){
+    html+='<p style="font-size:12px;color:var(--tx2)">'+review+' formato'+(review!==1?'s':'')+' con coincidencia incierta (etiqueta Revisar).</p>';
   }
-  if(auto.length){
-    html+='<p style="margin-top:10px;font-size:12px;color:var(--tx2)">Coincidencias automáticas ('+auto.length+'):</p><ul>';
-    auto.forEach(m=>{
-      const e=m.entry;
-      const tipoLabel=pautaCellStr(e.tipoContenido)||'(sin nombre)';
-      const destName=m.matchInfo&&m.matchInfo.fmt?m.matchInfo.fmt.name:tipoLabel;
-      const tag=m.matchInfo&&m.matchInfo.score>=PAUTA_MATCH_CONFIDENT
-        ?'<span class="pauta-tag pauta-tag-ok">Coincidencia</span>'
-        :'<span class="pauta-tag pauta-tag-warn">Aproximado</span>';
-      html+='<li><strong>'+escHtml(tipoLabel)+'</strong> → '+escHtml(destName)
-        +(e.etapa?' <span class="pauta-tag">'+escHtml(e.etapa)+'</span>':'')
-        +tag+'</li>';
-    });
-    html+='</ul>';
-  }
-  if(review.length){
-    html+='<div style="margin-top:12px">';
-    matches.forEach((m,idx)=>{if(m.needsReview) html+=buildPautaPickCard(idx,m);});
-    html+='</div>';
-  }
+  html+='<div style="margin-top:12px">';
+  matches.forEach((m,idx)=>{html+=buildPautaPickCard(idx,m);});
+  html+='</div>';
   html+='<p style="margin-top:10px;color:var(--tx2);font-size:12px">Los formatos personalizados se guardan en «Formatos personalizados». El precio unitario queda en $0 para completarlo manualmente. Influencers no se importan desde editorial; DISPLAY Y PAID MEDIA de Live Shopping sí (CPM e impresiones del tarifario).</p>';
   return html;
 }
@@ -7488,7 +7505,6 @@ function getPautaCustomName(idx,entry){
   return v||pautaCellStr(entry.tipoContenido)||'Formato personalizado';
 }
 function getPautaSelectedMatchInfo(idx,m){
-  if(!m.needsReview) return m.matchInfo;
   const pick=document.querySelector('input[name="pautaPick_'+idx+'"]:checked');
   if(!pick) return m.matchInfo;
   if(pick.value==='__custom__') return null;
@@ -7720,8 +7736,11 @@ function confirmarImportPauta(){
   cerrarPautaModal();
   buildFmts();
   render();
-  const nuevos=matches.filter((m,idx)=>!getPautaSelectedMatchInfo(idx,m)).length;
-  const revisados=matches.filter(m=>m.needsReview).length;
+  const nuevos=allMatches.filter((m,idx)=>!getPautaSelectedMatchInfo(idx,m)).length;
+  const revisados=allMatches.filter((m,idx)=>{
+    const sel=getPautaSelectedMatchInfo(idx,m);
+    return m.needsReview||!sel||sel.method==='user-selected';
+  }).length;
   showToast('✓ Pauta importada: '+parsed.entries.length+' formatos'
     +(nuevos?' ('+nuevos+' personalizados)':'')
     +(revisados?' · '+revisados+' asignados manualmente':''));
