@@ -5213,10 +5213,10 @@ async function exportarExcel(){
         }
 
         const medio = medioPre;
-        sc(r,1,medio,{bg,fg:C.black,bold:true,sz:9,ha:'center',va:'top'});
-        sc(r,2,fmtDisplayName(row.f,row.s),{bg,fg:C.black,bold:true,sz:9,ha:'center',va:'top'});
-        sc(r,3,row.f.marca||'',{bg,fg:C.black,sz:9,ha:'center',va:'top'});
-        sc(r,4,descFull,{bg,fg:C.black,sz:9,ha:'left',italic:true,wrap:true,va:'top'});
+        sc(r,1,medio,{bg,fg:C.black,bold:true,sz:9,ha:'center'});
+        sc(r,2,fmtDisplayName(row.f,row.s),{bg,fg:C.black,bold:true,sz:9,ha:'center'});
+        sc(r,3,row.f.marca||'',{bg,fg:C.black,sz:9,ha:'center'});
+        sc(r,4,descFull,{bg,fg:C.black,sz:9,ha:'left',italic:true,wrap:true});
         // Referencia con hyperlink
         {const refCell=ws.getRow(dataRowN).getCell(5);
          if(row.f.ref){
@@ -5228,7 +5228,7 @@ async function exportarExcel(){
            sc(ws.getRow(dataRowN),5,'',{bg,fg:C.black,sz:9,ha:'center',italic:true});
          }}
         sc(r,6,row.s.qty,{bg,fg:C.black,bold:true,sz:9,ha:'center'});
-        sc(r,7,platVal,{bg:bgS,fg:(row.webPlatRadio||row.radioStation)?'FFCC6600':C.black,sz:9,ha:'left',wrap:true,va:'top'});
+        sc(r,7,platVal,{bg:bgS,fg:(row.webPlatRadio||row.radioStation)?'FFCC6600':C.black,sz:9,ha:'left',wrap:true});
         sc(r,8,row.alc>0?row.alc:'',{bg:bgS,fg:C.black,sz:9,ha:'right',nfmt:'#,##0'});
         sc(r,9,row.imp>0?row.imp:'',{bg,fg:C.black,sz:9,ha:'right',nfmt:'#,##0',bold:!!row.impModified});
         // CTR / VTR por formato
