@@ -739,7 +739,7 @@ html[data-theme="day"] .login-card img{filter:none}
       <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
       <button class="btn btn-sec btn-full" onclick="exportarOTWeb()">Crear OT WEB</button>
     </div>
-    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Import sin Live Shopping cruzado</p>
+    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Informativo Vertical Mega+MN</p>
   </div>
   <div class="hist-card">
     <div class="hist-header">
@@ -996,7 +996,16 @@ const CATS=[
        marca:'Logo + product placement',
        desc:'Informativo vertical que profundiza en un anuncio o hito clave de la marca. Distribución multiplataforma en Mega y Meganoticias.',
        ref:'https://www.instagram.com/reel/DZORuYSFeE9/',
-       tipo:'fijo', precio:2500000, imp:245000},
+       tipo:'fijo', precio:2500000, imp:245000,
+       pautaPlats:[
+         {plat:'Instagram Mega y Meganoticias',alc:200000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'Facebook Meganoticias',alc:20000},
+         {plat:'TikTok Mega',alc:10000},
+         {plat:'TikTok Meganoticias',alc:2000},
+         {plat:'Shorts Meganoticias',alc:3000},
+         {plat:'Shorts Mega',alc:2000}
+       ]},
       {id:'info_vertical_vocero', name:'Informativo vertical junto a vocero', tag:'Precio fijo', tagCls:'tag-fijo',
        plat:'TikTok · Instagram · Shorts · Facebook Meganoticias',
        marca:'Caluga con logos + mención',
@@ -5990,6 +5999,8 @@ const PAUTA_ALIASES={
   'capsula informativa':'__capsula_mn__',
   'capsula informativa meganoticias':'capsula_info_mn',
   'informativo meganoticias':'capsula_info_mn',
+  'informativo vertical mega + meganoticias':'info_vertical_hito',
+  'informativo vertical mega y meganoticias':'info_vertical_hito',
   'grafica informativa sabias que':'grafica_sabias_que',
   'live en estudio digital':'live_estudio_digital',
   'informativo vertical junto a vocero':'info_vertical_vocero',
@@ -6915,6 +6926,7 @@ function pautaScoreName(entry,fmt){
   if(fn===n) return 1;
   let s=matchScore(n,fn);
   if(n&&fn&&(n.includes(fn)||fn.includes(n))) s=Math.max(s,.85);
+  if(/informativo/.test(n)&&/vertical/.test(n)&&/mega/.test(n)&&/meganoticias/.test(n)&&fmt.id==='info_vertical_hito') s=Math.max(s,1);
   if(/informativo/.test(n)&&/previo|previa/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.88);
   if(/capsula/.test(n)&&/informativ/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.9);
   if((/capsula/.test(n)&&/vertical|rostro/.test(n)||/dinamica/.test(n)&&/rostro/.test(n))&&fmt.id==='dinamicas') s=Math.max(s,.92);
@@ -7114,8 +7126,10 @@ function pautaAliasMatch(n,entry){
   if(/backstage/.test(n)){
     return resolveBackstageMatch(entry,n);
   }
-  // Cápsula Informativa MN solo si habla de informativa / previo / meganoticias
-  if((/capsula/.test(n)&&/informativ/.test(n))||(/informativo/.test(n)&&/previo|previa|meganoticias/.test(n))){
+  const infoVerticalDual=resolveInfoVerticalDualMatch(entry,n);
+  if(infoVerticalDual) return infoVerticalDual;
+  // Cápsula Informativa MN solo si habla de informativa / previo / meganoticias (no dual Mega+MN)
+  if((/capsula/.test(n)&&/informativ/.test(n))||(/informativo/.test(n)&&/previo|previa|meganoticias/.test(n)&&!/vertical/.test(n)&&!/mega/.test(n))){
     return resolveCapsulaMnMatch(entry,n);
   }
   if((/grafica/.test(n)||(/carrusel/.test(n)&&!/productos/.test(n)))&&!/descuento|dto|oferta|anuncio/.test(n)){
@@ -7168,11 +7182,25 @@ function pickGraficaFeedId(entry){
   if(/meganoticias/.test(p)) return'grafica_mn';
   return'grafica_mega';
 }
+function resolveInfoVerticalDualMatch(entry,n){
+  const dualName=/informativo/.test(n)&&/vertical/.test(n)&&/mega/.test(n)&&/meganoticias/.test(n);
+  const mega=pautaPlatHasBrand(entry,'mega');
+  const mn=pautaPlatHasBrand(entry,'meganoticias');
+  const dualPlat=mega&&mn;
+  const scope=pautaEntryBrandScope(entry);
+  if(!dualName&&!dualPlat&&scope!=='both') return null;
+  const f=allFmts().find(x=>x.id==='info_vertical_hito');
+  if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
+  const r=scorePautaEntryVsFormat(entry,f);
+  return{fmt:f,score:Math.max(r.score,dualName?1:.95),method:'info-vertical-dual',breakdown:r.breakdown};
+}
 function resolveCapsulaMnMatch(entry,n){
   const f=allFmts().find(x=>x.id===PAUTA_CAPSULA_MN_ID);
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
-  // No forzar MN si la pauta es solo Mega
-  if(pautaEntryBrandScope(entry)==='mega') return null;
+  if(resolveInfoVerticalDualMatch(entry,n)) return null;
+  const scope=pautaEntryBrandScope(entry);
+  if(scope==='mega'||scope==='both') return null;
+  if(/informativo/.test(n)&&/vertical/.test(n)) return null;
   const plat=pautaPlatMatchAnalysis(entry,f);
   const r=scorePautaEntryVsFormat(entry,f);
   const score=Math.max(r.score,.9,plat.fullMatch?1:.85);
