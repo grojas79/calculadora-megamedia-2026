@@ -7542,6 +7542,10 @@ function getPautaCustomName(idx,entry){
   return v||pautaCellStr(entry.tipoContenido)||'Formato personalizado';
 }
 function getPautaSelectedMatchInfo(idx,m){
+  if(!m.needsReview){
+    const wrap=document.getElementById('pautaPickWrap_'+idx);
+    if(!wrap||wrap.style.display==='none') return m.matchInfo;
+  }
   const pick=document.querySelector('input[name="pautaPick_'+idx+'"]:checked');
   if(!pick) return m.matchInfo;
   if(pick.value==='__custom__') return null;
