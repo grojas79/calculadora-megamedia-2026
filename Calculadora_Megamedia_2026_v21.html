@@ -4036,10 +4036,10 @@ function render(){
   document.getElementById('sumRows').innerHTML=
     rows.filter(r=>!r.infDetailRow).map(r=>{
       const amt=sumRowFinalAmount(r,tNeto,tFinal);
-      const share=tFinal>0?((amt/tFinal)*100).toFixed(1)+'%':'';
+      const share=tFinal>0?((amt/tFinal)*100).toFixed(1):'0.0';
       return `<div class="sum-row">
       <span class="sum-label">${sumFmtLink(r)}</span>
-      <span class="sum-val" style="color:var(--cy)" title="${share} del total">${fM(amt)}</span>
+      <span class="sum-val"><span style="color:var(--cy)">${fM(amt)}</span><span style="font-size:9px;color:var(--tx3);margin-left:5px">${share}%</span></span>
     </div>`;
     }).join('')
     +(dtoG>0?`<div class="sum-dto-row">
