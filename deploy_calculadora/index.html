@@ -5149,23 +5149,7 @@ async function exportarExcel(){
         if(row.pautaPlatVal) platVal=row.pautaPlatVal;
         else if(row.pautaPlats&&row.pautaPlats.length) platVal=pautaPlatsLabel(row.pautaPlats);
 
-        const medioPre=row.infDetailRow||row.infTotalRow?'':(
-          row.pautaMedio
-            ? row.pautaMedio
-            : row.webPlatRadio
-            ? 'Plataformas Radio — formato web'
-            : row.radioStation
-              ? ('Radio '+radioCap(row.radioStation))
-              : row.f.radioType==='radio'
-              ? ('Radio '+radioCap(row.s.radio))
-              : (row.f.progType==='programa'
-                ? (metaTag||'Programa o Rostro')
-                : row.f.rostroField
-                ? (metaTag||'Rostro')
-                : (row.webPlat
-                  ? 'Web Mega / Meganoticias'
-                  : sectionLabel.replace(' & Contenido Digital','').replace(', Display & Señal en Vivo','')))
-        );
+        const medioPre=exportMedioForRow(row,sectionLabel);
 
         let rh;
         if(row.infDetailRow){
@@ -5589,23 +5573,7 @@ async function exportarPDF(){
       if(row.pautaPlatVal) platVal=row.pautaPlatVal;
       else if(row.pautaPlats&&row.pautaPlats.length) platVal=pautaPlatsLabel(row.pautaPlats);
 
-      const medioPre=row.infDetailRow||row.infTotalRow?'':(
-        row.pautaMedio
-          ? row.pautaMedio
-          : row.webPlatRadio
-          ? 'Plataformas Radio — formato web'
-          : row.radioStation
-            ? ('Radio '+radioCap(row.radioStation))
-            : row.f.radioType==='radio'
-            ? ('Radio '+radioCap(row.s.radio))
-            : (row.f.progType==='programa'
-              ? (metaTag||'Programa o Rostro')
-              : row.f.rostroField
-              ? (metaTag||'Rostro')
-              : (row.webPlat
-                ? 'Web Mega / Meganoticias'
-                : sectionLabel.replace(' & Contenido Digital','').replace(', Display & Señal en Vivo','')))
-      );
+      const medioPre=exportMedioForRow(row,sectionLabel);
 
       let cells;
       if(row.infDetailRow){
@@ -6476,6 +6444,39 @@ function inferPautaOrigenFromFmt(f){
   const cat=CATS.find(c=>c.fmts.some(x=>x.id===f.id));
   if(cat&&cat.id==='megadeportes') return 'Megadeportes';
   return '';
+}
+function exportPlatTextForRow(row){
+  if(row.pautaPlats&&row.pautaPlats.length)
+    return row.pautaPlats.map(p=>p.plat).filter(Boolean).join(' · ');
+  if(row.pautaPlatVal) return row.pautaPlatVal;
+  const s=row.s;
+  if(s&&s.pautaPlats&&s.pautaPlats.length)
+    return s.pautaPlats.map(p=>p.plat).filter(Boolean).join(' · ');
+  return pautaFmtPlatLabel(row.f);
+}
+function exportSectionMedioFallback(sectionLabel){
+  if(!sectionLabel) return '';
+  if(canonPautaEtapa(sectionLabel)) return '';
+  const n=normPauta(sectionLabel);
+  if(/display y paid|formatos comerciales|contenido sin etapa|filas extra|todo el periodo|previa|durante|post\b/.test(n)&&n.length<=24) return '';
+  return sectionLabel.replace(' & Contenido Digital','').replace(', Display & Señal en Vivo','');
+}
+function exportMedioForRow(row,sectionLabel){
+  if(row.infDetailRow||row.infTotalRow) return '';
+  if(row.pautaMedio) return row.pautaMedio;
+  if(row.webPlatRadio) return 'Plataformas Radio — formato web';
+  if(row.radioStation) return 'Radio '+radioCap(row.radioStation);
+  if(row.f&&row.f.radioType==='radio') return 'Radio '+radioCap(row.s.radio);
+  if(row.webPlat) return 'Web Mega / Meganoticias';
+  const fromPlat=inferPautaOrigenFromPlatText(exportPlatTextForRow(row));
+  if(fromPlat) return fromPlat;
+  const fromFmt=inferPautaOrigenFromFmt(row.f);
+  if(fromFmt) return fromFmt;
+  const cat=row.f&&CATS.find(c=>c.fmts.some(x=>x.id===row.f.id));
+  if(cat&&cat.id==='web') return 'Web Mega / Meganoticias';
+  const sec=exportSectionMedioFallback(sectionLabel);
+  if(sec) return sec;
+  return 'Mega';
 }
 function detectPautaHeaderMap(cells){
   const map={};
