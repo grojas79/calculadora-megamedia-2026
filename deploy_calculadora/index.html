@@ -739,7 +739,7 @@ html[data-theme="day"] .login-card img{filter:none}
       <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
       <button class="btn btn-sec btn-full" onclick="exportarOTWeb()">Crear OT WEB</button>
     </div>
-    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Build dcfb82e · Excel centrado vertical</p>
+    <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Etapa previa LS en export</p>
   </div>
   <div class="hist-card">
     <div class="hist-header">
@@ -1847,6 +1847,19 @@ function isLsPackFmtId(id){
 function isLsDisplayPaidMediaFmt(f){
   return !!(f&&isLsPackFmtId(f.id));
 }
+function exportEtapaOf(r){
+  const fromRow=canonPautaEtapa(r&&r.pautaEtapa||'');
+  if(fromRow) return fromRow;
+  const id=r&&r.f&&r.f.id;
+  const fromState=canonPautaEtapa(id&&STATE[id]?.pautaEtapa||'');
+  if(fromState) return fromState;
+  if(r&&r.f&&!isLsDisplayPaidMediaFmt(r.f)) return canonPautaEtapa(pautaDefaultEtapaForFmt(r.f,{}));
+  return '';
+}
+function exportRowInEtapaSection(r,etapa){
+  if(!isPautaEditorialFmt(r.f)||isLsDisplayPaidMediaFmt(r.f)) return false;
+  return exportEtapaOf(r)===etapa;
+}
 function pautaFmtByTemplateOrId(entry){
   const fmtId=String(entry&&entry.fmtId||'').trim();
   if(fmtId){
@@ -1971,6 +1984,16 @@ function pautaDefaultEtapaForFmt(f,entry){
   if(/^ls_pm_previa/.test(f.id)) return 'Etapa previa';
   if(/^ls_pm_durante/.test(f.id)) return 'Durante';
   if(/^ls_pm_post/.test(f.id)) return 'Post';
+  if(/^ls_/.test(f.id)&&!isLsDisplayPaidMediaFmt(f)){
+    const id=String(f.id||'');
+    if(/_previa|_previo|grafica_anuncio|grafica_concurso|informativo|story_link|react|tienda/.test(id)) return 'Etapa previa';
+    if(/transmision/.test(id)) return 'Durante';
+    if(/_post|momento|carrusel|backstage/.test(id)) return 'Post';
+    const d=normPauta(f.desc||'');
+    if(/etapa previa|etapa: previa/.test(d)) return 'Etapa previa';
+    if(/etapa durante|etapa: durante/.test(d)) return 'Durante';
+    if(/etapa posterior|etapa post|etapa: post/.test(d)) return 'Post';
+  }
   return canonPautaEtapa(entry&&entry.etapa)||'';
 }
 function lsDisplayPaidMediaSubsections(rows){
@@ -2040,15 +2063,14 @@ function excelRowKey(r){
 function partitionExportRows(rows){
   const byEtapa=[];
   const used=new Set();
-  const etapaOf=r=>canonPautaEtapa(STATE[r.f.id]?.pautaEtapa||r.pautaEtapa||'');
-  const present=new Set(rows.filter(r=>isPautaEditorialFmt(r.f)&&etapaOf(r)).map(etapaOf));
+  const present=new Set(rows.filter(r=>exportRowInEtapaSection(r,exportEtapaOf(r))).map(r=>exportEtapaOf(r)));
   const metaEtapas=(PAUTA_IMPORT_META.etapas||[]).map(canonPautaEtapa).filter(Boolean);
   const etapas=[];
   ETAPAS_CANONICAS.forEach(e=>{
     if(present.has(e)||metaEtapas.includes(e)) etapas.push(e);
   });
   etapas.forEach(etapa=>{
-    const etapaRows=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f)&&etapaOf(r)===etapa);
+    const etapaRows=rows.filter(r=>exportRowInEtapaSection(r,etapa));
     if(!etapaRows.length) return;
     etapaRows.forEach(r=>used.add(excelRowKey(r)));
     byEtapa.push({etapa,rows:etapaRows});
@@ -3664,7 +3686,8 @@ function getRows(){
       row.pautaPlats=s.pautaPlats;
       row.pautaPlatVal=pautaM.platVal;
     }
-    if(s.pautaEtapa) row.pautaEtapa=s.pautaEtapa;
+    const etapa=s.pautaEtapa||pautaDefaultEtapaForFmt(f,{});
+    if(etapa) row.pautaEtapa=canonPautaEtapa(etapa)||etapa;
     if(esTipoRRSS(f)) row.impModified=isFmtImpModified(f,s);
     out.push(row);
   });
