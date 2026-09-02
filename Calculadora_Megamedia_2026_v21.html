@@ -668,7 +668,7 @@ html[data-theme="day"] .login-card img{filter:none}
   <div class="fmt-nav-tools">
     <button type="button" onclick="expandUsedFmtGroups()">Mostrar grupos en uso</button>
     <button type="button" onclick="collapseAllFmtGroups()">Contraer Grupos</button>
-    <span style="font-size:10px;color:var(--tx3);margin-left:4px">Los grupos con formatos activos se abren solos</span>
+    <span style="font-size:10px;color:var(--tx3);margin-left:4px">Los grupos con formatos activos se abren solos · Producción e Influencers no reciben dto. por volumen</span>
   </div>
 
   <div style="position:relative;margin-bottom:12px">
@@ -677,7 +677,7 @@ html[data-theme="day"] .login-card img{filter:none}
       stroke-linecap="round" stroke-linejoin="round">
       <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
     </svg>
-    <input id="fmtSearch" type="search" placeholder="Buscar formato… (ej: nota, live, CPM, deportes)  ·  atajo /"
+    <input id="fmtSearch" type="search" placeholder="Buscar formato por nombre… (ej: repositorio, live, nota)  ·  atajo /"
       aria-label="Buscar formato en el tarifario"
       style="width:100%;background:var(--dk3);border:1px solid var(--bd2);border-radius:var(--r2);
              padding:8px 36px 8px 32px;color:var(--tx);font-size:13px;outline:none;transition:.15s"
@@ -2194,9 +2194,13 @@ function fmtImpTotal(f,s){
   if(f.radioType==='radio') return calcRadioFmtTotals(f,s).imp;
   return (+s.imp||0)*(+s.qty||1);
 }
-function sumRowFinalAmount(r,tNeto,tFinal){
-  if(tNeto<=0) return 0;
-  return Math.round((r.neto/tNeto)*tFinal);
+function sumRowFinalAmount(r,totals){
+  if(r.infDetailRow) return 0;
+  if(isFixedInversionFmt(r.f)) return r.neto;
+  const discNeto=totals&&totals.discNeto!=null?totals.discNeto:0;
+  const discFinal=totals&&totals.discFinal!=null?totals.discFinal:0;
+  if(discNeto<=0) return 0;
+  return Math.round((r.neto/discNeto)*discFinal);
 }
 function visibleFmtRoot(id){
   const sr=document.getElementById('sr_'+id);
@@ -2310,6 +2314,37 @@ function esTipoWeb(f){
   return catObj && catObj.id === 'web';
 }
 function isProduccionFmt(f){return !!(f&&f.prodType==='produccion');}
+function isInfluencerFmt(f){return !!(f&&f.infType==='influencer');}
+/** Producción e Influencers no reciben dto. por volumen ni ajuste de inversión final global. */
+function isFixedInversionFmt(f){return isProduccionFmt(f)||isInfluencerFmt(f);}
+function splitRowsForGlobalDto(rows){
+  let discNeto=0,fixedNeto=0;
+  const discRows=[];
+  (rows||[]).forEach(r=>{
+    if(r.infDetailRow) return;
+    if(isFixedInversionFmt(r.f)) fixedNeto+=+r.neto||0;
+    else { discRows.push(r); discNeto+=+r.neto||0; }
+  });
+  return {discRows,discNeto,fixedNeto};
+}
+function calcCampaignTotals(rows){
+  const {discRows,discNeto,fixedNeto}=splitRowsForGlobalDto(rows);
+  const tNeto=discNeto+fixedNeto;
+  let discFinal,dtoGM,dtoG;
+  if(DTO_CONTROL==='final'&&FINAL_OVERRIDE!=null){
+    const targetTotal=Math.max(fixedNeto,Math.min(tNeto,Math.round(+FINAL_OVERRIDE||0)));
+    FINAL_OVERRIDE=targetTotal;
+    discFinal=Math.max(0,targetTotal-fixedNeto);
+    dtoGM=discNeto-discFinal;
+    dtoG=discNeto>0?(dtoGM/discNeto)*100:0;
+  } else {
+    const disc=invFinalConDtoGlobal(discNeto,getDtoGlobalPctRaw());
+    discFinal=disc.final;
+    dtoGM=disc.dtoGM;
+    dtoG=disc.dtoG;
+  }
+  return {discRows,discNeto,fixedNeto,discFinal,tNeto,tFinal:discFinal+fixedNeto,dtoGM,dtoG};
+}
 function esTipoRRSS(f){
   if(!f||esTipoWeb(f)||f.radioType==='radio'||f.infType==='influencer'||isProduccionFmt(f)) return false;
   return true;
@@ -4091,7 +4126,8 @@ function onDtoGlobalInput(el){
 }
 function onInvFinalInput(el){
   const rows=getRows();
-  const tNeto=rows.reduce((a,r)=>a+r.neto,0);
+  const totals=calcCampaignTotals(rows);
+  const {tNeto,fixedNeto,discNeto}=totals;
   if(tNeto<=0){
     showToast('Activa formatos para fijar la inversión final');
     return;
@@ -4099,6 +4135,7 @@ function onInvFinalInput(el){
   DTO_CONTROL='final';
   let clp=moneyFromInputValue(el?.value||'');
   if(clp>tNeto) clp=tNeto;
+  if(clp<fixedNeto) clp=fixedNeto;
   FINAL_OVERRIDE=clp;
   // Sincronizar los otros inputs de final sin pisar el activo
   const display=moneyToInputValue(clp);
@@ -4106,7 +4143,8 @@ function onInvFinalInput(el){
     const other=document.getElementById(id);
     if(other&&other!==el) other.value=display;
   });
-  const pct=tNeto>0?((tNeto-clp)/tNeto)*100:0;
+  const discFinal=Math.max(0,clp-fixedNeto);
+  const pct=discNeto>0?((discNeto-discFinal)/discNeto)*100:0;
   syncDtoGlobalInputs(pct);
   render();
 }
@@ -4118,8 +4156,8 @@ function resetDtoControl(){
 }
 function render(){
   const rows=getRows();
-  const tNeto=rows.reduce((a,r)=>a+r.neto,0);
-  const {final:tFinal,dtoGM,dtoG}=calcInversionFinal(tNeto);
+  const totals=calcCampaignTotals(rows);
+  const {tNeto,tFinal,dtoGM,dtoG,discNeto,fixedNeto}=totals;
   // Mantener campos sincronizados según el control activo
   if(DTO_CONTROL==='final'){
     syncDtoGlobalInputs(dtoG);
@@ -4315,7 +4353,7 @@ function render(){
   if(dtoG>0){
     tbody+=`<tr style="background:rgba(230,126,34,.10)">
       <td colspan="7" style="color:var(--or);text-align:right;font-size:11px;font-style:italic">
-        Descuento por volumen (${formatDtoPct(dtoG)}%)${DTO_CONTROL==='final'?' · valor final manual':''} sobre subtotal neto ${fM(tNeto)}
+        Descuento por volumen (${formatDtoPct(dtoG)}%)${DTO_CONTROL==='final'?' · valor final manual':''} sobre subtotal neto ${fM(discNeto)}${fixedNeto>0?' (sin Producción/Influencers)':''}
       </td>
       <td class="num" style="color:var(--or);font-weight:700">-${fM(dtoGM)}</td>
       <td colspan="5"></td>
@@ -4338,7 +4376,7 @@ function render(){
   const tBrutoTotal=rows.reduce((a,r)=>a+r.bruto,0);
   document.getElementById('sumRows').innerHTML=
     rows.filter(r=>!r.infDetailRow).map(r=>{
-      const amt=sumRowFinalAmount(r,tNeto,tFinal);
+      const amt=sumRowFinalAmount(r,totals);
       const share=tFinal>0?((amt/tFinal)*100).toFixed(1):'0.0';
       return `<div class="sum-row">
       <span class="sum-label">${sumFmtLink(r)}</span>
@@ -4412,17 +4450,16 @@ function loadHistFromStorage(){
 }
 
 function campaignSnapshot(){
-  const tN=getRows().reduce((a,r)=>a+r.neto,0);
-  const inv=calcInversionFinal(tN);
+  const totals=calcCampaignTotals(getRows());
   return{
     cliente:gv('cliente'),campania:gv('campania'),
     semanas:gv('semanas'),objetivo:gv('objetivo'),
     emailEjec:CURRENT_EJEC||gv('emailEjec').trim(),
     ejecutivo:CURRENT_EJEC||gv('emailEjec').trim(),
-    dtoG:inv.dtoG,moneda:MONEDA,
+    dtoG:totals.dtoG,moneda:MONEDA,
     dtoControl:DTO_CONTROL,
     finalOverride:DTO_CONTROL==='final'?FINAL_OVERRIDE:null,
-    tFinal:inv.final
+    tFinal:totals.tFinal
   };
 }
 function applyCampaignSnapshot(h){
@@ -4554,8 +4591,7 @@ function parkSessionDraftIfAny(){
 
 function teamRecordFromCurrent(id){
   const rows=getRows();
-  const tN=rows.reduce((a,r)=>a+r.neto,0);
-  const inv=calcInversionFinal(tN);
+  const totals=calcCampaignTotals(rows);
   const formatos=[...new Set(rows.filter(r=>!r.infTotalRow).map(r=>sumFmtLabel(r)))].join(' · ');
   return{
     id,
@@ -4565,8 +4601,8 @@ function teamRecordFromCurrent(id){
     objetivo:gv('objetivo')||'',
     semanas:+gv('semanas')||0,
     moneda:MONEDA,
-    tFinal:inv.final,
-    dtoG:inv.dtoG,
+    tFinal:totals.tFinal,
+    dtoG:totals.dtoG,
     fecha:new Date().toLocaleDateString('es-CL'),
     fechaISO:new Date().toISOString(),
     formatos:formatos.slice(0,400),
@@ -4949,15 +4985,14 @@ function guardar(){
   if(!requireLogin()) return;
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
-  const tN=rows.reduce((a,r)=>a+r.neto,0);
-  const inv=calcInversionFinal(tN);
+  const totals=calcCampaignTotals(rows);
   const snap=campaignSnapshot();
   if(sessionFromDraft&&loadedDraftId!=null) HIST=HIST.filter(h=>h.id!==loadedDraftId);
   const id=Date.now();
   HIST.unshift({
     id,
     cli:snap.cliente||'—',cam:snap.campania||'—',
-    tN:inv.final,dtoG:inv.dtoG,moneda:MONEDA,
+    tN:totals.tFinal,dtoG:totals.dtoG,moneda:MONEDA,
     fecha:new Date().toLocaleDateString('es-CL'),
     state:JSON.parse(JSON.stringify(STATE)),
     pautaMeta:JSON.parse(JSON.stringify(PAUTA_IMPORT_META)),
@@ -5306,9 +5341,9 @@ async function exportarExcel(){
   if(btn){btn.textContent='Generando…';btn.disabled=true;}
 
   try{
-    const tNeto=rows.reduce((a,r)=>a+r.neto,0);
+    const totals=calcCampaignTotals(rows);
+    const {tNeto,tFinal,dtoGM,dtoG,discNeto,fixedNeto}=totals;
     const tBruto=rows.reduce((a,r)=>a+r.bruto,0);
-    const {final:tFinal,dtoGM,dtoG}=calcInversionFinal(tNeto);
     const totalAhorro=tBruto-tFinal;
     const tImp=rows.reduce((a,r)=>a+r.imp,0);
     const tAlc=calcAlcSainsbury(rows);
@@ -5753,7 +5788,7 @@ async function exportarExcel(){
     const resumenRows=[
       ['Total Tarifa',`$${f0(tBruto)}`,C.blue,'Tarifa bruta sin descuentos',false],
       ['Descuentos por formatos',dtoFmt>0?`-$${f0(dtoFmt)}`:'$0',C.orange,dtoFmt>0?`Ahorro unitario por formato (${dtoFmtPct.toFixed(1)}%)`:'Sin descuentos unitarios por formato',false],
-      ['Descuento por Volumen',dtoGM>0?`-$${f0(dtoGM)}`:'$0',C.orange,dtoG>0?`Descuento por volumen${dtoVolPctLabel}${DTO_CONTROL==='final'?' · valor final manual':''} sobre subtotal neto $${f0(tNeto)}`:'Sin descuento por volumen',false],
+      ['Descuento por Volumen',dtoGM>0?`-$${f0(dtoGM)}`:'$0',C.orange,dtoG>0?`Descuento por volumen${dtoVolPctLabel}${DTO_CONTROL==='final'?' · valor final manual':''} sobre subtotal neto $${f0(discNeto)}${fixedNeto>0?' (sin Producción/Influencers)':''}`:'Sin descuento por volumen',false],
       ['Total Final',`$${f0(tFinal)}`,C.green,dtoTotalPct>0?`Inversión final · ahorro total ${dtoTotalPct.toFixed(1)}%`:'Inversión final de la pauta',true],
     ];
     resumenRows.forEach(([label,val,color,sub,isFinal])=>{
@@ -5877,9 +5912,9 @@ async function exportarPDF(){
   if(btn){btn.textContent='Generando…';btn.disabled=true;}
 
   try{
-    const tNeto=rows.reduce((a,r)=>a+r.neto,0);
+    const totals=calcCampaignTotals(rows);
+    const {tNeto,tFinal,dtoGM,dtoG,discNeto,fixedNeto}=totals;
     const tBruto=rows.reduce((a,r)=>a+r.bruto,0);
-    const {final:tFinal,dtoGM,dtoG}=calcInversionFinal(tNeto);
     const tImp=rows.reduce((a,r)=>a+r.imp,0);
     const tAlc=calcAlcSainsbury(rows);
     const cpm=tImp>0?(tFinal/tImp)*1000:0;
@@ -6125,7 +6160,7 @@ async function exportarPDF(){
       const resumenRows=[
         ['Total Tarifa','$'+f0(tBruto),C.blue,'Tarifa bruta sin descuentos',false],
         ['Descuentos por formatos',dtoFmt>0?'-$'+f0(dtoFmt):'$0',C.orange,dtoFmt>0?'Ahorro unitario por formato ('+dtoFmtPct.toFixed(1)+'%)':'Sin descuentos unitarios por formato',false],
-        ['Descuento por Volumen',dtoGM>0?'-$'+f0(dtoGM):'$0',C.orange,dtoG>0?'Descuento por volumen ('+formatDtoPct(dtoG)+'%)'+(DTO_CONTROL==='final'?' · valor final manual':'')+' sobre subtotal neto $'+f0(tNeto):'Sin descuento por volumen',false],
+        ['Descuento por Volumen',dtoGM>0?'-$'+f0(dtoGM):'$0',C.orange,dtoG>0?'Descuento por volumen ('+formatDtoPct(dtoG)+'%)'+(DTO_CONTROL==='final'?' · valor final manual':'')+' sobre subtotal neto $'+f0(discNeto)+(fixedNeto>0?' (sin Producción/Influencers)':''):'Sin descuento por volumen',false],
         ['Total Final','$'+f0(tFinal),C.green,dtoTotalPct>0?'Inversión final · ahorro total '+dtoTotalPct.toFixed(1)+'%':'Inversión final de la pauta',true],
       ];
       resumenRows.forEach(([label,val,color,sub,isFinal])=>{
