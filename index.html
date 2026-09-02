@@ -3678,17 +3678,11 @@ function filtrarFormatos(q){
   });
 
   const term=q.toLowerCase().trim();
-  // Buscar en todos los formatos (nombre, plataforma, descripción, categoría)
   const matches=[];
   CATS.forEach(cat=>{
     cat.fmts.forEach(f=>{
-      const s=STATE[f.id];
-      const webPlatStr=(s&&s.webPlats)?s.webPlats.map(wp=>typeof wp==='string'?wp:(wp.plat||'')).join(' '):'';
-      const radioStr=(s&&s.radioEntries)?s.radioEntries.map(re=>'Radio '+radioCap(re.radio)).join(' '):'';
-      const haystack=(f.name+' '+f.plat+' '+webPlatStr+' '+radioStr+' '+getDescDefault(f)+' '+cat.label+' '+f.tag).toLowerCase();
-      if(haystack.includes(term)){
-        matches.push({f, cat});
-      }
+      const name=(f.name||'').toLowerCase();
+      if(name.includes(term)) matches.push({f, cat});
     });
   });
 
