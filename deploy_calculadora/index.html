@@ -2540,7 +2540,6 @@ const EMAIL_KEY='mg_email_ejec_v1';
 const EJEC_KEY='mg_ejecutivo_v1';
 const TEAM_LOCAL_KEY='mg_team_propuestas_v1';
 const TEAM_API='/api/propuestas';
-const TEAM_BIN_URL='https://jsonbin-zeta.vercel.app/api/bins/uMogXtk4Ar';
 const EJECUTIVOS=[
   'Alicia Campos',
   'Gabriela Araya',
@@ -2592,6 +2591,7 @@ function loginEjecutivo(nombre){
   document.documentElement.classList.remove('need-login');
   persistEmailPref();
   showToast('Hola, '+nombre.split(' ')[0]);
+  pushLocalHistToTeam();
 }
 function logoutEjecutivo(){
   try{localStorage.removeItem(EJEC_KEY);}catch(e){}
@@ -4280,52 +4280,48 @@ function writeLocalTeamStore(store){
 }
 function mergeTeamProposal(list,rec){
   const out=Array.isArray(list)?list.slice():[];
-  const i=out.findIndex(p=>p&&p.id===rec.id);
+  const key=String(rec.id);
+  const i=out.findIndex(p=>p&&String(p.id)===key);
   if(i>=0) out[i]=Object.assign({},out[i],rec);
   else out.unshift(rec);
   return out;
 }
+function teamRecordFromHist(h){
+  const fechaISO=h.fechaISO||'';
+  return{
+    id:h.id,
+    ejecutivo:h.ejecutivo||h.emailEjec||CURRENT_EJEC||'—',
+    cliente:h.cli||h.cliente||'—',
+    campania:h.cam||h.campania||'—',
+    objetivo:h.objetivo||'',
+    semanas:+h.semanas||0,
+    moneda:h.moneda||'CLP',
+    tFinal:+h.tN||+h.tFinal||0,
+    dtoG:+h.dtoG||0,
+    fecha:h.fecha||'',
+    fechaISO,
+    formatos:h.formatos||'',
+    nFormatos:+h.nFormatos||0
+  };
+}
+function pushLocalHistToTeam(){
+  const items=(HIST||[]).filter(h=>!isDraftItem(h));
+  if(!items.length) return;
+  items.reduce((p,h)=>p.then(()=>syncTeamUpsert(teamRecordFromHist(h))),Promise.resolve())
+    .catch(e=>console.warn('resync equipo',e));
+}
 async function teamApi(method,body){
   const opts={method,headers:{'Content-Type':'application/json'},cache:'no-store'};
   if(body) opts.body=JSON.stringify(body);
-  try{
-    const r=await fetch(TEAM_API,opts);
-    const data=await r.json().catch(()=>null);
-    if(r.ok) return data;
-    const msg=(data&&data.error)||('Registro del equipo no disponible ('+r.status+')');
-    const err=new Error(msg);
-    err.remote=true;
-    err.status=r.status;
-    err.details=data&&data.details;
-    if(r.status>=500||r.status===429||r.status===402||r.status===503) throw err;
-  }catch(e){
-    if(e&&e.remote) throw e;
-  }
-  if(method==='GET'){
-    const r=await fetch(TEAM_BIN_URL,{cache:'no-store'});
-    if(!r.ok) throw new Error('Registro compartido no disponible');
-    const data=await r.json();
-    if(!data||!Array.isArray(data.proposals)) throw new Error('Registro compartido no disponible');
-    return data;
-  }
-  if(method==='POST'){
-    let cur;
-    try{
-      const r=await fetch(TEAM_BIN_URL,{cache:'no-store'});
-      if(!r.ok) throw new Error('skip');
-      cur=await r.json();
-      if(!cur||!Array.isArray(cur.proposals)) throw new Error('skip');
-    }catch(e){
-      throw new Error('Registro compartido no disponible');
-    }
-    const store={proposals:cur.proposals.slice(),updatedAt:Date.now()};
-    if(body.action==='upsert') store.proposals=mergeTeamProposal(store.proposals,body.proposal);
-    if(body.action==='delete') store.proposals=store.proposals.filter(p=>p&&p.id!==body.id);
-    const wr=await fetch(TEAM_BIN_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(store)});
-    if(!wr.ok) throw new Error('Registro compartido no disponible');
-    return {ok:true,count:store.proposals.length};
-  }
-  throw new Error('Registro compartido no disponible');
+  const r=await fetch(TEAM_API,opts);
+  const data=await r.json().catch(()=>null);
+  if(r.ok) return data;
+  const msg=(data&&data.error)||('Registro del equipo no disponible ('+r.status+')');
+  const err=new Error(msg);
+  err.remote=true;
+  err.status=r.status;
+  err.details=data&&data.details;
+  throw err;
 }
 async function syncTeamUpsert(rec){
   const local=readLocalTeamStore();
@@ -4337,7 +4333,7 @@ async function syncTeamUpsert(rec){
 }
 async function syncTeamDelete(id){
   const local=readLocalTeamStore();
-  local.proposals=local.proposals.filter(p=>p&&p.id!==id);
+  local.proposals=local.proposals.filter(p=>p&&String(p.id)!==String(id));
   local.updatedAt=Date.now();
   writeLocalTeamStore(local);
   try{await teamApi('POST',{action:'delete',id});}
@@ -4353,29 +4349,16 @@ async function fetchTeamProposals(){
     remoteError=(e&&e.message)||'Registro compartido no disponible';
   }
   const local=readLocalTeamStore().proposals||[];
-  const fromHist=(HIST||[]).filter(h=>!isDraftItem(h)).map(h=>({
-    id:h.id,
-    ejecutivo:h.ejecutivo||h.emailEjec||CURRENT_EJEC||'—',
-    cliente:h.cli||h.cliente||'—',
-    campania:h.cam||h.campania||'—',
-    objetivo:h.objetivo||'',
-    semanas:+h.semanas||0,
-    moneda:h.moneda||'CLP',
-    tFinal:+h.tN||+h.tFinal||0,
-    dtoG:+h.dtoG||0,
-    fecha:h.fecha||'',
-    fechaISO:h.fechaISO||'',
-    formatos:h.formatos||'',
-    nFormatos:+h.nFormatos||0
-  }));
+  const fromHist=(HIST||[]).filter(h=>!isDraftItem(h)).map(teamRecordFromHist);
   const byId=new Map();
   fromHist.concat(local).concat(remote).forEach(p=>{
     if(!p||p.id==null) return;
-    const prev=byId.get(p.id);
-    if(!prev){ byId.set(p.id,p); return; }
+    const key=String(p.id);
+    const prev=byId.get(key);
+    if(!prev){ byId.set(key,p); return; }
     const newer=(p.fechaISO||'')>=(prev.fechaISO||'');
     const richer=(p.formatos&&!prev.formatos)||(p.ejecutivo&&p.ejecutivo!=='—'&&(!prev.ejecutivo||prev.ejecutivo==='—'));
-    if(newer||richer) byId.set(p.id,Object.assign({},prev,p));
+    if(newer||richer) byId.set(key,Object.assign({},prev,p));
   });
   const list=[...byId.values()].sort((a,b)=>(b.fechaISO||b.fecha||'').localeCompare(a.fechaISO||a.fecha||''));
   return {list,remoteError,remoteCount:remote.length};
@@ -8122,6 +8105,7 @@ const parkedDraft=parkSessionDraftIfAny();
 withDraftMuted(()=>{buildFmts();render();});
 renderHist();
 refreshTeamStoreStatus();
+if(CURRENT_EJEC) pushLocalHistToTeam();
 if(parkedDraft) showToast('Borrador disponible en Propuestas');
 setReportePeriodo('month');
 ['cliente','campania','semanas','objetivo','emailEjec'].forEach(id=>{
