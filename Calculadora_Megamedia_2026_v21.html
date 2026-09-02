@@ -3886,7 +3886,8 @@ function toggle(id){
     if(f&&f.id==='spots_licenciados') applyCatalogPautaPlats(f,STATE[id]);
     expandFmtNavParents(id);
   }
-  document.getElementById('fi_'+id).classList.toggle('active',STATE[id].active);
+  const mainEl=document.getElementById('fi_'+id);
+  if(mainEl) mainEl.classList.toggle('active',STATE[id].active);
   // Sync search result item if visible
   const srEl=document.getElementById('sr_'+id);
   if(srEl){
