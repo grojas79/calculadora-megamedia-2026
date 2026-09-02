@@ -339,6 +339,9 @@ input::-moz-placeholder,textarea::-moz-placeholder{color:var(--ph);opacity:1;fon
   padding:12px 14px;margin-top:4px}
 .dto-global-title{font-size:11px;color:var(--tx2);font-weight:600;margin-bottom:8px;
   letter-spacing:.06em;text-transform:uppercase}
+.dto-global-note{font-size:11px;color:var(--tx3);line-height:1.45;margin:0 0 10px;padding:7px 10px;border-radius:var(--r3);
+  background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.18)}
+.dto-global-note strong{color:var(--am);font-weight:600}
 .dto-global-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .dto-global label{font-size:12px;color:var(--tx2);font-weight:500;white-space:nowrap}
 .dto-global input{width:90px;background:var(--dk);border:1px solid var(--bd2);
@@ -668,7 +671,7 @@ html[data-theme="day"] .login-card img{filter:none}
   <div class="fmt-nav-tools">
     <button type="button" onclick="expandUsedFmtGroups()">Mostrar grupos en uso</button>
     <button type="button" onclick="collapseAllFmtGroups()">Contraer Grupos</button>
-    <span style="font-size:10px;color:var(--tx3);margin-left:4px">Los grupos con formatos activos se abren solos · Producción e Influencers no reciben dto. por volumen</span>
+    <span style="font-size:10px;color:var(--tx3);margin-left:4px">Los grupos con formatos activos se abren solos</span>
   </div>
 
   <div style="position:relative;margin-bottom:12px">
@@ -695,6 +698,7 @@ html[data-theme="day"] .login-card img{filter:none}
 
   <div class="dto-global" style="margin-top:14px">
     <div class="dto-global-title">Descuento por volumen sobre el total de la pauta</div>
+    <p class="dto-global-note">El descuento por volumen y la inversión final <strong>no afectan</strong> a <strong>Producción BC</strong> ni a <strong>Influencers</strong>; solo se aplican al resto de formatos activos.</p>
     <div class="dto-global-row">
       <label for="dtoGlobal">Descuento global %</label>
       <input type="number" id="dtoGlobal" value="0" min="0" max="100" step="0.01" oninput="onDtoGlobalInput(this)" aria-describedby="dtoPreview"/>
@@ -745,6 +749,7 @@ html[data-theme="day"] .login-card img{filter:none}
     </div>
     <div class="dto-global dto-side">
       <div class="dto-global-title">Descuento por volumen</div>
+      <p class="dto-global-note">No aplica a <strong>Producción BC</strong> ni <strong>Influencers</strong>.</p>
       <div class="dto-global-row">
         <label for="dtoGlobalSide">Descuento %</label>
         <input type="number" id="dtoGlobalSide" value="0" min="0" max="100" step="0.01" oninput="onDtoGlobalInput(this)" aria-describedby="dtoPreviewSide"/>
