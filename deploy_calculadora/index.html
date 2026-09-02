@@ -107,17 +107,6 @@ input::-moz-placeholder,textarea::-moz-placeholder{color:var(--ph);opacity:1;fon
 .tc-pill{font-size:11px;color:var(--tx2);display:flex;gap:4px;align-items:center}
 .tc-pill strong{color:var(--cy)}
 
-.cat-group{margin-bottom:12px}
-.cat-label{font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--tx3);
-  text-transform:uppercase;padding:5px 8px;margin-bottom:6px;
-  border-left:2px solid var(--bd2);display:flex;align-items:center;gap:8px}
-.cat-label.rrss{border-color:var(--cy);color:var(--cy)}
-.cat-label.vod{border-color:var(--pu,#8844EE);color:var(--pu,#8844EE)}
-.cat-label.web{border-color:var(--am);color:var(--am)}
-.cat-label.prod{border-color:var(--mg);color:var(--mg)}
-.cat-label.inf{border-color:var(--gr);color:var(--gr)}
-.cat-label.rad{border-color:var(--or);color:var(--or)}
-
 /* Botones de navegación por sección */
 .cat-nav-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;
   border-radius:20px;font-size:10.5px;font-weight:700;letter-spacing:.04em;
@@ -130,6 +119,56 @@ input::-moz-placeholder,textarea::-moz-placeholder{color:var(--ph);opacity:1;fon
 .cat-nav-btn.prod{border-color:rgba(232,0,125,.35);color:var(--mg)}
 .cat-nav-btn.inf{border-color:rgba(0,200,150,.35);color:var(--gr)}
 .cat-nav-btn.rad{border-color:rgba(230,126,34,.35);color:var(--or)}
+.cat-nav-btn.has-active{background:rgba(0,200,232,.12);box-shadow:0 0 0 1px rgba(0,200,232,.2)}
+.cat-nav-count{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:10px;font-size:9px;font-weight:800;background:var(--cy);color:#000;margin-left:2px}
+.cat-nav-count.zero{opacity:.45;background:var(--bd2);color:var(--tx2)}
+
+.fmt-nav-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.fmt-nav-tools button{padding:5px 10px;border-radius:var(--r3);border:1px solid var(--bd2);background:var(--dk3);color:var(--tx2);font-size:10.5px;font-weight:600;cursor:pointer;transition:.15s}
+.fmt-nav-tools button:hover{border-color:var(--cy);color:var(--cy)}
+
+.mega-group{border:1px solid var(--bd);border-radius:var(--r2);margin-bottom:14px;overflow:hidden;background:var(--dk2)}
+.mega-group-header{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;user-select:none;background:var(--dk3);border-bottom:1px solid transparent;transition:.15s}
+.mega-group.open .mega-group-header{border-bottom-color:var(--bd)}
+.mega-group-header:hover{background:rgba(0,200,232,.06)}
+.mega-group-icon{font-size:16px;line-height:1}
+.mega-group-title{font-size:12px;font-weight:800;letter-spacing:.04em;flex:1}
+.mega-group-meta{font-size:10px;color:var(--tx3);font-weight:600}
+.mega-group-body{display:none;padding:10px 10px 4px}
+.mega-group.open .mega-group-body{display:block}
+.mega-group.editorial .mega-group-title{color:var(--cy)}
+.mega-group.liveshopping .mega-group-title{color:var(--cy)}
+.mega-group.radios .mega-group-title{color:var(--or)}
+.mega-group.web .mega-group-title{color:var(--am)}
+.mega-group.otros .mega-group-title{color:var(--mg)}
+
+.cat-group{margin-bottom:10px;border:1px solid var(--bd);border-radius:var(--r2);overflow:hidden;background:var(--dk)}
+.cat-group:last-child{margin-bottom:0}
+.cat-label{font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--tx3);
+  text-transform:uppercase;padding:8px 10px;margin-bottom:0;
+  border-left:3px solid var(--bd2);display:flex;align-items:center;gap:8px;
+  cursor:pointer;user-select:none;background:var(--dk3);transition:.15s}
+.cat-label:hover{background:rgba(255,255,255,.03)}
+.cat-group.open .cat-label{border-bottom:1px solid var(--bd)}
+.cat-group-body{display:none;padding:8px 8px 4px}
+.cat-group.open .cat-group-body{display:block}
+.cat-chev{display:inline-block;width:12px;font-size:10px;color:var(--tx3);transition:transform .15s;flex-shrink:0}
+.cat-group.open>.cat-label .cat-chev,.cat-subsection.open>.cat-sub-label .cat-chev,.mega-group.open>.mega-group-header .cat-chev{transform:rotate(90deg)}
+.cat-count{margin-left:auto;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;background:var(--bd2);color:var(--tx2)}
+.cat-count.active{background:rgba(0,200,232,.2);color:var(--cy)}
+.cat-subsection{margin-bottom:8px;border:1px dashed var(--bd2);border-radius:var(--r3);overflow:hidden}
+.cat-subsection:last-child{margin-bottom:0}
+.cat-sub-label{display:flex;align-items:center;gap:8px;padding:6px 9px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx2);cursor:pointer;user-select:none;background:rgba(0,0,0,.15)}
+.cat-sub-label:hover{color:var(--cy)}
+.cat-sub-body{display:none;padding:4px 4px 2px}
+.cat-subsection.open .cat-sub-body{display:block}
+.search-cat-header{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--tx2);padding:8px 4px 4px;margin-top:4px;border-bottom:1px solid var(--bd)}
+.cat-label.rrss{border-color:var(--cy);color:var(--cy)}
+.cat-label.vod{border-color:var(--pu,#8844EE);color:var(--pu,#8844EE)}
+.cat-label.web{border-color:var(--am);color:var(--am)}
+.cat-label.prod{border-color:var(--mg);color:var(--mg)}
+.cat-label.inf{border-color:var(--gr);color:var(--gr)}
+.cat-label.rad{border-color:var(--or);color:var(--or)}
 
 .fmt-item{border:1px solid var(--bd);border-radius:var(--r2);margin-bottom:6px;overflow:hidden;transition:.15s}
 .fmt-item:hover{border-color:var(--bd2)}
@@ -625,7 +664,12 @@ html[data-theme="day"] .login-card img{filter:none}
   <div class="sec">Formatos — Tarifario 2026</div>
 
   <!-- ── Índice de secciones ─────────────────────────────────────────────── -->
-  <div id="catNav" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+  <div id="catNav" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+  <div class="fmt-nav-tools">
+    <button type="button" onclick="expandUsedFmtGroups()">Mostrar grupos en uso</button>
+    <button type="button" onclick="collapseAllFmtGroups()">Colapsar todo</button>
+    <span style="font-size:10px;color:var(--tx3);margin-left:4px">Los grupos con formatos activos se abren solos</span>
+  </div>
 
   <div style="position:relative;margin-bottom:12px">
     <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:.5;pointer-events:none"
@@ -3364,12 +3408,210 @@ function fmtGrid(f,s){
   return g+costoProdField;
 }
 
+// ── Navegación agrupada de formatos ───────────────────────────────────────
+const NAV_MEGA_GROUPS=[
+  {id:'editorial',label:'Editorial & RRSS',icon:'📱',cls:'editorial',catIds:['rrss','vodcast','programas','teleseries','megadeportes']},
+  {id:'liveshopping',label:'Live Shopping',icon:'🛒',cls:'liveshopping',catIds:['liveshopping']},
+  {id:'radios',label:'Radios',icon:'📻',cls:'radios',catIds:['radios']},
+  {id:'web',label:'Web & Display',icon:'🖥️',cls:'web',catIds:['web']},
+  {id:'otros',label:'Producción & otros',icon:'✨',cls:'otros',catIds:['produccion','influencers','personalizado']}
+];
+const LS_UI_SECTIONS=[
+  {id:'previa',label:'Etapa previa'},
+  {id:'durante',label:'Durante el evento'},
+  {id:'posterior',label:'Etapa posterior'},
+  {id:'display',label:'Display'},
+  {id:'paid',label:'Paid Media'}
+];
+const FMT_NAV_KEY='mg_fmt_nav_v1';
+let fmtNavState={mega:{},cat:{},sub:{}};
+function loadFmtNavState(){
+  try{
+    const d=JSON.parse(sessionStorage.getItem(FMT_NAV_KEY)||'{}');
+    fmtNavState={mega:d.mega||{},cat:d.cat||{},sub:d.sub||{}};
+  }catch(e){fmtNavState={mega:{},cat:{},sub:{}};}
+}
+function saveFmtNavState(){
+  try{sessionStorage.setItem(FMT_NAV_KEY,JSON.stringify(fmtNavState));}catch(e){}
+}
+function megaGroupForCat(catId){
+  return NAV_MEGA_GROUPS.find(mg=>mg.catIds.includes(catId))||null;
+}
+function countActiveInCat(cat){
+  return (cat.fmts||[]).filter(f=>STATE[f.id]&&STATE[f.id].active).length;
+}
+function countActiveInMega(mg){
+  return (mg.catIds||[]).reduce((n,id)=>{
+    const cat=CATS.find(c=>c.id===id);
+    return n+(cat?countActiveInCat(cat):0);
+  },0);
+}
+function totalInMega(mg){
+  return (mg.catIds||[]).reduce((n,id)=>{
+    const cat=CATS.find(c=>c.id===id);
+    return n+(cat&&cat.fmts?cat.fmts.length:0);
+  },0);
+}
+function lsFmtUiSection(f){
+  if(/^ls_banners_/.test(f.id)) return 'display';
+  if(/^ls_pm_/.test(f.id)) return 'paid';
+  if(f.id==='ls_transmision') return 'durante';
+  if(/ls_mejor_momento|ls_nota_post|ls_carrusel|ls_backstage/.test(f.id)) return 'posterior';
+  return 'previa';
+}
+function countActiveInSub(catId,subId){
+  const cat=CATS.find(c=>c.id===catId);
+  if(!cat) return 0;
+  return cat.fmts.filter(f=>lsFmtUiSection(f)===subId&&STATE[f.id]&&STATE[f.id].active).length;
+}
+function megaGroupOpen(mg){
+  if(fmtNavState.mega[mg.id]===true) return true;
+  if(fmtNavState.mega[mg.id]===false) return false;
+  return countActiveInMega(mg)>0;
+}
+function catGroupOpen(cat){
+  if(fmtNavState.cat[cat.id]===true) return true;
+  if(fmtNavState.cat[cat.id]===false) return false;
+  return countActiveInCat(cat)>0;
+}
+function subSectionOpen(catId,subId){
+  const key=catId+'_'+subId;
+  if(fmtNavState.sub[key]===true) return true;
+  if(fmtNavState.sub[key]===false) return false;
+  return countActiveInSub(catId,subId)>0;
+}
+function applyFmtNavClasses(){
+  NAV_MEGA_GROUPS.forEach(mg=>{
+    const el=document.getElementById('mega_'+mg.id);
+    if(el) el.classList.toggle('open',megaGroupOpen(mg));
+  });
+  CATS.forEach(cat=>{
+    const el=document.getElementById('cat_'+cat.id);
+    if(el) el.classList.toggle('open',catGroupOpen(cat));
+    if(cat.id==='liveshopping'){
+      LS_UI_SECTIONS.forEach(sec=>{
+        const sub=document.getElementById('catsub_'+cat.id+'_'+sec.id);
+        if(sub) sub.classList.toggle('open',subSectionOpen(cat.id,sec.id));
+      });
+    }
+  });
+  updateCatNavBadges();
+}
+function updateCatNavBadges(){
+  const nav=document.getElementById('catNav');
+  if(!nav) return;
+  nav.querySelectorAll('.cat-nav-btn').forEach(btn=>{
+    const mgId=btn.getAttribute('data-mega');
+    const mg=NAV_MEGA_GROUPS.find(x=>x.id===mgId);
+    if(!mg) return;
+    const active=countActiveInMega(mg);
+    const total=totalInMega(mg);
+    btn.classList.toggle('has-active',active>0);
+    const badge=btn.querySelector('.cat-nav-count');
+    if(badge){
+      badge.textContent=active>0?String(active):String(total);
+      badge.classList.toggle('zero',!active);
+      badge.title=active>0?(active+' activo'+(active===1?'':'s')+' de '+total):total+' formatos';
+    }
+    const meta=document.getElementById('mega_meta_'+mg.id);
+    if(meta) meta.textContent=active?active+' en uso · '+total+' formatos':total+' formatos';
+  });
+  CATS.forEach(cat=>{
+    const active=countActiveInCat(cat);
+    const badge=document.getElementById('cat_count_'+cat.id);
+    if(badge){
+      badge.textContent=active>0?String(active):String(cat.fmts.length);
+      badge.classList.toggle('active',active>0);
+      badge.title=active>0?(active+' activo'+(active===1?'':'s')):cat.fmts.length+' formatos';
+    }
+  });
+}
+function toggleMegaGroup(id,evt){
+  if(evt) evt.preventDefault();
+  const mg=NAV_MEGA_GROUPS.find(x=>x.id===id);
+  if(!mg) return;
+  fmtNavState.mega[id]=!megaGroupOpen(mg);
+  saveFmtNavState();
+  applyFmtNavClasses();
+}
+function toggleCatGroup(id,evt){
+  if(evt){evt.preventDefault();evt.stopPropagation();}
+  const cat=CATS.find(c=>c.id===id);
+  if(!cat) return;
+  fmtNavState.cat[id]=!catGroupOpen(cat);
+  saveFmtNavState();
+  applyFmtNavClasses();
+}
+function toggleCatSubSection(catId,subId,evt){
+  if(evt){evt.preventDefault();evt.stopPropagation();}
+  const key=catId+'_'+subId;
+  fmtNavState.sub[key]=!subSectionOpen(catId,subId);
+  saveFmtNavState();
+  applyFmtNavClasses();
+}
+function expandFmtNavParents(fmtId){
+  const cat=CATS.find(c=>c.fmts.some(x=>x.id===fmtId));
+  if(!cat) return;
+  const mg=megaGroupForCat(cat.id);
+  if(mg) fmtNavState.mega[mg.id]=true;
+  fmtNavState.cat[cat.id]=true;
+  if(cat.id==='liveshopping'){
+    const f=cat.fmts.find(x=>x.id===fmtId);
+    if(f){
+      const sub=lsFmtUiSection(f);
+      fmtNavState.sub[cat.id+'_'+sub]=true;
+    }
+  }
+  saveFmtNavState();
+  applyFmtNavClasses();
+}
+function expandUsedFmtGroups(){
+  NAV_MEGA_GROUPS.forEach(mg=>{ if(countActiveInMega(mg)) fmtNavState.mega[mg.id]=true; });
+  CATS.forEach(cat=>{
+    if(countActiveInCat(cat)) fmtNavState.cat[cat.id]=true;
+    if(cat.id==='liveshopping'){
+      LS_UI_SECTIONS.forEach(sec=>{
+        if(countActiveInSub(cat.id,sec.id)) fmtNavState.sub[cat.id+'_'+sec.id]=true;
+      });
+    }
+  });
+  saveFmtNavState();
+  applyFmtNavClasses();
+}
+function collapseAllFmtGroups(){
+  NAV_MEGA_GROUPS.forEach(mg=>{ fmtNavState.mega[mg.id]=false; });
+  CATS.forEach(cat=>{
+    fmtNavState.cat[cat.id]=false;
+    if(cat.id==='liveshopping'){
+      LS_UI_SECTIONS.forEach(sec=>{ fmtNavState.sub[cat.id+'_'+sec.id]=false; });
+    }
+  });
+  saveFmtNavState();
+  applyFmtNavClasses();
+}
+
 // ── Scroll suave a sección ───────────────────────────────────────────────
 function scrollToCat(id){
+  const mg=megaGroupForCat(id);
+  if(mg) fmtNavState.mega[mg.id]=true;
+  fmtNavState.cat[id]=true;
+  saveFmtNavState();
+  applyFmtNavClasses();
   setTimeout(()=>{
-    const el=document.getElementById("cat_"+id);
-    if(el) el.scrollIntoView({behavior:"smooth",block:"start"});
-  },50);
+    const el=document.getElementById('cat_'+id)||(mg&&document.getElementById('mega_'+mg.id));
+    if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+  },60);
+}
+function scrollToMega(id){
+  const mg=NAV_MEGA_GROUPS.find(x=>x.id===id);
+  if(!mg) return;
+  fmtNavState.mega[id]=true;
+  saveFmtNavState();
+  applyFmtNavClasses();
+  setTimeout(()=>{
+    const el=document.getElementById('mega_'+id);
+    if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+  },60);
 }
 function sumFmtLabel(r){
   let t=r.infTotalRow?'TOTAL INFLUENCERS':fmtDisplayName(r.f,r.s);
@@ -3385,10 +3627,14 @@ function sumFmtLink(r){
 function scrollToFmt(id){
   const q=document.getElementById('fmtSearch');
   if(q&&q.value.trim()) filtrarFormatos('');
+  expandFmtNavParents(id);
   const cat=CATS.find(c=>c.fmts.some(x=>x.id===id));
   if(cat){
-    const catEl=document.getElementById('cat_'+cat.id);
-    if(catEl) catEl.scrollIntoView({behavior:'smooth',block:'start'});
+    const mg=megaGroupForCat(cat.id);
+    if(mg) fmtNavState.mega[mg.id]=true;
+    fmtNavState.cat[cat.id]=true;
+    saveFmtNavState();
+    applyFmtNavClasses();
   }
   setTimeout(()=>{
     if(!STATE[id]?.active) toggle(id);
@@ -3399,7 +3645,7 @@ function scrollToFmt(id){
     el.scrollIntoView({behavior:'smooth',block:'center'});
     el.classList.add('fmt-highlight');
     setTimeout(()=>el.classList.remove('fmt-highlight'),2200);
-  },cat?300:0);
+  },cat?320:0);
 }
 
 // ── Buscador de formatos ─────────────────────────────────────────────────
@@ -3465,9 +3711,19 @@ function filtrarFormatos(q){
   }
 
   resultsDiv.style.display='';
+  const grouped=new Map();
+  matches.forEach(item=>{
+    const key=item.cat.id;
+    if(!grouped.has(key)) grouped.set(key,{cat:item.cat,items:[]});
+    grouped.get(key).items.push(item);
+  });
+  const orderedCats=CATS.map(c=>c.id).filter(id=>grouped.has(id));
   resultsDiv.innerHTML='<div style="font-size:10px;color:var(--tx2);margin-bottom:8px;font-weight:600;letter-spacing:.06em;text-transform:uppercase">'
     +matches.length+' resultado'+(matches.length!==1?'s':'')+' para "'+q+'"</div>'
-    +matches.map(({f,cat})=>{
+    +orderedCats.map(catId=>{
+      const g=grouped.get(catId);
+      return '<div class="search-cat-header">'+escHtml(g.cat.label)+' · '+g.items.length+'</div>'
+        +g.items.map(({f,cat})=>{
       const s=STATE[f.id];
       return '<div class="fmt-item'+(s.active?' active':'')+'" id="sr_'+f.id+'" style="margin-bottom:6px">'
         +'<div class="fmt-top" onclick="toggleFromSearch(&quot;'+f.id+'&quot;)">'
@@ -3491,6 +3747,7 @@ function filtrarFormatos(q){
         +'</div>'
         +'</div>';
     }).join('');
+    }).join('');
 }
 
 function toggleFromSearch(id){
@@ -3504,6 +3761,7 @@ function toggleFromSearch(id){
     if(body) body.style.display=STATE[id].active?'block':'none';
   }
   if(mainEl) mainEl.classList.toggle('active',STATE[id].active);
+  if(STATE[id].active) expandFmtNavParents(id);
   render();
 }
 
@@ -3523,54 +3781,102 @@ const CAT_LABELS_SHORT={
   'personalizado':'Personalizados'
 };
 
+function renderFmtItem(f){
+  const s=STATE[f.id];
+  return`<div class="fmt-item${s.active?' active':''}" id="fi_${f.id}">
+    <div class="fmt-top" onclick="toggle('${f.id}')">
+      <div class="fmt-chk">
+        <svg viewBox="0 0 12 10" fill="none">
+          <polyline points="1,5 4.5,9 11,1" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="fmt-info">
+        <div class="fmt-name-row">
+          ${f.customType&&!f.sourceFmtId
+            ?`<input type="text" class="custom-fmt-name" id="cname_${f.id}" value="${escHtml(f.name)}" onclick="event.stopPropagation()" oninput="updCustomName('${f.id}')" placeholder="Nombre del formato"/>`
+            :`<span class="fmt-name">${escHtml(f.name)}</span>`}
+          <span class="fmt-tag ${f.tagCls}">${f.tag}${f.tipo==='cpm'?' /mil':''}</span>
+          ${s.pautaEtapa?`<span class="fmt-tag" style="background:var(--bd2);color:var(--tx)">${escHtml(canonPautaEtapa(s.pautaEtapa)||s.pautaEtapa)}</span>`:''}
+        </div>
+        <div class="fmt-plat" id="plat_${f.id}">${displayPlat(f,s)}</div>
+        ${f.marca?`<div style="font-size:10px;color:var(--tx2);margin-bottom:3px;font-style:italic">${f.marca}</div>`:''}
+        <div class="fmt-desc">${getDesc(f)}</div>
+        ${f.ref?`<div style="margin-top:3px"><a href="${f.ref}" target="_blank" style="font-size:10px;color:var(--cy);text-decoration:none">Ver ejemplo →</a></div>`:''}
+      </div>
+    </div>
+    <div class="fmt-body">
+      <div class="fmt-grid">
+        ${fmtGrid(f,s)}
+      </div>
+      ${descBox(f)}
+      <div id="price_${f.id}" class="fmt-price-preview"></div>
+      <div class="fmt-alc">${fmtAlcBlock(f,s,'')}</div>
+    </div>
+  </div>`;
+}
+function renderCatBody(cat){
+  if(cat.id==='liveshopping'){
+    return LS_UI_SECTIONS.map(sec=>{
+      const fmts=cat.fmts.filter(f=>lsFmtUiSection(f)===sec.id);
+      if(!fmts.length) return '';
+      const active=countActiveInSub(cat.id,sec.id);
+      const open=subSectionOpen(cat.id,sec.id);
+      return`<div class="cat-subsection${open?' open':''}" id="catsub_${cat.id}_${sec.id}">
+        <div class="cat-sub-label" onclick="toggleCatSubSection('${cat.id}','${sec.id}',event)">
+          <span class="cat-chev">▸</span>
+          <span>${sec.label}</span>
+          <span class="cat-count${active?' active':''}" title="${active?active+' activos':fmts.length+' formatos'}">${active||fmts.length}</span>
+        </div>
+        <div class="cat-sub-body">${fmts.map(renderFmtItem).join('')}</div>
+      </div>`;
+    }).join('');
+  }
+  return cat.fmts.map(renderFmtItem).join('');
+}
+function renderCatGroup(cat){
+  const active=countActiveInCat(cat);
+  const open=catGroupOpen(cat);
+  const label=CAT_LABELS_SHORT[cat.id]||cat.label;
+  return`<div class="cat-group${open?' open':''}" id="cat_${cat.id}">
+    <div class="cat-label ${cat.cls}" onclick="toggleCatGroup('${cat.id}',event)">
+      <span class="cat-chev">▸</span>
+      <span>${label}</span>
+      <span class="cat-count${active?' active':''}" id="cat_count_${cat.id}" title="${active?active+' activos':cat.fmts.length+' formatos'}">${active||cat.fmts.length}</span>
+    </div>
+    <div class="cat-group-body">${renderCatBody(cat)}</div>
+  </div>`;
+}
+
 function buildFmts(){
-  // ── Botones de navegación ─────────────────────────────────────────────
+  loadFmtNavState();
   const nav=document.getElementById('catNav');
   if(nav){
-    nav.innerHTML=CATS.map(cat=>{
-      const icon=CAT_ICONS[cat.cls]||'📌';
-      const label=CAT_LABELS_SHORT[cat.id]||cat.label;
-      return`<a class="cat-nav-btn ${cat.cls}" href="#cat_${cat.id}" onclick="scrollToCat('${cat.id}')">${icon} ${label}</a>`;
+    nav.innerHTML=NAV_MEGA_GROUPS.map(mg=>{
+      const active=countActiveInMega(mg);
+      const total=totalInMega(mg);
+      return`<a class="cat-nav-btn ${mg.cls}${active?' has-active':''}" href="#mega_${mg.id}" data-mega="${mg.id}" onclick="scrollToMega('${mg.id}');return false;">`
+        +mg.icon+' '+mg.label
+        +`<span class="cat-nav-count${active?'':' zero'}">${active||total}</span></a>`;
     }).join('');
   }
 
-  document.getElementById('fmtList').innerHTML=CATS.map(cat=>`
-    <div class="cat-group" id="cat_${cat.id}">
-      <div class="cat-label ${cat.cls}">${cat.label}</div>
-      ${cat.fmts.map(f=>{
-        const s=STATE[f.id];
-        return`<div class="fmt-item${s.active?' active':''}" id="fi_${f.id}">
-          <div class="fmt-top" onclick="toggle('${f.id}')">
-            <div class="fmt-chk">
-              <svg viewBox="0 0 12 10" fill="none">
-                <polyline points="1,5 4.5,9 11,1" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-            <div class="fmt-info">
-              <div class="fmt-name-row">
-                ${f.customType&&!f.sourceFmtId
-                  ?`<input type="text" class="custom-fmt-name" id="cname_${f.id}" value="${escHtml(f.name)}" onclick="event.stopPropagation()" oninput="updCustomName('${f.id}')" placeholder="Nombre del formato"/>`
-                  :`<span class="fmt-name">${escHtml(f.name)}</span>`}
-                <span class="fmt-tag ${f.tagCls}">${f.tag}${f.tipo==='cpm'?' /mil':''}</span>
-                ${s.pautaEtapa?`<span class="fmt-tag" style="background:var(--bd2);color:var(--tx)">${escHtml(canonPautaEtapa(s.pautaEtapa)||s.pautaEtapa)}</span>`:''}
-              </div>
-              <div class="fmt-plat" id="plat_${f.id}">${displayPlat(f,s)}</div>
-              ${f.marca?`<div style="font-size:10px;color:var(--tx2);margin-bottom:3px;font-style:italic">${f.marca}</div>`:''}
-              <div class="fmt-desc">${getDesc(f)}</div>
-              ${f.ref?`<div style="margin-top:3px"><a href="${f.ref}" target="_blank" style="font-size:10px;color:var(--cy);text-decoration:none">Ver ejemplo →</a></div>`:''}
-            </div>
-          </div>
-          <div class="fmt-body">
-            <div class="fmt-grid">
-              ${fmtGrid(f,s)}
-            </div>
-            ${descBox(f)}
-            <div id="price_${f.id}" class="fmt-price-preview"></div>
-            <div class="fmt-alc">${fmtAlcBlock(f,s,'')}</div>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`).join('');
+  document.getElementById('fmtList').innerHTML=NAV_MEGA_GROUPS.map(mg=>{
+    const cats=mg.catIds.map(id=>CATS.find(c=>c.id===id)).filter(Boolean);
+    if(!cats.length) return '';
+    const active=countActiveInMega(mg);
+    const total=totalInMega(mg);
+    const open=megaGroupOpen(mg);
+    return`<div class="mega-group ${mg.cls}${open?' open':''}" id="mega_${mg.id}">
+      <div class="mega-group-header" onclick="toggleMegaGroup('${mg.id}',event)">
+        <span class="cat-chev">▸</span>
+        <span class="mega-group-icon">${mg.icon}</span>
+        <span class="mega-group-title">${mg.label}</span>
+        <span class="mega-group-meta" id="mega_meta_${mg.id}">${active?active+' en uso · ':''}${total} formatos</span>
+      </div>
+      <div class="mega-group-body">${cats.map(renderCatGroup).join('')}</div>
+    </div>`;
+  }).join('');
+  applyFmtNavClasses();
 }
 
 function toggle(id){
@@ -3578,6 +3884,7 @@ function toggle(id){
   if(STATE[id].active){
     const f=allFmts().find(x=>x.id===id);
     if(f&&f.id==='spots_licenciados') applyCatalogPautaPlats(f,STATE[id]);
+    expandFmtNavParents(id);
   }
   document.getElementById('fi_'+id).classList.toggle('active',STATE[id].active);
   // Sync search result item if visible
@@ -3858,6 +4165,7 @@ function render(){
     document.getElementById('miniKpis').innerHTML='';
     document.getElementById('pricingStrip').style.display='none';
     scheduleDraftSave();
+    updateCatNavBadges();
     return;
   }
   document.getElementById('emptyState').style.display='none';
@@ -4080,6 +4388,7 @@ function render(){
     setFmtPricePreview(f.id,f,STATE[f.id]);
   });
   scheduleDraftSave();
+  updateCatNavBadges();
 }
 
 // ── Historia + borrador ───────────────────────────────────────────────────
