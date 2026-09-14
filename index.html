@@ -322,9 +322,16 @@ input::-moz-placeholder,textarea::-moz-placeholder{color:var(--ph);opacity:1;fon
 .rad-entry-add:hover{background:rgba(230,126,34,.16);border-style:solid}
 .rad-entry-add .plus{font-size:18px;line-height:.5;font-weight:700}
 
-.inf-mode-row{display:flex;align-items:center;gap:7px;padding:8px 2px;margin-top:4px;border-top:1px solid var(--bd)}
-.inf-mode-check{accent-color:var(--gr);width:14px;height:14px;cursor:pointer;flex-shrink:0}
-.inf-mode-label{font-size:11px;color:var(--tx);cursor:pointer;user-select:none;font-weight:500}
+.inf-mode-row{display:flex;align-items:flex-start;gap:7px;padding:8px 2px;margin-top:4px;border-top:1px solid var(--bd)}
+/* Higher specificity than .fmt-grid input/label so checkbox is not stretched to 100% */
+.fmt-grid input.inf-mode-check,.inf-mode-check{
+  accent-color:var(--gr);width:14px;height:14px;padding:0;margin-top:2px;
+  background:transparent;border:none;border-radius:0;cursor:pointer;flex-shrink:0
+}
+.fmt-grid label.inf-mode-label,.inf-mode-label{
+  font-size:11px;color:var(--tx);cursor:pointer;user-select:none;font-weight:500;
+  margin-bottom:0;flex:1;min-width:0;line-height:1.35
+}
 .inf-mode-label .hint{color:var(--tx3);font-size:10px;font-weight:400;display:block;margin-top:1px}
 .inf-paquete{margin-top:2px;background:rgba(0,200,150,.06);border:1px solid var(--gr);border-radius:var(--r3);padding:9px 10px}
 .inf-paquete label{display:block;font-size:10.5px;color:var(--gr);margin-bottom:5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
