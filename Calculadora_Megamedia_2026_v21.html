@@ -6377,6 +6377,11 @@ const PAUTA_ALIASES={
   'itt':'itt',
   'skin branding':'skin',
   'nota web':'__nota_web__',
+  'nota de prensa':'__nota_web__',
+  'nota de prensa mega':'nota_mega',
+  'nota de prensa meganoticias':'nota_mn',
+  'nota de prensa meganoticias mega':'nota_mn_mega',
+  'nota de prensa mega meganoticias':'nota_mn_mega',
   'vivencial de marca':'vivencial',
   'vivencial en terreno':'vivencial',
   'follow meganoticias':'follow_mn',
@@ -7135,12 +7140,13 @@ function pautaNameFamily(text){
   const n=normPauta(text);
   if(!n) return'';
   if(/grafica/.test(n)||(/carrusel/.test(n)&&!/productos/.test(n)&&!/paid media/.test(n))) return'grafica';
+  if(/\bnota\b/.test(n)&&(/prensa|web|dato|oferta/.test(n))) return'nota';
+  if(/informativo/.test(n)&&/vertical/.test(n)) return'info_vertical';
   if(/capsula/.test(n)&&/informativ/.test(n)) return'capsula_info';
   if(/informativo/.test(n)&&/previo|previa/.test(n)) return'capsula_info';
   if(/informativo/.test(n)&&/meganoticias/.test(n)&&!/vertical/.test(n)&&!pautaTextHasMegaBrand(n)) return'capsula_info';
   if(/capsula/.test(n)&&(/vertical/.test(n)||/rostro/.test(n))) return'capsulas_rostro';
   if(/dinamica/.test(n)&&/rostro/.test(n)) return'capsulas_rostro';
-  if(/\bnota\b/.test(n)&&(/web/.test(n)||/dato/.test(n)||/oferta/.test(n))) return'nota';
   if(/story/.test(n)) return'story';
   if(/backstage/.test(n)) return'backstage';
   if(/live/.test(n)) return'live';
@@ -7369,6 +7375,10 @@ function pautaScoreName(entry,fmt){
   if(/backstage/.test(n)&&fmt.id==='backstage'&&!/vodcast|live\s*shopping/.test(n)) s=Math.max(s,.92);
   if(ef==='grafica'&&PAUTA_GRAFICA_FEED_IDS.includes(fmt.id)) s=Math.max(s,.92);
   if(ef==='grafica'&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.min(s,.2);
+  if(ef==='nota'&&PAUTA_NOTA_WEB_IDS.includes(fmt.id)) s=Math.max(s,.94);
+  if(ef==='nota'&&/^info_vertical/.test(fmt.id)) s=Math.min(s,.2);
+  if(ef==='info_vertical'&&/^info_vertical/.test(fmt.id)) s=Math.max(s,.94);
+  if(ef==='info_vertical'&&PAUTA_NOTA_WEB_IDS.includes(fmt.id)) s=Math.min(s,.2);
   return s;
 }
 function pautaNameConfident(best,second){
@@ -7470,7 +7480,7 @@ function pautaResolveMatch(entry){
 function pautaIsConfidentMatch(matchInfo,alternatives){
   if(!matchInfo) return false;
   if(matchInfo.ambiguous) return false;
-  if(matchInfo.method==='exact'||matchInfo.method==='id'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro'||matchInfo.method==='name-family') return true;
+  if(matchInfo.method==='exact'||matchInfo.method==='id'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro'||matchInfo.method==='name-family'||matchInfo.method==='info-vertical-dual') return true;
   if(matchInfo.method==='capsulas-plat-name'&&matchInfo.score>=.85) return true;
   if(matchInfo.method==='plat-full'&&matchInfo.score>=.85) return true;
   if(matchInfo.method==='plat+name'&&matchInfo.score>=.75) return true;
@@ -7606,6 +7616,11 @@ function pautaAliasMatch(n,entry){
   if(/backstage/.test(n)){
     return resolveBackstageMatch(entry,n);
   }
+  // Nota de prensa / nota web antes de Informativo Vertical dual
+  if(/\bnota\b/.test(n)&&(/prensa|web/.test(n))&&!/dato|oferta|live\s*shopping|vodcast/.test(n)){
+    const nota=resolveNotaWebMatch(entry,n);
+    if(nota) return nota;
+  }
   const infoVerticalDual=resolveInfoVerticalDualMatch(entry,n);
   if(infoVerticalDual) return infoVerticalDual;
   // Cápsula Informativa MN solo si habla de informativa / previo (no dual Mega+MN)
@@ -7670,16 +7685,23 @@ function pickGraficaFeedId(entry){
   return'grafica_mega';
 }
 function resolveInfoVerticalDualMatch(entry,n){
-  const dualName=/informativo/.test(n)&&/vertical/.test(n)&&/mega/.test(n)&&/meganoticias/.test(n);
-  const mega=pautaPlatHasBrand(entry,'mega');
-  const mn=pautaPlatHasBrand(entry,'meganoticias');
-  const dualPlat=mega&&mn;
-  const scope=pautaEntryBrandScope(entry);
-  if(!dualName&&!dualPlat&&scope!=='both') return null;
+  // Solo si el nombre habla de Informativo Vertical (no por plataformas duales solas)
+  const dualName=/informativo/.test(n)&&/vertical/.test(n);
+  if(!dualName) return null;
+  // No capturar notas de prensa / web
+  if(/\bnota\b/.test(n)&&(/prensa|web|dato|oferta/.test(n))) return null;
   const f=allFmts().find(x=>x.id==='info_vertical_hito');
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
+  const nameMn=pautaTextHasMnBrand(n)||pautaPlatHasBrand(entry,'meganoticias');
+  const nameMega=pautaTextHasMegaBrand(n)||pautaPlatHasBrand(entry,'mega');
+  // Dual Mega+MN explícito en nombre o plataformas; si no, no forzar hito
+  if(!(nameMn&&nameMega)&&pautaEntryBrandScope(entry)!=='both'){
+    // Nombre solo "informativo vertical" sin marcas → dejar scoring general
+    if(!/mega/.test(n.replace(/meganoticias/g,''))&&!/meganoticias/.test(n)) return null;
+  }
   const r=scorePautaEntryVsFormat(entry,f);
-  return{fmt:f,score:Math.max(r.score,dualName?1:.95),method:'info-vertical-dual',breakdown:r.breakdown};
+  const strongDual=nameMn&&nameMega;
+  return{fmt:f,score:Math.max(r.score,strongDual?1:.92),method:'info-vertical-dual',breakdown:r.breakdown};
 }
 function resolveCapsulaMnMatch(entry,n){
   const f=allFmts().find(x=>x.id===PAUTA_CAPSULA_MN_ID);
