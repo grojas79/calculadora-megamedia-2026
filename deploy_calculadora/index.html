@@ -7773,6 +7773,12 @@ function resolveCapsulasPlatFirstMatch(entry,n){
   };
 }
 function pickNotaWebId(entry){
+  const name=entry.tipoContenido||'';
+  const nameMn=pautaTextHasMnBrand(name);
+  const nameMega=pautaTextHasMegaBrand(name);
+  if(nameMn&&nameMega) return'nota_mn_mega';
+  if(nameMn&&!nameMega) return'nota_mn';
+  if(nameMega&&!nameMn) return'nota_mega';
   const mega=pautaPlatHasBrand(entry,'mega');
   const mn=pautaPlatHasBrand(entry,'meganoticias');
   if(mega&&mn) return'nota_mn_mega';
