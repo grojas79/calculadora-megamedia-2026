@@ -4325,6 +4325,15 @@ const PAUTA_ALIASES={
   'grafica del evento':'grafica_mn_mega',
   'grafica o carrusel':'__grafica_feed__',
   'grafica carrusel':'__grafica_feed__',
+  'grafica en feed':'__grafica_feed__',
+  'grafica en ig':'__grafica_feed__',
+  'grafica ig':'__grafica_feed__',
+  'grafica en feed ig meganoticias':'grafica_mn',
+  'grafica en feed ig mega':'grafica_mega',
+  'grafica en feed ig meganoticias ig mega':'grafica_mn_mega',
+  'grafica en ig meganoticias mega':'grafica_mn_mega',
+  'grafica en ig meganoticias + mega':'grafica_mn_mega',
+  'grafica en ig meganoticias + ig mega':'grafica_mn_mega',
   'live organico con vocero de la organizacion':'live_organico',
   'live organico con vocero de marca auspiciadora':'live_organico',
   'nota web':'__nota_web__',
@@ -4524,12 +4533,51 @@ async function parsePautaXLSX(buffer){
   return parsePautaRows(rows);
 }
 function matchScore(a,b){
-  const wa=a.split(' ').filter(w=>w.length>2);
-  const wb=b.split(' ').filter(w=>w.length>2);
+  const wa=pautaMeaningfulTokens(a);
+  const wb=pautaMeaningfulTokens(b);
   if(!wa.length||!wb.length) return 0;
   let hits=0;
-  wa.forEach(w=>{ if(wb.some(x=>x.includes(w)||w.includes(x))) hits++; });
+  wa.forEach(w=>{ if(wb.some(x=>pautaTokenEquals(w,x))) hits++; });
   return hits/Math.max(wa.length,wb.length);
+}
+function pautaMeaningfulTokens(s){
+  return normPauta(s).split(' ').filter(w=>w.length>2||w==='ig'||w==='fb'||w==='yt'||w==='tt');
+}
+function pautaTokenEquals(a,b){
+  if(!a||!b) return false;
+  if(a===b) return true;
+  // No confundir Mega con Meganoticias / Megadeportes
+  if(a==='mega'&&(b==='meganoticias'||b==='megadeportes')) return false;
+  if(b==='mega'&&(a==='meganoticias'||a==='megadeportes')) return false;
+  if(a==='mega'&&b.startsWith('mega')&&b!=='mega') return false;
+  if(b==='mega'&&a.startsWith('mega')&&a!=='mega') return false;
+  // Substring solo para tokens suficientemente largos
+  if(a.length>=4&&b.length>=4&&(a.includes(b)||b.includes(a))){
+    if((a==='mega'||b==='mega')&&(a.includes('meganoticias')||b.includes('meganoticias')||a.includes('megadeportes')||b.includes('megadeportes'))) return false;
+    return true;
+  }
+  return false;
+}
+function pautaNameFamily(text){
+  const n=normPauta(text);
+  if(!n) return'';
+  if(/grafica/.test(n)||(/carrusel/.test(n)&&!/productos/.test(n))) return'grafica';
+  if(/capsula/.test(n)&&/informativ/.test(n)) return'capsula_info';
+  if(/informativo/.test(n)&&/previo|previa|meganoticias/.test(n)) return'capsula_info';
+  if(/capsula/.test(n)&&(/vertical/.test(n)||/rostro/.test(n))) return'capsulas_rostro';
+  if(/dinamica/.test(n)&&/rostro/.test(n)) return'capsulas_rostro';
+  if(/\bnota\b/.test(n)&&(/web/.test(n)||/dato/.test(n)||/oferta/.test(n))) return'nota';
+  if(/story/.test(n)) return'story';
+  if(/backstage/.test(n)) return'backstage';
+  if(/live/.test(n)) return'live';
+  return'';
+}
+function pautaTextHasMegaBrand(text){
+  const n=normPauta(text).replace(/meganoticias/g,' ').replace(/megadeportes/g,' ');
+  return /\bmega\b/.test(n)||/(^|\s)mega(\s|$)/.test(n);
+}
+function pautaTextHasMnBrand(text){
+  return /meganoticias/.test(normPauta(text));
 }
 const PAUTA_MATCH_CONFIDENT=.8;
 const PAUTA_ALTERNATIVES_MAX=12;
@@ -4714,10 +4762,17 @@ function pautaScoreName(entry,fmt){
   if(fn===n) return 1;
   let s=matchScore(n,fn);
   if(n&&fn&&(n.includes(fn)||fn.includes(n))) s=Math.max(s,.85);
+  const ef=pautaNameFamily(n);
+  const ff=pautaNameFamily(fn)||pautaNameFamily(fmt.id||'');
+  // Misma familia de formato → reforzar; familias distintas → penalizar fuerte
+  if(ef&&ff&&ef===ff) s=Math.max(s,.9);
+  if(ef&&ff&&ef!==ff) s=Math.min(s,.28);
   if(/informativo/.test(n)&&/previo|previa/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.88);
   if(/capsula/.test(n)&&/informativ/.test(n)&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.max(s,.9);
   if((/capsula/.test(n)&&/vertical|rostro/.test(n)||/dinamica/.test(n)&&/rostro/.test(n))&&fmt.id==='dinamicas') s=Math.max(s,.92);
   if(/backstage/.test(n)&&fmt.id==='backstage'&&!/vodcast|live\s*shopping/.test(n)) s=Math.max(s,.92);
+  if(ef==='grafica'&&PAUTA_GRAFICA_FEED_IDS.includes(fmt.id)) s=Math.max(s,.92);
+  if(ef==='grafica'&&fmt.id===PAUTA_CAPSULA_MN_ID) s=Math.min(s,.2);
   return s;
 }
 function pautaNameConfident(best,second){
@@ -4748,6 +4803,16 @@ function pautaCandidatesByName(entry){
     })
     .filter(c=>c.plat.score>0||c.nameScore>0||c.descScore>0)
     .sort((a,b)=>{
+      const fam=pautaNameFamily(entry.tipoContenido);
+      if(fam){
+        const af=pautaNameFamily(a.fmt.name)||pautaNameFamily(a.fmt.id);
+        const bf=pautaNameFamily(b.fmt.name)||pautaNameFamily(b.fmt.id);
+        const aSame=af===fam?1:0,bSame=bf===fam?1:0;
+        if(bSame!==aSame) return bSame-aSame;
+        if(aSame&&bSame&&b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
+      }
+      if(b.nameScore>=.9&&a.nameScore<.75&&b.nameScore-a.nameScore>=.2) return -1;
+      if(a.nameScore>=.9&&b.nameScore<.75&&a.nameScore-b.nameScore>=.2) return 1;
       if(b.plat.fullMatch!==a.plat.fullMatch) return(b.plat.fullMatch?1:0)-(a.plat.fullMatch?1:0);
       if(b.plat.score!==a.plat.score) return b.plat.score-a.plat.score;
       if(b.plat.entryCoverage!==a.plat.entryCoverage) return b.plat.entryCoverage-a.plat.entryCoverage;
@@ -4760,10 +4825,32 @@ function pautaResolveMatch(entry){
   const best=candidates[0];
   if(!best) return null;
   const second=candidates[1];
+  const fam=pautaNameFamily(entry.tipoContenido);
+  // 0) Nombre de familia claro + score alto → priorizar sobre plataformas de otra familia
+  if(fam&&best.nameScore>=PAUTA_NAME_MIN_CONFIDENT){
+    const famBest=candidates.find(c=>{
+      const ff=pautaNameFamily(c.fmt.name)||pautaNameFamily(c.fmt.id);
+      return ff===fam&&c.nameScore>=PAUTA_NAME_MIN_CONFIDENT;
+    });
+    if(famBest&&(pautaNameFamily(best.fmt.name)||pautaNameFamily(best.fmt.id))!==fam){
+      return{fmt:famBest.fmt,score:Math.max(famBest.nameScore,famBest.score),method:'name-family',breakdown:famBest.breakdown};
+    }
+    if(famBest&&famBest.fmt.id===best.fmt.id){
+      return{fmt:best.fmt,score:Math.max(best.nameScore,best.score),method:'name-family',breakdown:best.breakdown};
+    }
+  }
   // 1) Coincidencia completa de plataformas → priorizar; desambiguar por nombre/desc
   if(best.plat.fullMatch){
     const full=candidates.filter(c=>c.plat.fullMatch);
     if(full.length===1){
+      // Si el nombre contradice fuerte la familia, no forzar plataforma
+      if(fam){
+        const bf=pautaNameFamily(best.fmt.name)||pautaNameFamily(best.fmt.id);
+        if(bf&&bf!==fam&&best.nameScore<.5){
+          const byName=candidates.find(c=>(pautaNameFamily(c.fmt.name)||pautaNameFamily(c.fmt.id))===fam&&c.nameScore>=.7);
+          if(byName) return{fmt:byName.fmt,score:Math.max(byName.nameScore,byName.score),method:'name-family',breakdown:byName.breakdown};
+        }
+      }
       return{fmt:best.fmt,score:Math.max(best.score,.92),method:'plat-full',breakdown:best.breakdown};
     }
     full.sort((a,b)=>{
@@ -4788,7 +4875,7 @@ function pautaResolveMatch(entry){
 function pautaIsConfidentMatch(matchInfo,alternatives){
   if(!matchInfo) return false;
   if(matchInfo.ambiguous) return false;
-  if(matchInfo.method==='exact'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro') return true;
+  if(matchInfo.method==='exact'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro'||matchInfo.method==='name-family') return true;
   if(matchInfo.method==='capsulas-plat-name'&&matchInfo.score>=.85) return true;
   if(matchInfo.method==='plat-full'&&matchInfo.score>=.85) return true;
   if(matchInfo.method==='plat+name'&&matchInfo.score>=.75) return true;
@@ -4831,6 +4918,16 @@ function pautaRankAlternatives(entry,limit){
     candidates.push({fmt,...r,method:'multi'});
   });
   candidates.sort((a,b)=>{
+    const fam=pautaNameFamily(entry.tipoContenido);
+    if(fam){
+      const af=pautaNameFamily(a.fmt.name)||pautaNameFamily(a.fmt.id);
+      const bf=pautaNameFamily(b.fmt.name)||pautaNameFamily(b.fmt.id);
+      const aSame=af===fam?1:0,bSame=bf===fam?1:0;
+      if(bSame!==aSame) return bSame-aSame;
+      if(aSame&&bSame&&b.breakdown.name!==a.breakdown.name) return b.breakdown.name-a.breakdown.name;
+    }
+    if(b.breakdown.name>=.9&&a.breakdown.name<.75&&b.breakdown.name-a.breakdown.name>=.2) return -1;
+    if(a.breakdown.name>=.9&&b.breakdown.name<.75&&a.breakdown.name-b.breakdown.name>=.2) return 1;
     if(b.breakdown.platFull!==a.breakdown.platFull) return(b.breakdown.platFull?1:0)-(a.breakdown.platFull?1:0);
     if(b.breakdown.plat!==a.breakdown.plat) return b.breakdown.plat-a.breakdown.plat;
     if(b.breakdown.name!==a.breakdown.name) return b.breakdown.name-a.breakdown.name;
@@ -4929,6 +5026,13 @@ function pautaPlatHasBrand(entry,brand){
   return parts.some(p=>normPauta(p).includes(normPauta(brand)));
 }
 function pickGraficaFeedId(entry){
+  const name=entry.tipoContenido||'';
+  const nameMn=pautaTextHasMnBrand(name);
+  const nameMega=pautaTextHasMegaBrand(name);
+  // El nombre de la pauta manda cuando declara Mega / Meganoticias
+  if(nameMn&&nameMega) return'grafica_mn_mega';
+  if(nameMn&&!nameMega) return'grafica_mn';
+  if(nameMega&&!nameMn) return'grafica_mega';
   const mega=pautaPlatHasBrand(entry,'mega');
   const mn=pautaPlatHasBrand(entry,'meganoticias');
   if(mega&&mn) return'grafica_mn_mega';
@@ -5029,6 +5133,12 @@ function resolveCapsulasPlatFirstMatch(entry,n){
   };
 }
 function pickNotaWebId(entry){
+  const name=entry.tipoContenido||'';
+  const nameMn=pautaTextHasMnBrand(name);
+  const nameMega=pautaTextHasMegaBrand(name);
+  if(nameMn&&nameMega) return'nota_mn_mega';
+  if(nameMn&&!nameMega) return'nota_mn';
+  if(nameMega&&!nameMn) return'nota_mega';
   const mega=pautaPlatHasBrand(entry,'mega');
   const mn=pautaPlatHasBrand(entry,'meganoticias');
   if(mega&&mn) return'nota_mn_mega';
@@ -5151,7 +5261,7 @@ function buildPautaPickCard(idx,m){
   </label>`;
   const meta=pautaEntryMetaLine(e);
   const altHint=opts.length
-    ?'Alternativas ordenadas por <strong>plataformas</strong>, luego <strong>nombre</strong> y <strong>descripción</strong>. Elige una del catálogo o crea un formato nuevo con los datos del Excel:'
+    ?'Alternativas ordenadas por <strong>nombre del formato</strong> (familia), luego <strong>plataformas</strong> y <strong>descripción</strong>. Elige una del catálogo o crea un formato nuevo con los datos del Excel:'
     :'No se encontraron alternativas cercanas. Puedes crear un formato nuevo con nombre, descripción y plataformas del Excel:';
   return`<div class="pauta-pick-card" data-pauta-idx="${idx}">
     <div class="pauta-pick-src"><strong>${escHtml(pautaCellStr(e.tipoContenido)||'(sin nombre)')}</strong>
