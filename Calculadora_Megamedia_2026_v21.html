@@ -2241,7 +2241,20 @@ function syncFmtStateFromDom(id){
   if(f&&active===d){
     applyUnitDtoPct(s,d?d.value:0);
   } else if(f&&active===finv){
-    applyUnitInvFinal(s,fmtMediaBruto(f,s),parseMiles(finv&&finv.value||''));
+    const invClp=parseMiles(finv&&finv.value||'');
+    if(f.tipo==='cpm'){
+      applyCpmTriad(s,'inv',invClp);
+      if(p&&document.activeElement!==p) p.value=fmtMiles(s.precio||0);
+      if(i&&document.activeElement!==i) i.value=fmtMiles(s.imp||0);
+    } else {
+      applyUnitInvFinal(s,fmtMediaBruto(f,s),invClp);
+    }
+  } else if(f&&f.tipo==='cpm'&&(active===p||active===i)){
+    const edited=active===p?'precio':'imp';
+    const val=edited==='precio'?parseMiles(p&&p.value||''):parseMiles(i&&i.value||'');
+    applyCpmTriad(s,edited,val,parseMiles(finv&&finv.value||''));
+    if(p&&document.activeElement!==p) p.value=fmtMiles(s.precio||0);
+    if(i&&document.activeElement!==i) i.value=fmtMiles(s.imp||0);
   } else if(d&&s.dtoControl!=='final'){
     s.dto=Math.max(0,Math.min(100,+d.value||0));
   }
@@ -2780,6 +2793,43 @@ function entryMediaBruto(tipo,entry){
   const precio=+entry.precio||0;
   return tipo==='cpm'?(precio/1000)*imp:precio*qty;
 }
+/** Mult. neto CPM: cantidad × (1 − dto%). */
+function cpmNetMult(entry){
+  return Math.max(0,(+entry.qty||1)*(1-(+entry.dto||0)/100));
+}
+/**
+ * Tríada CPM: inversión ≈ (CPM/1000) × impresiones × qty × (1−dto%).
+ * Con 2 de 3 datos (precio/imp/inv) resuelve el tercero.
+ * edited: 'precio' | 'imp' | 'inv'
+ * invHint: inversión actual del input cuando se edita precio o impresiones.
+ */
+function applyCpmTriad(entry,edited,value,invHint){
+  if(!entry) return;
+  const v=Math.max(0,Math.round(+value||0));
+  const invH=Math.max(0,Math.round(invHint!=null?+invHint:0));
+  const dto=Math.max(0,Math.min(100,+entry.dto||0));
+  // Salir de finalOverride (p.ej. inv tipada con bruto=0 → override 0) para que el neto siga la tríada
+  applyUnitDtoPct(entry,dto);
+  if(edited==='precio') entry.precio=v;
+  else if(edited==='imp') entry.imp=v;
+  else if(edited!=='inv') return;
+  const precio=+entry.precio||0;
+  const imp=+entry.imp||0;
+  const mult=cpmNetMult(entry);
+  if(mult<=0) return;
+  if(edited==='inv'){
+    if(precio>0) entry.imp=Math.round(v/((precio/1000)*mult));
+    else if(imp>0) entry.precio=Math.round((v*1000)/(imp*mult));
+    return;
+  }
+  if(edited==='precio'){
+    if(imp<=0&&invH>0&&v>0) entry.imp=Math.round(invH/((v/1000)*mult));
+    return;
+  }
+  if(edited==='imp'){
+    if(precio<=0&&invH>0&&v>0) entry.precio=Math.round((invH*1000)/(v*mult));
+  }
+}
 // Control del total: por % de volumen o por valor final manual (redondeo comercial)
 let DTO_CONTROL='pct'; // 'pct' | 'final'
 let FINAL_OVERRIDE=null; // CLP enteros cuando DTO_CONTROL==='final'
@@ -2942,7 +2992,9 @@ function renderRadioGrid(f,s){
         +'<input type="number" id="rd_'+id+'_'+idx+'" min="0" max="100" step="0.01" value="'+formatDtoPct(+re.dto||0)+'" '+oi+'dto\',+this.value)" style="'+inp+'"/></div>'
         +'<div><label style="color:var(--cy)">Inversión (CLP)</label>'
         +'<input type="text" data-m="1" class="fmt-inv-field" id="rfinv_'+id+'_'+idx+'" inputmode="numeric" placeholder="Ej: 500.000" value="'+(tot.neto?fmtMiles(tot.neto):'')+'" '+oi+'inv\',parseMiles(this.value))" style="'+inp+'"/>'
-        +'<div class="fmt-inv-hint">Editable · el % se calcula desde la tarifa</div></div>'
+        +'<div class="fmt-inv-hint">'+(f.tipo==='cpm'
+          ? '2 de 3: CPM + inversión → impresiones (o al revés)'
+          : 'Editable · el % se calcula desde la tarifa')+'</div></div>'
         +'<div><label>Impresiones est.</label>'
         +'<input type="text" data-m="1" value="'+fmtMiles(+re.imp||0)+'" '+oi+'imp\',parseMiles(this.value))" style="'+inp+'"/></div>'
       +'</div>'
@@ -2991,16 +3043,26 @@ function updRadioEntryField(id,idx,field,value){
   if(!s||!f||!s.radioEntries||!s.radioEntries[idx]) return;
   migrateRadioEntries(s,f);
   const re=s.radioEntries[idx];
-  if(field==='precio') re.precio=+value||0;
-  else if(field==='qty') re.qty=Math.max(1,+value||1);
+  const block=document.getElementById('rad_entry_'+id+'_'+idx);
+  const invEl=document.getElementById('rfinv_'+id+'_'+idx);
+  const invHint=parseMiles(invEl&&invEl.value||'');
+  if(field==='qty') re.qty=Math.max(1,+value||1);
   else if(field==='dto') applyUnitDtoPct(re,value);
+  else if(f.tipo==='cpm'&&(field==='precio'||field==='imp'||field==='inv')){
+    applyCpmTriad(re,field,value,field==='inv'?value:invHint);
+  } else if(field==='precio') re.precio=+value||0;
   else if(field==='inv') applyUnitInvFinal(re,entryMediaBruto(f.tipo,re),value);
   else if(field==='imp') re.imp=+value||0;
   const tot=radioEntryTotals(f,re);
   const dEl=document.getElementById('rd_'+id+'_'+idx);
-  const invEl=document.getElementById('rfinv_'+id+'_'+idx);
   if(dEl&&document.activeElement!==dEl) dEl.value=formatDtoPct(re.dto||0);
   if(invEl&&document.activeElement!==invEl) invEl.value=tot.neto?fmtMiles(tot.neto):'';
+  if(block&&f.tipo==='cpm'){
+    const precioInp=block.querySelector('input[oninput*="\'precio\'"]');
+    const impInp=block.querySelector('input[oninput*="\'imp\'"]');
+    if(precioInp&&document.activeElement!==precioInp) precioInp.value=fmtMiles(re.precio||0);
+    if(impInp&&document.activeElement!==impInp) impInp.value=fmtMiles(re.imp||0);
+  }
   const mini=document.getElementById('rmini_'+id+'_'+idx);
   if(mini){
     mini.innerHTML=(re.dto>0
@@ -3095,14 +3157,11 @@ function renderWebPlatGrid(f,s){
         +'<input type="number" id="wd_'+id+'_'+idx+'" min="0" max="100" step="0.01" value="'+formatDtoPct(+wp.dto||0)+'" '+oi+'dto\',+this.value)" style="'+inp+'"/></div>'
         +'<div><label style="color:var(--cy)">Inversión (CLP)</label>'
         +'<input type="text" data-m="1" class="fmt-inv-field" id="wfinv_'+id+'_'+idx+'" inputmode="numeric" placeholder="Ej: 500.000" value="'+(tot.neto?fmtMiles(tot.neto):'')+'" '+oi+'inv\',parseMiles(this.value))" style="'+inpCy+'"/>'
-        +'<div class="fmt-inv-hint">Editable · el % se calcula desde la tarifa</div></div>'
+        +'<div class="fmt-inv-hint">'+(f.tipo==='cpm'
+          ? '2 de 3: CPM + inversión → impresiones (o al revés)'
+          : 'Editable · el % se calcula desde la tarifa')+'</div></div>'
         +'<div><label>Impresiones est.</label>'
         +'<input type="text" data-m="1" value="'+fmtMiles(+wp.imp||0)+'" '+oi+'imp\',parseMiles(this.value))" style="'+inp+'"/></div>'
-        +(f.tipo==='cpm'
-          ? '<div class="full"><label style="color:var(--cy)">💰 Inversión objetivo (CLP) → recalcula impresiones</label>'
-            +'<input type="text" data-m="1" id="winv_'+id+'_'+idx+'" placeholder="Ej: 500.000" style="'+inpCy+'"'
-            +' oninput="updWebPlatInv(\''+id+'\','+idx+')"/></div>'
-          : '')
       +'</div>'
       +'<div class="web-plat-mini" id="wmini_'+id+'_'+idx+'">'+dtoHtml
         +' · Alcance: <strong>'+f0(tot.alc)+'</strong> usuarios</div>'
@@ -3143,16 +3202,26 @@ function updWebPlatField(id,idx,field,value){
   if(!s||!f||!s.webPlats||!s.webPlats[idx]) return;
   migrateWebPlats(s,f);
   const wp=s.webPlats[idx];
-  if(field==='precio') wp.precio=+value||0;
-  else if(field==='qty') wp.qty=Math.max(1,+value||1);
+  const block=document.getElementById('web_plat_'+id+'_'+idx);
+  const invEl=document.getElementById('wfinv_'+id+'_'+idx);
+  const invHint=parseMiles(invEl&&invEl.value||'');
+  if(field==='qty') wp.qty=Math.max(1,+value||1);
   else if(field==='dto') applyUnitDtoPct(wp,value);
+  else if(f.tipo==='cpm'&&(field==='precio'||field==='imp'||field==='inv')){
+    applyCpmTriad(wp,field,value,field==='inv'?value:invHint);
+  } else if(field==='precio') wp.precio=+value||0;
   else if(field==='inv') applyUnitInvFinal(wp,entryMediaBruto(f.tipo,wp),value);
   else if(field==='imp') wp.imp=+value||0;
   const tot=webPlatRowTotals(f,wp);
   const dEl=document.getElementById('wd_'+id+'_'+idx);
-  const invEl=document.getElementById('wfinv_'+id+'_'+idx);
   if(dEl&&document.activeElement!==dEl) dEl.value=formatDtoPct(wp.dto||0);
   if(invEl&&document.activeElement!==invEl) invEl.value=tot.neto?fmtMiles(tot.neto):'';
+  if(block&&f.tipo==='cpm'){
+    const precioInp=block.querySelector('input[oninput*="\'precio\'"]');
+    const impInp=block.querySelector('input[oninput*="\'imp\'"]');
+    if(precioInp&&document.activeElement!==precioInp) precioInp.value=fmtMiles(wp.precio||0);
+    if(impInp&&document.activeElement!==impInp) impInp.value=fmtMiles(wp.imp||0);
+  }
   const mini=document.getElementById('wmini_'+id+'_'+idx);
   if(mini){
     mini.innerHTML=(wp.dto>0
@@ -3163,21 +3232,12 @@ function updWebPlatField(id,idx,field,value){
   updWebFmt(id);
 }
 function updWebPlatInv(id,idx){
-  const f=allFmts().find(x=>x.id===id);
-  const s=STATE[id];
-  if(!f||!s||f.tipo!=='cpm'||!s.webPlats||!s.webPlats[idx]) return;
-  const wp=s.webPlats[idx];
-  const invObj=parseMiles(document.getElementById('winv_'+id+'_'+idx)?.value||0);
-  if(invObj<=0) return;
-  const qty=+wp.qty||1;
-  const dto=+wp.dto||0;
-  const factor=((+wp.precio||0)/1000)*qty*(1-dto/100);
-  if(factor<=0) return;
-  wp.imp=Math.round(invObj/factor);
-  const block=document.getElementById('web_plat_'+id+'_'+idx);
-  const impInp=block&&block.querySelector('input[oninput*="imp"]');
-  if(impInp) impInp.value=fmtMiles(wp.imp);
-  updWebPlatField(id,idx,'imp',wp.imp);
+  // Compat: campo legado "inversión objetivo" → misma tríada vía inv
+  const el=document.getElementById('winv_'+id+'_'+idx);
+  const invObj=parseMiles(el&&el.value||0);
+  const invEl=document.getElementById('wfinv_'+id+'_'+idx);
+  if(invEl&&document.activeElement!==invEl) invEl.value=invObj?fmtMiles(invObj):'';
+  updWebPlatField(id,idx,'inv',invObj);
 }
 function updWebFmt(id){
   const f=allFmts().find(x=>x.id===id);
@@ -3369,7 +3429,6 @@ function fmtGrid(f,s){
   const inpGr='width:100%;background:var(--dk);border:1px solid var(--gr);border-radius:4px;padding:5px 7px;color:var(--tx);font-size:12px;outline:none';
   const id=f.id;
   const oi='oninput="upd(\'' +id+ '\')"';
-  const oiInv='oninput="updInv(\'' +id+ '\')"';
   if(f.infType==='influencer'){
     return renderInfluencerGrid(f, s);
   }
@@ -3438,13 +3497,11 @@ function fmtGrid(f,s){
     +'<input type="number" id="d_'+id+'" value="'+formatDtoPct(s.dto||0)+'" min="0" max="100" step="0.01" '+oi+' style="'+inp+'" aria-label="Descuento unitario porcentual"/></div>'
     +'<div><label for="finv_'+id+'" style="color:var(--cy)">Inversión (CLP)</label>'
     +'<input type="text" data-m="1" id="finv_'+id+'" class="fmt-inv-field" inputmode="numeric" placeholder="Ej: 2.000.000" value="'+(invNeto?fmtMiles(invNeto):'')+'" '+oi+' style="'+inpCy+'" aria-label="Inversión del formato sobre tarifa"/>'
-    +'<div class="fmt-inv-hint">Editable · el % se calcula desde la tarifa</div></div>'
+    +'<div class="fmt-inv-hint">'+(f.tipo==='cpm'
+      ? '2 de 3: CPM + inversión → impresiones (o al revés)'
+      : 'Editable · el % se calcula desde la tarifa')+'</div></div>'
     +'<div><label for="i_'+id+'">Impresiones est.</label>'
     +'<input type="text" data-m="1" id="i_'+id+'" value="'+fmtMiles(s.imp)+'" '+oi+' style="'+inp+'" aria-label="Impresiones estimadas"/></div>';
-  if(f.tipo==='cpm'){
-    g+='<div style="grid-column:1/-1"><label for="inv_'+id+'" style="color:var(--cy)">Inversión objetivo (CLP) → recalcula impresiones</label>'
-      +'<input type="text" data-m="1" id="inv_'+id+'" placeholder="Ej: 2.000.000" style="'+inpCy+'" '+oiInv+' aria-label="Inversión objetivo"/></div>';
-  }
   return g+costoProdField;
 }
 
@@ -3951,27 +4008,31 @@ function syncFmtDtoInvInputs(id){
   const neto=unitNetoFromTarget(s,bruto).neto;
   const d=fmtInputInRoot(root,'d_',id);
   const finv=fmtInputInRoot(root,'finv_',id);
+  const p=fmtInputInRoot(root,'p_',id);
+  const i=fmtInputInRoot(root,'i_',id);
   if(d&&document.activeElement!==d) d.value=formatDtoPct(s.dto||0);
   if(finv&&document.activeElement!==finv) finv.value=neto?fmtMiles(neto):'';
+  if(f.tipo==='cpm'){
+    if(p&&document.activeElement!==p) p.value=fmtMiles(s.precio||0);
+    if(i&&document.activeElement!==i) i.value=fmtMiles(s.imp||0);
+  }
 }
 
 function updInv(id){
+  // Compat: campo legado "inversión objetivo" → misma tríada vía finv
   const f=allFmts().find(x=>x.id===id);
   if(!f||f.tipo!=='cpm') return;
-  const s=syncFmtStateFromDom(id);
   const root=visibleFmtRoot(id);
   const invObj=parseMiles((fmtInputInRoot(root,'inv_',id)||document.getElementById('inv_'+id))?.value||0);
-  if(invObj<=0) return;
-  // inv_objetivo = (CPM/1000) * imp * qty * (1 - dto/100)
-  // despejando imp: imp = invObj / ((CPM/1000) * qty * (1 - dto/100))
-  const qty=s.qty||1;
-  const dto=s.dto||0;
-  const factor=(s.precio/1000)*qty*(1-dto/100);
-  if(factor<=0) return;
-  const newImp=Math.round(invObj/factor);
-  s.imp=newImp;
+  const s=STATE[id];
+  if(!s) return;
+  applyCpmTriad(s,'inv',invObj);
+  const finv=fmtInputInRoot(root,'finv_',id);
   const impEl=fmtInputInRoot(root,'i_',id)||document.getElementById('i_'+id);
-  if(impEl) impEl.value=fmtMiles(newImp);
+  const pEl=fmtInputInRoot(root,'p_',id)||document.getElementById('p_'+id);
+  if(finv&&document.activeElement!==finv) finv.value=invObj?fmtMiles(invObj):'';
+  if(impEl) impEl.value=fmtMiles(s.imp||0);
+  if(pEl&&document.activeElement!==pEl) pEl.value=fmtMiles(s.precio||0);
   upd(id);
 }
 
