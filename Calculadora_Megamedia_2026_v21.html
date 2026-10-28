@@ -1772,12 +1772,18 @@ const CATS=[
        desc:'Mix de banners de marca en Mega.cl y Meganoticias.cl. Modelo de compra: CPM.',
        ref:'',
        tipo:'cpm', precio:2500, imp:1000000},
+      {id:'dai',             name:'DAI (Dynamic Ad Insertion)',         tag:'CPM', tagCls:'tag-cpm',
+       plat:'Player web Mega y Meganoticias',
+       marca:'Spot insertado en el player',
+       desc:'Spot publicitario insertado dinámicamente en el player digital de Mega y Meganoticias mediante Dynamic Ad Insertion (DAI). Cobro por CPM.',
+       ref:'',
+       tipo:'cpm', precio:5500, imp:250000},
       {id:'dai_sev',         name:'DAI SEV (Spot en señal en vivo)',    tag:'CPM', tagCls:'tag-cpm',
        plat:'Señal en vivo streaming · Player web Mega y Meganoticias',
        marca:'Spot en tanda señal en vivo',
        desc:'Spot publicitario insertado en la tanda de la señal en vivo mediante Dynamic Ad Insertion (DAI). Cobro por CPM.',
        ref:'',
-       tipo:'cpm', precio:5500, imp:250000},
+       tipo:'cpm', precio:12000, imp:250000},
       {id:'ig_social_extend',name:'Instagram Social Extend',            tag:'CPM', tagCls:'tag-cpm',
        plat:'Mega.cl · ROS',
        marca:'Inserción de contenido RRSS del cliente',
@@ -2097,7 +2103,7 @@ function isPautaCategorySectionLabel(s){
   if(!n) return false;
   if(/^(contenido editorial|vodcast|live shopping|programa o rostro|programas|teleseries|megadeportes|rrss radios|filas extra|formatos comerciales|contenido \(?sin etapa\)?|web display|senal en vivo|paid media|todo el periodo|previa|durante|post)$/.test(n))
     return true;
-  if(/filas extra|formatos comerciales|contenido sin etapa|web display|senal en vivo|paid media|display y paid|display & paid|plataformas de radio|todo el periodo/.test(n))
+  if(/filas extra|formatos comerciales|contenido sin etapa|web display|paid media|display y paid|display & paid|plataformas de radio|todo el periodo/.test(n))
     return true;
   try{
     if(typeof CATS!=='undefined'&&Array.isArray(CATS)){
@@ -4379,8 +4385,8 @@ function render(){
         <td class="num">${r.imp>0?f0(r.imp):'—'}</td>
         <td class="num">${r.alc>0?f0(r.alc):'—'}</td>
         <td class="num">${fM(r.cpm)}</td>
-        <td class="num" style="color:var(--am)">${(()=>{const id=r.f.id;if(id==='advideo')return'2.5%';if(id==='dai_sev')return'0.75%';if(id==='itt')return'2%';if(id==='itt_video')return'—';if(id==='skin_video_cpm')return'1%';if(id==='skin')return'1%';if(id==='banner_display')return'1%';if(id==='ig_social_extend')return'1%';if(id==='rich_media')return'1%';return'—';})()}</td>
-        <td class="num" style="color:var(--cy)">${(()=>{const id=r.f.id;if(id==='advideo')return'78%';if(id==='dai_sev')return'95%';if(id==='itt_video')return'40%';if(id==='skin_video_cpm')return'50%';return'—';})()}</td>
+        <td class="num" style="color:var(--am)">${(()=>{const id=r.f.id;if(id==='advideo')return'2.5%';if(id==='dai_sev'||id==='dai')return'0.75%';if(id==='itt')return'2%';if(id==='itt_video')return'—';if(id==='skin_video_cpm')return'1%';if(id==='skin')return'1%';if(id==='banner_display')return'1%';if(id==='ig_social_extend')return'1%';if(id==='rich_media')return'1%';return'—';})()}</td>
+        <td class="num" style="color:var(--cy)">${(()=>{const id=r.f.id;if(id==='advideo')return'78%';if(id==='dai_sev'||id==='dai')return'95%';if(id==='itt_video')return'40%';if(id==='skin_video_cpm')return'50%';return'—';})()}</td>
       </tr>`;
     });
   }
@@ -5286,6 +5292,7 @@ const OT_WEB_FMT_MAP={
   advideo:'Ad Video (Pre-Mid-Pos)',
   banner_display:'Banners Tradicionales (desktop y mobile)',
   banners_mix:'Mix de Banners',
+  dai:'DAI',
   dai_sev:'DAI',
   ig_social_extend:'Instagram Social Extend',
   itt:'ITT (desktop + mobile)',
@@ -5710,7 +5717,7 @@ async function exportarExcel(){
         const _id=row.f.id;
         const ctrVal=(()=>{
           if(_id==='advideo')return'2.5%';
-          if(_id==='dai_sev')return'0.75%';
+          if(_id==='dai_sev'||_id==='dai')return'0.75%';
           if(_id==='itt')return'2%';
           if(_id==='skin_video_cpm')return'1%';
           if(_id==='skin')return'1%';
@@ -5721,7 +5728,7 @@ async function exportarExcel(){
         })();
         const vtrVal=(()=>{
           if(_id==='advideo')return'78%';
-          if(_id==='dai_sev')return'95%';
+          if(_id==='dai_sev'||_id==='dai')return'95%';
           if(_id==='itt_video')return'40%';
           if(_id==='skin_video_cpm')return'50%';
           return'—';
@@ -6091,7 +6098,7 @@ async function exportarPDF(){
         const _id=row.f.id;
         const ctrVal=(()=>{
           if(_id==='advideo')return'2.5%';
-          if(_id==='dai_sev')return'0.75%';
+          if(_id==='dai_sev'||_id==='dai')return'0.75%';
           if(_id==='itt')return'2%';
           if(_id==='skin_video_cpm')return'1%';
           if(_id==='skin')return'1%';
@@ -6102,7 +6109,7 @@ async function exportarPDF(){
         })();
         const vtrVal=(()=>{
           if(_id==='advideo')return'78%';
-          if(_id==='dai_sev')return'95%';
+          if(_id==='dai_sev'||_id==='dai')return'95%';
           if(_id==='itt_video')return'40%';
           if(_id==='skin_video_cpm')return'50%';
           return'—';
@@ -6478,9 +6485,9 @@ const PAUTA_ALIASES={
   'live en estudio digital':'live_estudio_digital',
   'informativo vertical junto a vocero':'info_vertical_vocero',
   'retransmision':'retransmision',
-  'dai':'dai_sev',
-  'dai sev':'dai_sev',
-  'spot en senal en vivo':'dai_sev',
+  'dai':'__dai__',
+  'dai sev':'__dai__',
+  'spot en senal en vivo':'__dai__',
   'story para derivar trafico hacia la transmision oficial':'story_tx_oficial',
   'informativo en terreno':'info_terreno',
   'radar mega':'radar_mega',
@@ -7742,6 +7749,14 @@ function resolveLsPaidMediaMatch(entry,n){
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
   return{fmt:f,score:.95,method:'alias'};
 }
+// DAI SEV (señal en vivo, CPM mayor) solo si la fila lo menciona; si no, DAI
+function resolveDaiMatch(entry,n){
+  const text=normPauta([n,entry.plataforma,entry.tematica,...(entry.plats||[]).map(p=>p.plat)].join(' '));
+  const id=/\bsev\b|senal en vivo|senal vivo/.test(text)?'dai_sev':'dai';
+  const f=allFmts().find(x=>x.id===id);
+  if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
+  return{fmt:f,score:1,method:'alias'};
+}
 function pautaAliasMatch(n,entry){
   function resolveAliasId(id){
     if(id==='__mix_banners__') return resolveMixBannersMatch(entry,n);
@@ -7752,6 +7767,7 @@ function pautaAliasMatch(n,entry){
     if(id==='__backstage__') return resolveBackstageMatch(entry,n);
     if(id==='__dinamica_rostro__') return resolveDinamicaRostroMatch(entry,n);
     if(id==='__capsulas_plat__') return resolveCapsulasPlatFirstMatch(entry,n);
+    if(id==='__dai__') return resolveDaiMatch(entry,n);
     const f=allFmts().find(x=>x.id===id);
     if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
     return{fmt:f,score:1,method:'alias'};
@@ -7768,6 +7784,10 @@ function pautaAliasMatch(n,entry){
     if(n==='corte vertical'&&PAUTA_ALIASES[key]==='vod_corte_mm') continue;
     const hit=resolveAliasId(PAUTA_ALIASES[key]);
     if(hit) return{...hit,score:hit.score>=1?.95:hit.score,method:hit.method==='alias'?'alias-partial':hit.method};
+  }
+  if(/\bdai\b/.test(n)){
+    const dai=resolveDaiMatch(entry,n);
+    if(dai) return dai;
   }
   // Cápsulas verticales: plataformas primero, luego nombre
   if(/capsula/.test(n)&&/vertical/.test(n)){
