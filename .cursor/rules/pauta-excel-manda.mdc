@@ -1,0 +1,48 @@
+---
+description: Criterios para importar pautas Excel y agregar formatos al catálogo del Creador de Propuestas
+alwaysApply: true
+---
+
+# Pauta Excel e importación de formatos
+
+Responder siempre en español.
+
+## El Excel manda sobre el catálogo
+
+Al importar una pauta o al crear/actualizar un formato a partir de un Excel, usar siempre
+las **plataformas**, **alcances** e **impresiones** que vienen del Excel, no los del catálogo.
+
+- Plataformas: las del Excel reemplazan a las del catálogo (altas y bajas), conservando el nombre tal como viene.
+- Impresiones por plataforma: usar la columna de impresiones por fila (`IMPRESIONES`), no `IMPACTOS TOTALES`
+  (es el total × cantidad y suele venir en celda mergeada solo en la primera fila).
+- Cantidad: viene de `CANTIDAD`; las impresiones del formato son por unidad.
+- Formatos Web/Display (`cat.id==='web'`): se calculan con `s.webPlats` (plataforma web + impresiones por línea),
+  no con `s.pautaPlats`. Mapear las plataformas del Excel a `WEB_PLATAFORMAS` (ver `pautaWebPlatsFromEntry`).
+- CPM de formatos web (y Display/Paid Media LS): inversión = impresiones × CPM ÷ 1.000. Si el Excel trae
+  columna `CPM` (por fila o por plataforma) se usa ese CPM; si no trae CPM pero sí inversión (`VALOR BRUTO`,
+  `INVERSIÓN`; o si no, `INV. NETA FINAL`), CPM = inversión × 1.000 ÷ (impresiones × cantidad)
+  (`derivePautaCpmFromInv`); si no hay ninguno, el CPM por defecto del catálogo (`f.precio`).
+  Sin impresiones en el Excel se usan las impresiones por defecto del formato.
+- El catálogo solo rellena lo que el Excel no trae (por ejemplo, repartir un total mergeado entre plataformas).
+
+Ejemplo (fila "Corte react digital", cantidad 4, total 208.000):
+
+```js
+pautaPlats:[
+  {plat:'Instagram Mega',alc:30000},
+  {plat:'Facebook Mega',alc:10000},
+  {plat:'Shorts Mega',alc:2000},
+  {plat:'TikTok Mega',alc:10000}
+] // imp: 52000 por unidad
+```
+
+## Pareo de formatos
+
+- El nombre del formato manda; plataformas y descripción solo desempatan (`pautaWeightedScore`).
+- Columnas que contienen "tipo" pero no son el formato (ej. `TIPO AUSPICIO`) no deben mapearse a `TIPO DE CONTENIDO`.
+- Ids que empiezan con `vod_` se tratan como Vodcast y `prog_corte_` oculta el campo "Nombre del Programa".
+
+## Archivos
+
+`index.html`, `deploy_calculadora/index.html` y `Calculadora_Megamedia_2026_v21.html` deben quedar idénticos:
+editar `index.html` y copiarlo a los otros dos.

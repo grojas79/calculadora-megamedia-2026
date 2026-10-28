@@ -1226,6 +1226,14 @@ const CATS=[
          {plat:'Instagram Stories Meganoticias',alc:105000},
          {plat:'Meganoticias.cl',alc:200}
        ]},
+      {id:'yt_mejor_momento', name:'VOD de mejor momento de capítulo',   tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'YouTube Mega',
+       marca:'Logo',
+       desc:'Corte horizontal para YouTube a partir de momentos o cuñas destacadas del capítulo.',
+       ref:'', tipo:'fijo', precio:500000, imp:2000,
+       pautaPlats:[
+         {plat:'YouTube Mega',alc:2000}
+       ]},
     ]
   },
   {
@@ -1473,6 +1481,17 @@ const CATS=[
        marca:'Logo + mención',
        desc:'Formato de reacción en video protagonizado por rostros del programa ante contenido viral o de marca. Alto engagement orgánico.',
        ref:'', tipo:'fijo', precio:2000000, imp:120000, progType:'programa'},
+      {id:'prog_react_corte', name:'Corte react digital',               tag:'Precio fijo', tagCls:'tag-fijo',
+       plat:'Instagram Mega · Facebook Mega · Shorts Mega · TikTok Mega',
+       marca:'Mención + logo',
+       desc:'Corte vertical a partir de un momento destacado del react digital del programa.',
+       ref:'', tipo:'fijo', precio:1500000, imp:52000, progType:'programa',
+       pautaPlats:[
+         {plat:'Instagram Mega',alc:30000},
+         {plat:'Facebook Mega',alc:10000},
+         {plat:'Shorts Mega',alc:2000},
+         {plat:'TikTok Mega',alc:10000}
+       ]},
     ]
   },
   {
@@ -6459,6 +6478,9 @@ const PAUTA_ALIASES={
   'live en estudio digital':'live_estudio_digital',
   'informativo vertical junto a vocero':'info_vertical_vocero',
   'retransmision':'retransmision',
+  'dai':'dai_sev',
+  'dai sev':'dai_sev',
+  'spot en senal en vivo':'dai_sev',
   'story para derivar trafico hacia la transmision oficial':'story_tx_oficial',
   'informativo en terreno':'info_terreno',
   'radar mega':'radar_mega',
@@ -6466,6 +6488,10 @@ const PAUTA_ALIASES={
   'repositorio de capitulos':'repo_capitulos',
   'repositorio de capitulos mega':'repo_capitulos',
   'corte vertical':'corte_vertical',
+  'corte react digital':'prog_react_corte',
+  'vod de mejor momento de capitulo':'yt_mejor_momento',
+  'vod de mejor momento':'yt_mejor_momento',
+  'vod mejor momento':'yt_mejor_momento',
   'contenidos digitales':'corte_vertical',
   'corte vertical a partir de vodcast mejores momentos':'vod_corte_mm',
   'backstage de la grabacion':'__backstage__',
@@ -6959,11 +6985,25 @@ function exportMedioForRow(row,sectionLabel){
 }
 function detectPautaHeaderMap(cells){
   const map={};
+  let tipoGeneric=null;
+  let alcTotal=null;
+  let hits=0;
   cells.forEach((c,i)=>{
     const n=normPauta(c);
-    if(!n) return;
+    if(!n||n.length>40) return;
     if(n==='origen'||n==='medio') map.origen=i;
-    else if(n.includes('tipo')) map.tipo=i;
+    else if(/formato[\s_]*id|^id formato/.test(n)) map.fmtId=i;
+    else if(/\bcpm\b/.test(n)&&!n.includes('tipo')) map.cpm=i;
+    else if(/inversion|^inv\b|bruto|^valor|^monto/.test(n)&&!/tipo|dto|descuento|%/.test(n)){
+      if(/neta|neto|final/.test(n)){ if(map.invNeta==null) map.invNeta=i; }
+      else if(map.invBruta==null) map.invBruta=i;
+    }
+    else if(n.includes('tipo')){
+      // "TIPO AUSPICIO" / "TIPO DE COMPRA" no son el nombre del formato
+      if(/auspicio|compra|cobro|tarifa|venta/.test(n)) map.tipoAusp=i;
+      else if(/contenido|formato/.test(n)){ if(map.tipo==null) map.tipo=i; }
+      else if(tipoGeneric==null) tipoGeneric=i;
+    }
     else if(n.includes('presencia')||(n.includes('marca')&&!n.includes('tematica'))) map.marca=i;
     else if(n.includes('tematica')||n.includes('descripcion')) map.tematica=i;
     else if(n.includes('referencia')) map.ref=i;
@@ -6972,20 +7012,27 @@ function detectPautaHeaderMap(cells){
       if(map.plat==null) map.plat=i;
       else map.platDetail=i;
     }
-    else if(n.includes('impresion')||n.includes('impacto')||n.includes('alcance')) map.alc=i;
+    // Impresiones por plataforma priman sobre "IMPACTOS TOTALES" (celda mergeada solo en la 1ª fila)
+    else if(n.includes('impresion')){ if(map.alc==null) map.alc=i; }
+    else if(n.includes('impacto')||n.includes('alcance')){ if(alcTotal==null) alcTotal=i; }
     else if(n.includes('etapa')) map.etapa=i;
-    else if(/formato[\s_]*id|^id formato/.test(n)) map.fmtId=i;
+    else return;
+    hits++;
   });
-  if(map.tipo==null) return null;
-  if(map.origen==null) map.origen=0;
-  if(map.marca==null) map.marca=2;
-  if(map.tematica==null) map.tematica=4;
-  if(map.ref==null) map.ref=5;
-  if(map.cant==null) map.cant=5;
-  if(map.plat==null) map.plat=6;
-  if(map.alc==null) map.alc=7;
-  if(map.etapa==null) map.etapa=8;
-  if(map.fmtId==null) map.fmtId=9;
+  if(map.tipo==null) map.tipo=tipoGeneric;
+  if(map.tipo==null||hits<3) return null;
+  if(map.alc==null&&alcTotal!=null) map.alc=alcTotal;
+  const used=new Set(Object.values(map).filter(v=>v!=null));
+  const def=(key,idx)=>{ if(map[key]==null&&!used.has(idx)){ map[key]=idx; used.add(idx); } };
+  def('origen',0);
+  def('marca',2);
+  def('tematica',4);
+  def('ref',5);
+  def('cant',5);
+  def('plat',6);
+  def('alc',7);
+  def('etapa',8);
+  def('fmtId',9);
   return map;
 }
 function pautaCellAt(cells,idx){
@@ -7035,6 +7082,53 @@ function appendPautaPlat(pending,cells,map){
   if(!pending.plats.some(p=>normPauta(p.plat)===normPauta(plat))){
     pending.plats.push({plat,alc});
   }
+  setPautaEntryCpm(pending,plat,map&&map.cpm!=null?parsePautaNum(pautaCellAt(cells,map.cpm)):0);
+  setPautaEntryInvFromRow(pending,plat,cells,map);
+}
+// Inversión de la propuesta (bruta o neta), para derivar el CPM cuando el Excel no trae columna CPM
+function setPautaEntryInvFromRow(entry,plat,cells,map){
+  if(!entry||!map) return;
+  const b=map.invBruta!=null?parsePautaNum(pautaCellAt(cells,map.invBruta)):0;
+  const n=map.invNeta!=null?parsePautaNum(pautaCellAt(cells,map.invNeta)):0;
+  if(!(b>0)&&!(n>0)) return;
+  if(!entry.invByPlat) entry.invByPlat={};
+  const k=normPauta(plat)||'_';
+  const prev=entry.invByPlat[k]||{b:0,n:0};
+  entry.invByPlat[k]={b:prev.b||b,n:prev.n||n};
+}
+// CPM = inversión × 1.000 ÷ (impresiones × cantidad). Prioriza inversión bruta (CPM de tarifa) sobre la neta.
+function derivePautaCpmFromInv(e){
+  if(!e||e.cpm>0||!e.invByPlat) return;
+  const rows=Object.entries(e.invByPlat);
+  const kind=rows.some(([,v])=>v.b>0)?'b':'n';
+  const withInv=rows.filter(([,v])=>v[kind]>0);
+  if(!withInv.length) return;
+  const qty=Math.max(1,+e.qty||1);
+  const alcOf=k=>{
+    const p=(e.plats||[]).find(x=>normPauta(x.plat)===k);
+    return p?(+p.alc||0):0;
+  };
+  if(withInv.length>1&&withInv.every(([k])=>alcOf(k)>0)){
+    withInv.forEach(([k,v])=>setPautaEntryCpm(e,k,Math.round(v[kind]*1000/(alcOf(k)*qty))));
+    return;
+  }
+  const inv=withInv.reduce((a,[,v])=>a+v[kind],0);
+  const imp=+e.totalAlc||0;
+  if(imp>0) e.cpm=Math.round(inv*1000/(imp*qty));
+}
+// CPM de la propuesta (columna CPM del Excel), por fila y por plataforma
+function setPautaEntryCpm(entry,plat,cpm){
+  if(!entry||!(cpm>0)) return;
+  if(!(entry.cpm>0)) entry.cpm=cpm;
+  if(!entry.cpmByPlat) entry.cpmByPlat={};
+  const k=normPauta(plat);
+  if(k&&!(entry.cpmByPlat[k]>0)) entry.cpmByPlat[k]=cpm;
+}
+function pautaEntryCpmFor(entry,platText){
+  const by=entry&&entry.cpmByPlat||{};
+  const k=normPauta(platText);
+  if(k&&by[k]>0) return by[k];
+  return entry&&entry.cpm>0?entry.cpm:0;
 }
 function consolidatePautaEntries(entries){
   const out=[];
@@ -7047,6 +7141,7 @@ function consolidatePautaEntries(entries){
       e.plats.forEach(p=>{
         if(!ex.plats.some(x=>normPauta(x.plat)===normPauta(p.plat))) ex.plats.push(p);
       });
+      Object.entries(e.cpmByPlat||{}).forEach(([k,v])=>setPautaEntryCpm(ex,k,v));
     } else {
       out.push({...e,plats:e.plats.slice()});
     }
@@ -7114,12 +7209,14 @@ function parsePautaRows(rawRows){
         tematica:pautaCellAt(cells,colMap.tematica),
         referencia:pautaCellAt(cells,colMap.ref),
         qtyRaw:pautaCellAt(cells,colMap.cant)||'',
-        fmtId:(pautaCellAt(cells,colMap.fmtId)||pautaCellAt(cells,9)||'').trim(),
+        fmtId:(pautaCellAt(cells,colMap.fmtId)||'').trim(),
         plats
       };
       if(!pending.plats.length&&pending.plataforma){
         pending.plats.push({plat:pending.plataforma,alc:0});
       }
+      if(colMap.cpm!=null) setPautaEntryCpm(pending,p0||pending.plataforma,parsePautaNum(pautaCellAt(cells,colMap.cpm)));
+      setPautaEntryInvFromRow(pending,p0||pending.plataforma,cells,colMap);
       pending.qty=parsePautaQty(pending.qtyRaw||'1');
       result.entries.push(pending);
       return;
@@ -7133,6 +7230,7 @@ function parsePautaRows(rawRows){
     e.medio=canonPautaOrigen(e.medio)||e.medio||'';
     e.origenFamilia=e.origenFamilia||pautaOrigenFamiliaFromLabel(e.medio);
     expandPautaEntryPlats(e);
+    derivePautaCpmFromInv(e);
     return e;
   });
   const lsPackImport=pautaDetectLsPackImport(entries);
@@ -7423,7 +7521,11 @@ function pautaScoreName(entry,fmt){
   const n=sig.name;
   if(fn===n) return 1;
   let s=matchScore(n,fn);
-  if(n&&fn&&(n.includes(fn)||fn.includes(n))) s=Math.max(s,.85);
+  if(n&&fn&&(n.includes(fn)||fn.includes(n))){
+    // "Corte react digital" contiene "react", pero el formato es un corte: exigir la misma palabra principal
+    const head=t=>pautaMeaningfulTokens(t)[0]||'';
+    s=Math.max(s,head(n)===head(fn)?.85:.6);
+  }
   const ef=pautaNameFamily(n);
   const ff=pautaNameFamily(fn)||pautaNameFamily(fmt.id||'');
   if(ef&&ff&&ef===ff) s=Math.max(s,.9);
@@ -7468,7 +7570,7 @@ function pautaCandidatesByName(entry){
       const sig=pautaEntrySignals(entry);
       const descScore=sig.desc?matchScore(sig.desc,normPauta(fmt.desc||'')):0;
       const alcScore=pautaAlcSimilarity(sig.alc,fmt.imp);
-      const score=plat.score*.5+nameScore*.3+descScore*.2;
+      const score=pautaWeightedScore(nameScore,plat.score,descScore,alcScore);
       return{fmt,nameScore,plat,descScore,alcScore,score,breakdown:{name:nameScore,desc:descScore,plat:plat.score,alc:alcScore,platFull:plat.fullMatch}};
     })
     .filter(c=>c.plat.score>0||c.nameScore>0||c.descScore>0)
@@ -7481,8 +7583,7 @@ function pautaCandidatesByName(entry){
         if(bSame!==aSame) return bSame-aSame;
         if(aSame&&bSame&&b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
       }
-      if(b.nameScore>=.9&&a.nameScore<.75&&b.nameScore-a.nameScore>=.2) return -1;
-      if(a.nameScore>=.9&&b.nameScore<.75&&a.nameScore-b.nameScore>=.2) return 1;
+      if(Math.abs(b.score-a.score)>=.05) return b.score-a.score;
       if(b.plat.fullMatch!==a.plat.fullMatch) return(b.plat.fullMatch?1:0)-(a.plat.fullMatch?1:0);
       if(b.plat.score!==a.plat.score) return b.plat.score-a.plat.score;
       if(b.plat.entryCoverage!==a.plat.entryCoverage) return b.plat.entryCoverage-a.plat.entryCoverage;
@@ -7564,14 +7665,19 @@ function pautaAlcSimilarity(entryAlc,fmtImp){
   if(ratio>=.3) return .4;
   return .2;
 }
+// Prioridad: nombre → plataformas → descripción → alcance. Con nombre claro, el nombre manda.
+function pautaWeightedScore(nameScore,platScore,descScore,alcScore){
+  return nameScore>=PAUTA_NAME_MIN_CONFIDENT
+    ?nameScore*.82+platScore*.12+descScore*.04+alcScore*.02
+    :nameScore*.45+platScore*.4+descScore*.1+alcScore*.05;
+}
 function scorePautaEntryVsFormat(entry,fmt){
   const nameScore=pautaScoreName(entry,fmt);
   const plat=pautaPlatMatchAnalysis(entry,fmt);
   const sig=pautaEntrySignals(entry);
   const descScore=sig.desc?matchScore(sig.desc,normPauta(fmt.desc||'')):0;
   const alcScore=pautaAlcSimilarity(sig.alc,fmt.imp);
-  // Prioridad: plataformas (50%) → nombre (30%) → descripción (20%)
-  const score=plat.score*.5+nameScore*.3+descScore*.2;
+  const score=pautaWeightedScore(nameScore,plat.score,descScore,alcScore);
   return{score,breakdown:{name:nameScore,desc:descScore,plat:plat.score,alc:alcScore,platFull:plat.fullMatch}};
 }
 function pautaRankAlternatives(entry,limit){
@@ -8186,7 +8292,8 @@ function stampPautaEntryOnFmt(f,entry){
   s.descCustom=(tema&&normPauta(tema)!==normPauta(defDesc))?tema:null;
   s.pautaEtapa=pautaDefaultEtapaForFmt(f,entry)||canonPautaEtapa(entry.etapa)||entry.etapa||'';
   s.pautaMedio=canonPautaOrigen(entry.medio)||entry.medio||'';
-  if(isLsDisplayPaidMediaFmt(f)&&f.precio!=null) s.precio=+f.precio||0;
+  if(isLsDisplayPaidMediaFmt(f)&&f.precio!=null)
+    s.precio=f.tipo==='cpm'&&entry.cpm>0?entry.cpm:(+f.precio||0);
   if(!f.customType||f.sourceFmtId) s.nameOverride=pautaCellStr(entry.tipoContenido)||null;
   applyPautaImpsFromEntry(f,s,entry);
   if(entry.marca&&f.customType&&!f.sourceFmtId) f.marca=entry.marca;
@@ -8206,7 +8313,70 @@ function pautaTemaEffective(f,s){
 function pautaEntryHasDetailedPlats(entry){
   return !!(entry&&entry.plats&&entry.plats.filter(p=>p.plat&&+p.alc>0).length>1);
 }
+function canonPautaWebPlat(text){
+  const n=normPauta(text);
+  if(!n) return null;
+  if(/redes megamedia|red megamedia|toda la red|\bros\b|\bron\b/.test(n)) return'Redes Megamedia';
+  if(/redes radios/.test(n)) return'Redes Radios';
+  if(/mega\s*go/.test(n)) return'Mega Go';
+  if(/meganoticias/.test(n)) return'Meganoticias';
+  if(/carolina/.test(n)) return'Carolina';
+  if(/romantica/.test(n)) return'Romantica';
+  if(/infinita/.test(n)) return'Infinita';
+  if(/disney/.test(n)) return'Disney';
+  if(/\bmega\b/.test(n)) return'Mega';
+  return null;
+}
+// Líneas web (plataforma + impresiones) según el Excel; [] si no se reconoce ninguna plataforma
+function pautaWebPlatsFromEntry(f,entry,impTarget){
+  const byPlat=new Map();
+  (entry&&entry.plats||[]).forEach(p=>{
+    const parts=pautaPlatPartsFromText(p.plat).map(canonPautaWebPlat).filter(Boolean);
+    const uniq=[...new Set(parts)];
+    const cpm=pautaEntryCpmFor(entry,p.plat);
+    uniq.forEach(wp=>{
+      const prev=byPlat.get(wp)||{imp:0,cpm:0};
+      byPlat.set(wp,{imp:prev.imp+(uniq.length===1?(+p.alc||0):0),cpm:prev.cpm||cpm});
+    });
+  });
+  if(!byPlat.size) return [];
+  const qty=Math.max(1,+entry.qty||1);
+  let lines=[...byPlat].map(([plat,v])=>({plat,imp:v.imp,cpm:v.cpm}));
+  const sum=lines.reduce((a,l)=>a+l.imp,0);
+  const empty=lines.filter(l=>!(l.imp>0));
+  if(sum<=0){
+    const each=Math.round(impTarget/lines.length);
+    lines.forEach(l=>{l.imp=each;});
+  } else if(empty.length){
+    const rem=impTarget-sum;
+    if(rem>0) empty.forEach(l=>{l.imp=Math.round(rem/empty.length);});
+    lines=lines.filter(l=>l.imp>0);
+  }
+  return lines.map(l=>{
+    const wp={...newWebPlatEntry(f,l.plat),qty,imp:l.imp};
+    if(f.tipo==='cpm'&&l.cpm>0) wp.precio=l.cpm;
+    return wp;
+  });
+}
 function applyPautaImpsFromEntry(f,s,entry){
+  // Web/Display se calcula con s.webPlats (plataforma web + impresiones por línea), no con pautaPlats
+  if(esTipoWeb(f)){
+    const impTarget=Math.max(0,+(entry.totalAlc||0))||pautaFmtDefaultImp(f);
+    if(impTarget<=0) return;
+    migrateWebPlats(s,f);
+    const webFromExcel=pautaWebPlatsFromEntry(f,entry,impTarget);
+    if(webFromExcel.length){
+      s.webPlats=webFromExcel;
+      s.imp=webFromExcel.reduce((a,wp)=>a+(+wp.imp||0),0);
+    } else {
+      s.webPlats[0].imp=impTarget;
+      s.webPlats[0].qty=Math.max(1,+entry.qty||1);
+      if(f.tipo==='cpm') s.webPlats[0].precio=entry.cpm>0?entry.cpm:(+f.precio||0);
+      s.imp=impTarget;
+    }
+    setPautaImpBase(s,s.imp);
+    return;
+  }
   // Detalle por fila (una plataforma + impresión por línea)
   if(pautaEntryHasDetailedPlats(entry)){
     s.pautaPlats=entry.plats.map(p=>({plat:p.plat,alc:+p.alc||0}));
@@ -8231,16 +8401,6 @@ function applyPautaImpsFromEntry(f,s,entry){
   }
   if(f.pautaPlats&&f.pautaPlats.length) applyCatalogPautaPlats(f,s);
   const impTarget=Math.max(0,+(entry.totalAlc||0))||pautaFmtDefaultImp(f);
-  if(esTipoWeb(f)&&impTarget>0){
-    migrateWebPlats(s,f);
-    if(s.webPlats&&s.webPlats.length){
-      s.webPlats[0].imp=impTarget;
-      s.webPlats[0].qty=Math.max(1,+entry.qty||1);
-      s.imp=impTarget;
-      setPautaImpBase(s,impTarget);
-    }
-    return;
-  }
   if(isPautaWebDisplayImportFmt(f)&&impTarget>0){
     s.imp=impTarget;
     setPautaImpBase(s,impTarget);
