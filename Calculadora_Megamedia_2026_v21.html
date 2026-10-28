@@ -1772,16 +1772,23 @@ const CATS=[
        desc:'Mix de banners de marca en Mega.cl y Meganoticias.cl. Modelo de compra: CPM.',
        ref:'',
        tipo:'cpm', precio:2500, imp:1000000},
-      {id:'dai',             name:'DAI (Dynamic Ad Insertion)',         tag:'CPM', tagCls:'tag-cpm',
+      {id:'dai',             name:'DAI',                                tag:'CPM', tagCls:'tag-cpm',
        plat:'Player web Mega y Meganoticias',
        marca:'Spot insertado en el player',
        desc:'Spot publicitario insertado dinámicamente en el player digital de Mega y Meganoticias mediante Dynamic Ad Insertion (DAI). Cobro por CPM.',
        ref:'',
        tipo:'cpm', precio:5500, imp:250000},
-      {id:'dai_sev',         name:'DAI SEV (Spot en señal en vivo)',    tag:'CPM', tagCls:'tag-cpm',
-       plat:'Señal en vivo streaming · Player web Mega y Meganoticias',
-       marca:'Spot en tanda señal en vivo',
-       desc:'Spot publicitario insertado en la tanda de la señal en vivo mediante Dynamic Ad Insertion (DAI). Cobro por CPM.',
+      {id:'dai_programa',    name:'DAI Tanda Programa específico',      tag:'CPM', tagCls:'tag-cpm',
+       plat:'Señal en vivo · Tanda del programa',
+       marca:'Spot en tanda del programa',
+       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) en la tanda de un programa específico de la señal en vivo. Cobro por CPM.',
+       ref:'',
+       tipo:'cpm', precio:10000, imp:250000},
+      // id histórico dai_sev: se mantiene para no romper propuestas guardadas
+      {id:'dai_sev',         name:'DAI Mega Go',                        tag:'CPM', tagCls:'tag-cpm',
+       plat:'Mega Go · Señal en vivo streaming',
+       marca:'Spot en tanda señal en vivo Mega Go',
+       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) en la señal en vivo de Mega Go. Cobro por CPM.',
        ref:'',
        tipo:'cpm', precio:12000, imp:250000},
       {id:'ig_social_extend',name:'Instagram Social Extend',            tag:'CPM', tagCls:'tag-cpm',
@@ -4385,8 +4392,8 @@ function render(){
         <td class="num">${r.imp>0?f0(r.imp):'—'}</td>
         <td class="num">${r.alc>0?f0(r.alc):'—'}</td>
         <td class="num">${fM(r.cpm)}</td>
-        <td class="num" style="color:var(--am)">${(()=>{const id=r.f.id;if(id==='advideo')return'2.5%';if(id==='dai_sev'||id==='dai')return'0.75%';if(id==='itt')return'2%';if(id==='itt_video')return'—';if(id==='skin_video_cpm')return'1%';if(id==='skin')return'1%';if(id==='banner_display')return'1%';if(id==='ig_social_extend')return'1%';if(id==='rich_media')return'1%';return'—';})()}</td>
-        <td class="num" style="color:var(--cy)">${(()=>{const id=r.f.id;if(id==='advideo')return'78%';if(id==='dai_sev'||id==='dai')return'95%';if(id==='itt_video')return'40%';if(id==='skin_video_cpm')return'50%';return'—';})()}</td>
+        <td class="num" style="color:var(--am)">${(()=>{const id=r.f.id;if(id==='advideo')return'2.5%';if(/^dai/.test(id))return'0.75%';if(id==='itt')return'2%';if(id==='itt_video')return'—';if(id==='skin_video_cpm')return'1%';if(id==='skin')return'1%';if(id==='banner_display')return'1%';if(id==='ig_social_extend')return'1%';if(id==='rich_media')return'1%';return'—';})()}</td>
+        <td class="num" style="color:var(--cy)">${(()=>{const id=r.f.id;if(id==='advideo')return'78%';if(/^dai/.test(id))return'95%';if(id==='itt_video')return'40%';if(id==='skin_video_cpm')return'50%';return'—';})()}</td>
       </tr>`;
     });
   }
@@ -5293,6 +5300,7 @@ const OT_WEB_FMT_MAP={
   banner_display:'Banners Tradicionales (desktop y mobile)',
   banners_mix:'Mix de Banners',
   dai:'DAI',
+  dai_programa:'DAI',
   dai_sev:'DAI',
   ig_social_extend:'Instagram Social Extend',
   itt:'ITT (desktop + mobile)',
@@ -5717,7 +5725,7 @@ async function exportarExcel(){
         const _id=row.f.id;
         const ctrVal=(()=>{
           if(_id==='advideo')return'2.5%';
-          if(_id==='dai_sev'||_id==='dai')return'0.75%';
+          if(/^dai/.test(_id))return'0.75%';
           if(_id==='itt')return'2%';
           if(_id==='skin_video_cpm')return'1%';
           if(_id==='skin')return'1%';
@@ -5728,7 +5736,7 @@ async function exportarExcel(){
         })();
         const vtrVal=(()=>{
           if(_id==='advideo')return'78%';
-          if(_id==='dai_sev'||_id==='dai')return'95%';
+          if(/^dai/.test(_id))return'95%';
           if(_id==='itt_video')return'40%';
           if(_id==='skin_video_cpm')return'50%';
           return'—';
@@ -6098,7 +6106,7 @@ async function exportarPDF(){
         const _id=row.f.id;
         const ctrVal=(()=>{
           if(_id==='advideo')return'2.5%';
-          if(_id==='dai_sev'||_id==='dai')return'0.75%';
+          if(/^dai/.test(_id))return'0.75%';
           if(_id==='itt')return'2%';
           if(_id==='skin_video_cpm')return'1%';
           if(_id==='skin')return'1%';
@@ -6109,7 +6117,7 @@ async function exportarPDF(){
         })();
         const vtrVal=(()=>{
           if(_id==='advideo')return'78%';
-          if(_id==='dai_sev'||_id==='dai')return'95%';
+          if(/^dai/.test(_id))return'95%';
           if(_id==='itt_video')return'40%';
           if(_id==='skin_video_cpm')return'50%';
           return'—';
@@ -6487,6 +6495,8 @@ const PAUTA_ALIASES={
   'retransmision':'retransmision',
   'dai':'__dai__',
   'dai sev':'__dai__',
+  'dai mega go':'__dai__',
+  'dai tanda':'__dai__',
   'spot en senal en vivo':'__dai__',
   'story para derivar trafico hacia la transmision oficial':'story_tx_oficial',
   'informativo en terreno':'info_terreno',
@@ -7749,13 +7759,17 @@ function resolveLsPaidMediaMatch(entry,n){
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
   return{fmt:f,score:.95,method:'alias'};
 }
-// DAI SEV (señal en vivo, CPM mayor) solo si la fila lo menciona; si no, DAI
+// 3 DAI: Mega Go (id histórico dai_sev) > Tanda programa específico > DAI genérico
 function resolveDaiMatch(entry,n){
-  const text=normPauta([n,entry.plataforma,entry.tematica,...(entry.plats||[]).map(p=>p.plat)].join(' '));
-  const id=/\bsev\b|senal en vivo|senal vivo/.test(text)?'dai_sev':'dai';
+  const platText=normPauta([entry.plataforma,...(entry.plats||[]).map(p=>p.plat)].join(' '));
+  const text=normPauta([n,platText,entry.tematica].join(' '));
+  let id='dai';
+  if(/mega\s*go\b|megago/.test(text)) id='dai_sev';
+  else if(/\btanda\b/.test(text)||/programa/.test(n+' '+platText)) id='dai_programa';
+  else if(/\bsev\b|senal en vivo|senal vivo/.test(text)) id='dai_sev';
   const f=allFmts().find(x=>x.id===id);
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
-  return{fmt:f,score:1,method:'alias'};
+  return{fmt:f,score:1,method:'dai'};
 }
 function pautaAliasMatch(n,entry){
   function resolveAliasId(id){
@@ -8054,7 +8068,7 @@ function matchFormatoEntry(entry){
     // Alias solo es auto-confiable si plataformas no contradicen fuerte
     const plat=pautaPlatMatchAnalysis(entry,alias.fmt);
     const needsReview=plat.score===0&&pautaEntryPlatLines(entry).length>0&&!['exact','alias','id'].includes(alias.method);
-    return{matchInfo:alias,alternatives:alts,needsReview:!!needsReview&&alias.method!=='alias'&&alias.method!=='dinamica-rostro'&&alias.method!=='backstage'};
+    return{matchInfo:alias,alternatives:alts,needsReview:!!needsReview&&alias.method!=='alias'&&alias.method!=='dinamica-rostro'&&alias.method!=='backstage'&&alias.method!=='dai'};
   }
   const exact=pautaFmtCandidates(entry).find(x=>normPauta(x.name)===n);
   if(exact) return{matchInfo:{fmt:exact,score:1,method:'exact'},alternatives:[{fmt:exact,score:1,method:'exact'}],needsReview:false};
