@@ -1772,23 +1772,22 @@ const CATS=[
        desc:'Mix de banners de marca en Mega.cl y Meganoticias.cl. Modelo de compra: CPM.',
        ref:'',
        tipo:'cpm', precio:2500, imp:1000000},
-      {id:'dai',             name:'DAI',                                tag:'CPM', tagCls:'tag-cpm',
-       plat:'Player web Mega y Meganoticias',
-       marca:'Spot insertado en el player',
-       desc:'Spot publicitario insertado dinámicamente en el player digital de Mega y Meganoticias mediante Dynamic Ad Insertion (DAI). Cobro por CPM.',
+      {id:'dai_sev',         name:'DAI SEV',                            tag:'CPM', tagCls:'tag-cpm',
+       plat:'Señales en vivo de Mega (Mega.cl, Mega Go, etc.)',
+       marca:'Spot en tanda señal en vivo',
+       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) en las tandas de todas las señales en vivo de las plataformas de Mega. Cobro por CPM.',
        ref:'',
        tipo:'cpm', precio:5500, imp:250000},
-      {id:'dai_programa',    name:'DAI Tanda Programa específico',      tag:'CPM', tagCls:'tag-cpm',
-       plat:'Señal en vivo · Tanda del programa',
+      {id:'dai_programa',    name:'DAI Tanda de programa específico',   tag:'CPM', tagCls:'tag-cpm',
+       plat:'Señal en vivo · Tanda de programa o bloque horario',
        marca:'Spot en tanda del programa',
-       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) en la tanda de un programa específico de la señal en vivo. Cobro por CPM.',
+       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) en las tandas de la señal en vivo, en un programa o bloque horario específico. Cobro por CPM.',
        ref:'',
        tipo:'cpm', precio:10000, imp:250000},
-      // id histórico dai_sev: se mantiene para no romper propuestas guardadas
-      {id:'dai_sev',         name:'DAI Mega Go',                        tag:'CPM', tagCls:'tag-cpm',
-       plat:'Mega Go · Señal en vivo streaming',
+      {id:'dai_megago',      name:'DAI Mega Go',                        tag:'CPM', tagCls:'tag-cpm',
+       plat:'Mega Go · Señal en vivo',
        marca:'Spot en tanda señal en vivo Mega Go',
-       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) en la señal en vivo de Mega Go. Cobro por CPM.',
+       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) solo en la señal en vivo de Mega Go. Cobro por CPM.',
        ref:'',
        tipo:'cpm', precio:12000, imp:250000},
       {id:'ig_social_extend',name:'Instagram Social Extend',            tag:'CPM', tagCls:'tag-cpm',
@@ -5108,10 +5107,29 @@ function guardar(){
   syncTeamUpsert(teamRecordFromCurrent(id));
 }
 
+function migrateLegacyFmtState(st){
+  if(!st) return;
+  const n=s=>normPauta(s);
+  const looksMegaGo=s=>{
+    if(!s) return false;
+    if(/mega\s*go|megago/.test(n(s.nameOverride||''))) return true;
+    const plats=(s.webPlats||[]).map(p=>n(p.plat)).filter(Boolean);
+    return plats.length>0&&plats.every(p=>/mega\s*go|megago/.test(p));
+  };
+  if(st.dai){
+    if(!st.dai_sev||!st.dai_sev.active) st.dai_sev=st.dai;
+    delete st.dai;
+  }
+  if(st.dai_sev&&st.dai_sev.active&&looksMegaGo(st.dai_sev)&&!(st.dai_megago&&st.dai_megago.active)){
+    st.dai_megago=st.dai_sev;
+    delete st.dai_sev;
+  }
+}
 function cargar(id){
   const h=HIST.find(x=>x.id===id);if(!h)return;
   Object.keys(STATE).forEach(k=>delete STATE[k]);
   Object.assign(STATE,JSON.parse(JSON.stringify(h.state)));
+  migrateLegacyFmtState(STATE);
   allFmts().forEach(f=>{if(!STATE[f.id]) initFmtState(f);});
   applyCampaignSnapshot(h);
   PAUTA_IMPORT_META=h.pautaMeta?JSON.parse(JSON.stringify(h.pautaMeta)):{hasPautaSections:false,etapas:[]};
@@ -5302,6 +5320,7 @@ const OT_WEB_FMT_MAP={
   dai:'DAI',
   dai_programa:'DAI',
   dai_sev:'DAI',
+  dai_megago:'DAI',
   ig_social_extend:'Instagram Social Extend',
   itt:'ITT (desktop + mobile)',
   itt_video:'ITT Video Full (solo desktop)',
@@ -6497,6 +6516,8 @@ const PAUTA_ALIASES={
   'dai sev':'__dai__',
   'dai mega go':'__dai__',
   'dai tanda':'__dai__',
+  'dai tanda de programa especifico':'__dai__',
+  'dai tanda programa especifico':'__dai__',
   'spot en senal en vivo':'__dai__',
   'story para derivar trafico hacia la transmision oficial':'story_tx_oficial',
   'informativo en terreno':'info_terreno',
@@ -7759,14 +7780,14 @@ function resolveLsPaidMediaMatch(entry,n){
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
   return{fmt:f,score:.95,method:'alias'};
 }
-// 3 DAI: Mega Go (id histórico dai_sev) > Tanda programa específico > DAI genérico
+// Las 3 DAI corren en SEV. SEV/señal en vivo no desambigua: Mega Go > tanda/programa/horario > DAI genérico
 function resolveDaiMatch(entry,n){
   const platText=normPauta([entry.plataforma,...(entry.plats||[]).map(p=>p.plat)].join(' '));
   const text=normPauta([n,platText,entry.tematica].join(' '));
-  let id='dai';
-  if(/mega\s*go\b|megago/.test(text)) id='dai_sev';
-  else if(/\btanda\b/.test(text)||/programa/.test(n+' '+platText)) id='dai_programa';
-  else if(/\bsev\b|senal en vivo|senal vivo/.test(text)) id='dai_sev';
+  const namePlat=n+' '+platText;
+  let id='dai_sev';
+  if(/mega\s*go\b|megago/.test(text)) id='dai_megago';
+  else if(/\btanda\b/.test(text)||/programa especifico|programa o bloque|bloque horario|horario especifico/.test(text)||/programa/.test(namePlat)) id='dai_programa';
   const f=allFmts().find(x=>x.id===id);
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
   return{fmt:f,score:1,method:'dai'};
