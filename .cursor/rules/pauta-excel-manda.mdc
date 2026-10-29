@@ -38,7 +38,9 @@ pautaPlats:[
 
 ## Pareo de formatos
 
-- El nombre del formato manda; plataformas y descripción solo desempatan (`pautaWeightedScore`).
+- El nombre del formato manda. Plataformas y alcance desempatan y, si no calzan, el pareo pide confirmación con las alternativas más cercanas (`pautaWeightedScore`, `pautaCandidateFirm`).
+- Si falta o sobra una plataforma, la propuesta usa las del Excel (altas y bajas) sin crear un formato nuevo.
+- El nombre visible de esa propuesta pasa a ser el del Excel (`nameOverride`). Un formato nuevo solo se crea si el nombre y la descripción no se parecen a ninguno del catálogo.
 - Columnas que contienen "tipo" pero no son el formato (ej. `TIPO AUSPICIO`) no deben mapearse a `TIPO DE CONTENIDO`.
 - Ids que empiezan con `vod_` se tratan como Vodcast y `prog_corte_` oculta el campo "Nombre del Programa".
 

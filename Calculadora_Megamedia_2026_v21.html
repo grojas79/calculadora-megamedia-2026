@@ -6894,10 +6894,20 @@ function buildPautaPlatsFromExcelAndCatalog(f,entry){
 
   const catalog=(f&&f.pautaPlats)||[];
   const catMap=new Map(catalog.map(p=>[normPauta(p.plat),p]));
+  const excelAlc=new Map();
+  (entry&&entry.plats||[]).forEach(p=>{
+    const parts=pautaPlatPartsFromText(p.plat);
+    if(parts.length!==1) return;
+    const k=normPauta(parts[0]);
+    const alc=+p.alc||0;
+    if(k&&alc>0&&!excelAlc.has(k)) excelAlc.set(k,alc);
+  });
   function findCat(name){
     return catMap.get(normPauta(name))||null;
   }
   let plats=names.map(name=>{
+    const fromExcel=excelAlc.get(normPauta(name));
+    if(fromExcel>0) return{plat:name,alc:fromExcel};
     const cat=findCat(name);
     return{plat:name,alc:cat?(+cat.alc||0):0};
   });
@@ -7627,79 +7637,74 @@ function pautaCandidatesByName(entry){
       const score=pautaWeightedScore(nameScore,plat.score,descScore,alcScore);
       return{fmt,nameScore,plat,descScore,alcScore,score,breakdown:{name:nameScore,desc:descScore,plat:plat.score,alc:alcScore,platFull:plat.fullMatch}};
     })
-    .filter(c=>c.plat.score>0||c.nameScore>0||c.descScore>0)
-    .sort((a,b)=>{
-      const fam=pautaNameFamily(entry.tipoContenido);
-      if(fam){
-        const af=pautaNameFamily(a.fmt.name)||pautaNameFamily(a.fmt.id);
-        const bf=pautaNameFamily(b.fmt.name)||pautaNameFamily(b.fmt.id);
-        const aSame=af===fam?1:0,bSame=bf===fam?1:0;
-        if(bSame!==aSame) return bSame-aSame;
-        if(aSame&&bSame&&b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
-      }
-      if(Math.abs(b.score-a.score)>=.05) return b.score-a.score;
-      if(b.plat.fullMatch!==a.plat.fullMatch) return(b.plat.fullMatch?1:0)-(a.plat.fullMatch?1:0);
-      if(b.plat.score!==a.plat.score) return b.plat.score-a.plat.score;
-      if(b.plat.entryCoverage!==a.plat.entryCoverage) return b.plat.entryCoverage-a.plat.entryCoverage;
-      if(b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
-      return b.descScore-a.descScore;
-    });
+    .filter(c=>c.plat.score>0||c.nameScore>0||c.descScore>0||c.alcScore>=.5)
+    .sort((a,b)=>pautaCandidateSort(entry,a,b));
+}
+function pautaSameNameFamily(entry,fmt){
+  const fam=pautaNameFamily(entry.tipoContenido);
+  if(!fam) return 0;
+  const ff=pautaNameFamily(fmt.name)||pautaNameFamily(fmt.id);
+  return ff===fam?1:0;
+}
+function pautaCandidateSort(entry,a,b){
+  const as=+a.score||0,bs=+b.score||0;
+  if(Math.abs(bs-as)>=.04) return bs-as;
+  const bFam=pautaSameNameFamily(entry,b.fmt),aFam=pautaSameNameFamily(entry,a.fmt);
+  if(bFam!==aFam) return bFam-aFam;
+  const aPlat=a.plat||{},bPlat=b.plat||{};
+  const aFull=aPlat.fullMatch!=null?aPlat.fullMatch:!!(a.breakdown&&a.breakdown.platFull);
+  const bFull=bPlat.fullMatch!=null?bPlat.fullMatch:!!(b.breakdown&&b.breakdown.platFull);
+  if(bFull!==aFull) return (bFull?1:0)-(aFull?1:0);
+  const aPs=aPlat.score!=null?aPlat.score:(a.breakdown&&a.breakdown.plat)||0;
+  const bPs=bPlat.score!=null?bPlat.score:(b.breakdown&&b.breakdown.plat)||0;
+  if(bPs!==aPs) return bPs-aPs;
+  const aAlc=a.alcScore!=null?a.alcScore:(a.breakdown&&a.breakdown.alc)||0;
+  const bAlc=b.alcScore!=null?b.alcScore:(b.breakdown&&b.breakdown.alc)||0;
+  if(bAlc!==aAlc) return bAlc-aAlc;
+  const aName=a.nameScore!=null?a.nameScore:(a.breakdown&&a.breakdown.name)||0;
+  const bName=b.nameScore!=null?b.nameScore:(b.breakdown&&b.breakdown.name)||0;
+  if(bName!==aName) return bName-aName;
+  return (b.descScore||(b.breakdown&&b.breakdown.desc)||0)-(a.descScore||(a.breakdown&&a.breakdown.desc)||0);
+}
+function pautaPlatConflicts(entry,fmt){
+  const lines=pautaEntryPlatLines(entry);
+  if(!lines.length||!fmt) return false;
+  const plat=fmt.entryCoverage!=null?fmt:pautaPlatMatchAnalysis(entry,fmt);
+  if(plat.brandOk===false) return true;
+  return plat.entryCoverage<.34&&plat.score<.3;
+}
+function pautaCandidateFirm(best,second){
+  if(!best) return false;
+  const platLines=best.plat&&best.plat.total>0;
+  const platOk=!platLines||best.plat.entryCoverage>=.5||best.plat.score>=.45;
+  const alcKnown=best.alcScore>0;
+  const alcOk=!alcKnown||best.alcScore>=.3||best.nameScore>=1;
+  const gap=!second||(best.score-(second.score||0))>=.08;
+  if(best.nameScore>=1&&platOk) return true;
+  if(best.nameScore>=PAUTA_NAME_MIN_CONFIDENT&&platOk&&alcOk&&gap) return true;
+  if(best.plat.fullMatch&&best.nameScore>=.45&&alcOk&&gap) return true;
+  return false;
 }
 function pautaResolveMatch(entry){
   const candidates=pautaCandidatesByName(entry);
   const best=candidates[0];
   if(!best) return null;
   const second=candidates[1];
-  const fam=pautaNameFamily(entry.tipoContenido);
-  // 0) Nombre de familia claro + score alto → priorizar sobre plataformas de otra familia
-  if(fam&&best.nameScore>=PAUTA_NAME_MIN_CONFIDENT){
-    const famBest=candidates.find(c=>{
-      const ff=pautaNameFamily(c.fmt.name)||pautaNameFamily(c.fmt.id);
-      return ff===fam&&c.nameScore>=PAUTA_NAME_MIN_CONFIDENT;
-    });
-    if(famBest&&(pautaNameFamily(best.fmt.name)||pautaNameFamily(best.fmt.id))!==fam){
-      return{fmt:famBest.fmt,score:Math.max(famBest.nameScore,famBest.score),method:'name-family',breakdown:famBest.breakdown};
-    }
-    if(famBest&&famBest.fmt.id===best.fmt.id){
-      return{fmt:best.fmt,score:Math.max(best.nameScore,best.score),method:'name-family',breakdown:best.breakdown};
-    }
-  }
-  // 1) Coincidencia completa de plataformas → priorizar; desambiguar por nombre/desc
-  if(best.plat.fullMatch){
-    const full=candidates.filter(c=>c.plat.fullMatch);
-    if(full.length===1){
-      if(fam){
-        const bf=pautaNameFamily(best.fmt.name)||pautaNameFamily(best.fmt.id);
-        if(bf&&bf!==fam&&best.nameScore<.5){
-          const byName=candidates.find(c=>(pautaNameFamily(c.fmt.name)||pautaNameFamily(c.fmt.id))===fam&&c.nameScore>=.7);
-          if(byName) return{fmt:byName.fmt,score:Math.max(byName.nameScore,byName.score),method:'name-family',breakdown:byName.breakdown};
-        }
-      }
-      return{fmt:best.fmt,score:Math.max(best.score,.92),method:'plat-full',breakdown:best.breakdown};
-    }
-    full.sort((a,b)=>{
-      if(b.nameScore!==a.nameScore) return b.nameScore-a.nameScore;
-      return b.descScore-a.descScore;
-    });
-    const w=full[0];
-    const amb=full.length>1&&Math.abs(full[0].nameScore-full[1].nameScore)<.15;
-    return{fmt:w.fmt,score:Math.max(w.score,.9),method:'plat-full',breakdown:w.breakdown,ambiguous:amb};
-  }
-  // 2) Buena cobertura de plataformas + nombre claro
-  if(best.plat.entryCoverage>=.75&&best.nameScore>=PAUTA_NAME_MIN_CONFIDENT){
-    return{fmt:best.fmt,score:best.score,method:'plat+name',breakdown:best.breakdown};
-  }
-  // 3) Nombre muy claro y gap vs segundo
-  if(pautaNameConfident(best,second)&&best.nameScore>=PAUTA_NAME_MIN_CONFIDENT){
-    return{fmt:best.fmt,score:best.nameScore,method:'name',breakdown:best.breakdown};
-  }
-  // 4) Mejor score compuesto (plataformas → nombre → descripción)
-  return{fmt:best.fmt,score:best.score,method:'plat+name+desc',breakdown:best.breakdown,ambiguous:true};
+  const tooWeak=best.nameScore<.32&&best.descScore<.22&&best.plat.score<.35;
+  const firm=!tooWeak&&pautaCandidateFirm(best,second);
+  return{
+    fmt:best.fmt,
+    score:best.score,
+    method:firm?'name+plat+alc':'plat+name+desc',
+    breakdown:best.breakdown,
+    ambiguous:!firm,
+    tooWeak
+  };
 }
 function pautaIsConfidentMatch(matchInfo,alternatives){
-  if(!matchInfo) return false;
-  if(matchInfo.ambiguous) return false;
-  if(matchInfo.method==='exact'||matchInfo.method==='id'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro'||matchInfo.method==='name-family'||matchInfo.method==='info-vertical-dual') return true;
+  if(!matchInfo||matchInfo.tooWeak||matchInfo.ambiguous) return false;
+  if(matchInfo.method==='exact'||matchInfo.method==='id'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro'||matchInfo.method==='name-family'||matchInfo.method==='info-vertical-dual'||matchInfo.method==='dai') return true;
+  if(matchInfo.method==='name+plat+alc') return true;
   if(matchInfo.method==='capsulas-plat-name'&&matchInfo.score>=.85) return true;
   if(matchInfo.method==='plat-full'&&matchInfo.score>=.85) return true;
   if(matchInfo.method==='plat+name'&&matchInfo.score>=.75) return true;
@@ -7719,11 +7724,11 @@ function pautaAlcSimilarity(entryAlc,fmtImp){
   if(ratio>=.3) return .4;
   return .2;
 }
-// Prioridad: nombre → plataformas → descripción → alcance. Con nombre claro, el nombre manda.
+// Nombre primero. Plataformas y alcance desempatan y pueden bajar la confianza si no calzan.
 function pautaWeightedScore(nameScore,platScore,descScore,alcScore){
   return nameScore>=PAUTA_NAME_MIN_CONFIDENT
-    ?nameScore*.82+platScore*.12+descScore*.04+alcScore*.02
-    :nameScore*.45+platScore*.4+descScore*.1+alcScore*.05;
+    ?nameScore*.58+platScore*.24+descScore*.06+alcScore*.12
+    :nameScore*.40+platScore*.32+descScore*.10+alcScore*.18;
 }
 function scorePautaEntryVsFormat(entry,fmt){
   const nameScore=pautaScoreName(entry,fmt);
@@ -7746,21 +7751,7 @@ function pautaRankAlternatives(entry,limit){
     if(r.score<PAUTA_ALT_MIN_SCORE&&!r.breakdown.platFull&&r.breakdown.name<.35) return;
     candidates.push({fmt,...r,method:'multi'});
   });
-  candidates.sort((a,b)=>{
-    const fam=pautaNameFamily(entry.tipoContenido);
-    if(fam){
-      const af=pautaNameFamily(a.fmt.name)||pautaNameFamily(a.fmt.id);
-      const bf=pautaNameFamily(b.fmt.name)||pautaNameFamily(b.fmt.id);
-      const aSame=af===fam?1:0,bSame=bf===fam?1:0;
-      if(bSame!==aSame) return bSame-aSame;
-      if(aSame&&bSame&&b.breakdown.name!==a.breakdown.name) return b.breakdown.name-a.breakdown.name;
-    }
-    if(b.breakdown.name>=.9&&a.breakdown.name<.75&&b.breakdown.name-a.breakdown.name>=.2) return -1;
-    if(a.breakdown.name>=.9&&b.breakdown.name<.75&&a.breakdown.name-b.breakdown.name>=.2) return 1;
-    if(b.score!==a.score) return b.score-a.score;
-    if(b.breakdown.platFull!==a.breakdown.platFull) return(b.breakdown.platFull?1:0)-(a.breakdown.platFull?1:0);
-    return 0;
-  });
+  candidates.sort((a,b)=>pautaCandidateSort(entry,a,b));
   const seen=new Set();
   const out=[];
   const max=limit||PAUTA_ALTERNATIVES_MAX;
@@ -8136,16 +8127,34 @@ function matchFormatoEntry(entry){
       :alias.method==='nota-web'
       ?notaWebAlternatives(entry,alias.fmt.id)
       :[alias];
-    // Alias solo es auto-confiable si plataformas no contradicen fuerte
-    const plat=pautaPlatMatchAnalysis(entry,alias.fmt);
-    const needsReview=plat.score===0&&pautaEntryPlatLines(entry).length>0&&!['exact','alias','id'].includes(alias.method);
-    return{matchInfo:alias,alternatives:alts,needsReview:!!needsReview&&alias.method!=='alias'&&alias.method!=='dinamica-rostro'&&alias.method!=='backstage'&&alias.method!=='dai'};
+    const conflict=pautaPlatConflicts(entry,alias.fmt);
+    const hardAlias=alias.method==='alias'||alias.method==='dai'||alias.method==='backstage'||alias.method==='dinamica-rostro';
+    const needsReview=conflict||(!hardAlias&&pautaEntryPlatLines(entry).length>0&&pautaPlatMatchAnalysis(entry,alias.fmt).score===0);
+    let alternatives=alts;
+    if(needsReview){
+      const ranked=pautaRankAlternatives(entry,8);
+      const seen=new Set(alternatives.map(a=>a.fmt&&a.fmt.id));
+      ranked.forEach(a=>{if(a.fmt&&!seen.has(a.fmt.id)){seen.add(a.fmt.id);alternatives.push(a);}});
+    }
+    return{matchInfo:alias,alternatives,needsReview};
   }
   const exact=pautaFmtCandidates(entry).find(x=>normPauta(x.name)===n);
-  if(exact) return{matchInfo:{fmt:exact,score:1,method:'exact'},alternatives:[{fmt:exact,score:1,method:'exact'}],needsReview:false};
+  if(exact){
+    const conflict=pautaPlatConflicts(entry,exact);
+    const alternatives=[{fmt:exact,score:1,method:'exact'}];
+    if(conflict){
+      const ranked=pautaRankAlternatives(entry,8);
+      const seen=new Set([exact.id]);
+      ranked.forEach(a=>{if(a.fmt&&!seen.has(a.fmt.id)){seen.add(a.fmt.id);alternatives.push(a);}});
+    }
+    return{matchInfo:{fmt:exact,score:1,method:'exact'},alternatives,needsReview:conflict};
+  }
   const resolved=pautaResolveMatch(entry);
   const alternatives=pautaRankAlternatives(entry);
-  if(!resolved) return{matchInfo:null,alternatives,needsReview:true};
+  if(!resolved||resolved.tooWeak){
+    const near=alternatives.filter(a=>(a.score||0)>=.22||(a.breakdown&&(a.breakdown.name>=.35||a.breakdown.plat>=.45))).slice(0,4);
+    return{matchInfo:null,alternatives:near,needsReview:true,preferCustom:true};
+  }
   return{matchInfo:resolved,alternatives,needsReview:!pautaIsConfidentMatch(resolved,alternatives)};
 }
 function matchFormato(tipoContenido){
@@ -8202,7 +8211,7 @@ function buildPautaPickCard(idx,m,cardOpts){
     const pct=Math.round((c.score||0)*100);
     const hint=c.note||pautaFmtHint(c.fmt,c.breakdown);
     const hidePct=m.matchInfo&&m.matchInfo.method==='dai-choose';
-    const checked=(selectedId&&c.fmt.id===selectedId)||(!selectedId&&i===0);
+    const checked=!m.preferCustom&&((selectedId&&c.fmt.id===selectedId)||(!selectedId&&i===0));
     radios+=`<label class="pauta-pick-opt">
       <input type="radio" name="pautaPick_${idx}" value="${escHtml(c.fmt.id)}" data-score="${c.score||0}"${checked?' checked':''}>
       <span class="pauta-pick-opt-body">
@@ -8216,7 +8225,7 @@ function buildPautaPickCard(idx,m,cardOpts){
   const customDesc=pautaCellStr(e.tematica)||'(sin descripción)';
   const customPlats=pautaEntryPlatSummary(e)||'(sin plataformas)';
   radios+=`<label class="pauta-pick-opt pauta-pick-custom">
-    <input type="radio" name="pautaPick_${idx}" value="__custom__"${!altList.length?' checked':''}>
+    <input type="radio" name="pautaPick_${idx}" value="__custom__"${m.preferCustom||!altList.length?' checked':''}>
     <span class="pauta-pick-opt-body">
       <div class="pauta-pick-opt-name">＋ Crear formato nuevo</div>
       <label class="pauta-pick-field-lbl" for="pautaCustomName_${idx}">Nombre del formato (editable)</label>
@@ -8425,7 +8434,8 @@ function pautaTemaEffective(f,s){
   return String(f&&f.desc||'').trim();
 }
 function pautaEntryHasDetailedPlats(entry){
-  return !!(entry&&entry.plats&&entry.plats.filter(p=>p.plat&&+p.alc>0).length>1);
+  const lines=(entry&&entry.plats||[]).filter(p=>String(p.plat||'').trim());
+  return lines.length>0&&lines.every(p=>+p.alc>0);
 }
 function canonPautaWebPlat(text){
   const n=normPauta(text);
@@ -8662,7 +8672,7 @@ async function importarPautaEditorial(input){
         alternatives.sort((a,b)=>(b.score||0)-(a.score||0));
         alternatives=alternatives.slice(0,PAUTA_ALTERNATIVES_MAX);
       }
-      return{entry,matchInfo:r.matchInfo,alternatives,needsReview:r.needsReview};
+      return{entry,matchInfo:r.matchInfo,alternatives,needsReview:r.needsReview,preferCustom:!!r.preferCustom};
     });
     matches=augmentMatchesWithLsPack(parsed,matches);
     PAUTA_PENDING_IMPORT={parsed,matches,ctx:PAUTA_MATCH_CTX};
