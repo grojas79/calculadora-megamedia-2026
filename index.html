@@ -1773,21 +1773,21 @@ const CATS=[
        ref:'',
        tipo:'cpm', precio:2500, imp:1000000},
       {id:'dai_sev',         name:'DAI SEV',                            tag:'CPM', tagCls:'tag-cpm',
-       plat:'Señales en vivo de Mega (Mega.cl, Mega Go, etc.)',
-       marca:'Spot en tanda señal en vivo',
-       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) en las tandas de todas las señales en vivo de las plataformas de Mega. Cobro por CPM.',
+       plat:'Señal en vivo · cualquier plataforma y horario',
+       marca:'Spot en tanda de señal en vivo',
+       desc:'Spot en la tanda de la señal en vivo de cualquier plataforma (Mega.cl, Mega Go, Meganoticias, etc.) y en cualquier horario. Cobro por CPM.',
        ref:'',
        tipo:'cpm', precio:5500, imp:250000},
-      {id:'dai_programa',    name:'DAI Tanda de programa específico',   tag:'CPM', tagCls:'tag-cpm',
-       plat:'Señal en vivo · Tanda de programa o bloque horario',
-       marca:'Spot en tanda del programa',
-       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) en las tandas de la señal en vivo, en un programa o bloque horario específico. Cobro por CPM.',
+      {id:'dai_programa',    name:'DAI Tanda Programa',                 tag:'CPM', tagCls:'tag-cpm',
+       plat:'Señal en vivo · programa o bloque horario',
+       marca:'Spot en tanda de un programa o bloque horario',
+       desc:'Spot solo en las tandas de un programa específico, o de un bloque horario específico, en las plataformas que transmitan ese programa en la señal en vivo. Hay que indicar el programa o el rango horario. Cobro por CPM.',
        ref:'',
-       tipo:'cpm', precio:10000, imp:250000},
+       tipo:'cpm', precio:10000, imp:250000, daiSlot:true},
       {id:'dai_megago',      name:'DAI Mega Go',                        tag:'CPM', tagCls:'tag-cpm',
        plat:'Mega Go · Señal en vivo',
-       marca:'Spot en tanda señal en vivo Mega Go',
-       desc:'Spot publicitario insertado mediante Dynamic Ad Insertion (DAI) solo en la señal en vivo de Mega Go. Cobro por CPM.',
+       marca:'Spot en tanda de señal en vivo Mega Go',
+       desc:'Spot solo en la señal en vivo de Mega Go. Cobro por CPM.',
        ref:'',
        tipo:'cpm', precio:12000, imp:250000},
       {id:'ig_social_extend',name:'Instagram Social Extend',            tag:'CPM', tagCls:'tag-cpm',
@@ -2204,7 +2204,7 @@ function fmtCostoProdExtra(f,s){
 }
 function getFmtMetaTag(f,id){
   const s=STATE[id];
-  if(f.progType==='programa') return (s?.progNombre||document.getElementById('prog_'+id)?.value||'').trim();
+  if(f.daiSlot||f.progType==='programa') return (s?.progNombre||document.getElementById('prog_'+id)?.value||'').trim();
   if(f.rostroField) return (s?.rostroNombre||document.getElementById('rostro_'+id)?.value||'').trim();
   return '';
 }
@@ -3270,11 +3270,18 @@ function updWebPlatInv(id,idx){
   if(invEl&&document.activeElement!==invEl) invEl.value=invObj?fmtMiles(invObj):'';
   updWebPlatField(id,idx,'inv',invObj);
 }
+function updDaiSlot(id){
+  const s=STATE[id];
+  const el=document.getElementById('prog_'+id);
+  if(s&&el) s.progNombre=el.value||'';
+}
 function updWebFmt(id){
   const f=allFmts().find(x=>x.id===id);
   const s=STATE[id];
   if(!f||!s||!esTipoWeb(f)) return;
   migrateWebPlats(s,f);
+  const slot=document.getElementById('prog_'+id);
+  if(slot&&f.daiSlot) s.progNombre=slot.value||'';
   const tot=calcWebFmtTotals(f,s);
   s.precio=s.webPlats[0]?s.webPlats[0].precio:0;
   s.qty=s.webPlats.reduce((a,wp)=>a+(+wp.qty||1),0);
@@ -3464,7 +3471,15 @@ function fmtGrid(f,s){
     return renderInfluencerGrid(f, s);
   }
   let progField='';
-  if(f.progType==='programa' && !id.startsWith('prog_corte_')){
+  if(f.daiSlot){
+    const slotVal=escHtml(s&&s.progNombre?s.progNombre:'');
+    progField='<div style="grid-column:1/-1">'
+      +'<label style="color:var(--mg)">📺 Programa o bloque horario <span style="font-weight:400;color:var(--or);font-size:10.5px">(obligatorio)</span></label>'
+      +'<input type="text" id="prog_'+id+'" placeholder="Ej: Miss Universo, o 21:00 a 23:00"'
+      +' value="'+slotVal+'"'
+      +' style="width:100%;background:var(--dk);border:1px solid var(--mg);border-radius:4px;padding:5px 7px;color:var(--tx);font-size:12px;outline:none"'
+      +' oninput="updDaiSlot(\''+id+'\')"/></div>';
+  } else if(f.progType==='programa' && !id.startsWith('prog_corte_')){
     progField='<div style="grid-column:1/-1">'
       +'<label style="color:var(--mg)">📺 Nombre del Programa</label>'
       +'<input type="text" id="prog_'+id+'" placeholder="Ej: El Muro, Mega Teleseries, etc."'
@@ -6516,6 +6531,7 @@ const PAUTA_ALIASES={
   'dai sev':'__dai__',
   'dai mega go':'__dai__',
   'dai tanda':'__dai__',
+  'dai tanda programa':'__dai__',
   'dai tanda de programa especifico':'__dai__',
   'dai tanda programa especifico':'__dai__',
   'spot en senal en vivo':'__dai__',
@@ -7792,6 +7808,19 @@ function resolveDaiMatch(entry,n){
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
   return{fmt:f,score:1,method:'dai'};
 }
+function pautaDaiSlotFromEntry(entry){
+  const rawName=String(entry&&entry.tipoContenido||'').trim();
+  const fromName=rawName.replace(/\bdai\b|\btanda\b|\bprograma\b|\bespec[ií]fico\b|\bsev\b|\bmega\s*go\b/gi,' ').replace(/\s+/g,' ').trim();
+  if(fromName.length>=3) return fromName;
+  const plat=String(entry&&entry.plataforma||'').trim();
+  const pn=normPauta(plat);
+  if(pn&&!/^(mega(\s*cl)?|meganoticias(\s*cl)?|mega\s*go|sev|senal en vivo)$/.test(pn)){
+    return plat.replace(/^(tanda|programa)\s+/i,'').trim()||plat;
+  }
+  const tema=String(entry&&entry.tematica||'').trim();
+  if(/horario|programa|tanda/.test(normPauta(tema))) return tema;
+  return '';
+}
 function pautaAliasMatch(n,entry){
   function resolveAliasId(id){
     if(id==='__mix_banners__') return resolveMixBannersMatch(entry,n);
@@ -8349,7 +8378,13 @@ function stampPautaEntryOnFmt(f,entry){
   s.pautaMedio=canonPautaOrigen(entry.medio)||entry.medio||'';
   if(isLsDisplayPaidMediaFmt(f)&&f.precio!=null)
     s.precio=f.tipo==='cpm'&&entry.cpm>0?entry.cpm:(+f.precio||0);
-  if(!f.customType||f.sourceFmtId) s.nameOverride=pautaCellStr(entry.tipoContenido)||null;
+  if(!f.customType||f.sourceFmtId){
+    if(!/^dai_/.test(f.id)) s.nameOverride=pautaCellStr(entry.tipoContenido)||null;
+  }
+  if(f.daiSlot){
+    const slot=pautaDaiSlotFromEntry(entry);
+    if(slot) s.progNombre=slot;
+  }
   applyPautaImpsFromEntry(f,s,entry);
   if(entry.marca&&f.customType&&!f.sourceFmtId) f.marca=entry.marca;
   if(entry.referencia&&f.customType&&!f.sourceFmtId) f.ref=entry.referencia;
