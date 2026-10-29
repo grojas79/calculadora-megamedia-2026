@@ -7796,16 +7796,34 @@ function resolveLsPaidMediaMatch(entry,n){
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
   return{fmt:f,score:.95,method:'alias'};
 }
-// Las 3 DAI corren en SEV. SEV/señal en vivo no desambigua: Mega Go > tanda/programa/horario > DAI genérico
-function resolveDaiMatch(entry,n){
+// Las 3 DAI corren en SEV. Mega Go y tanda/programa se asignan solos; "DAI" a secas se elige a mano.
+function pautaDaiSpecificId(entry,n){
   const platText=normPauta([entry.plataforma,...(entry.plats||[]).map(p=>p.plat)].join(' '));
   const text=normPauta([n,platText,entry.tematica].join(' '));
   const namePlat=n+' '+platText;
-  let id='dai_sev';
-  if(/mega\s*go\b|megago/.test(text)) id='dai_megago';
-  else if(/\btanda\b/.test(text)||/programa especifico|programa o bloque|bloque horario|horario especifico/.test(text)||/programa/.test(namePlat)) id='dai_programa';
+  if(/mega\s*go\b|megago/.test(text)) return'dai_megago';
+  if(/\btanda\b/.test(text)||/programa especifico|programa o bloque|bloque horario|horario especifico/.test(text)||/programa/.test(namePlat)) return'dai_programa';
+  return'';
+}
+function daiChoiceAlternatives(){
+  const notes={
+    dai_sev:'Recomendado · opción más segura · cualquier plataforma y horario · CPM $5.500',
+    dai_megago:'Solo la señal en vivo de Mega Go · CPM $12.000',
+    dai_programa:'Tandas de un programa o bloque horario · hay que indicarlo · CPM $10.000'
+  };
+  return ['dai_sev','dai_megago','dai_programa'].map(id=>{
+    const f=allFmts().find(x=>x.id===id);
+    if(!f) return null;
+    return{fmt:f,score:id==='dai_sev'?.99:id==='dai_megago'?.9:.89,method:'dai-choose',note:notes[id]};
+  }).filter(Boolean);
+}
+function resolveDaiMatch(entry,n){
+  const specific=pautaDaiSpecificId(entry,n);
+  const id=specific||'dai_sev';
   const f=allFmts().find(x=>x.id===id);
   if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
+  if(!specific&&n==='dai')
+    return{fmt:f,score:.99,method:'dai-choose'};
   return{fmt:f,score:1,method:'dai'};
 }
 function pautaDaiSlotFromEntry(entry){
@@ -8110,6 +8128,9 @@ function matchFormatoEntry(entry){
   if(!n) return{matchInfo:null,alternatives:pautaRankAlternatives(entry),needsReview:true};
   const alias=pautaAliasMatch(n,entry);
   if(alias){
+    if(alias.method==='dai-choose'){
+      return{matchInfo:alias,alternatives:daiChoiceAlternatives(),needsReview:true};
+    }
     const alts=alias.method==='grafica-feed'
       ?graficaFeedAlternatives(entry,alias.fmt.id)
       :alias.method==='nota-web'
@@ -8179,7 +8200,8 @@ function buildPautaPickCard(idx,m,cardOpts){
   let radios='';
   altList.forEach((c,i)=>{
     const pct=Math.round((c.score||0)*100);
-    const hint=pautaFmtHint(c.fmt,c.breakdown);
+    const hint=c.note||pautaFmtHint(c.fmt,c.breakdown);
+    const hidePct=m.matchInfo&&m.matchInfo.method==='dai-choose';
     const checked=(selectedId&&c.fmt.id===selectedId)||(!selectedId&&i===0);
     radios+=`<label class="pauta-pick-opt">
       <input type="radio" name="pautaPick_${idx}" value="${escHtml(c.fmt.id)}" data-score="${c.score||0}"${checked?' checked':''}>
@@ -8187,7 +8209,7 @@ function buildPautaPickCard(idx,m,cardOpts){
         <div class="pauta-pick-opt-name">${escHtml(c.fmt.name)}</div>
         ${hint?`<div class="pauta-pick-opt-sub">${escHtml(hint)}</div>`:''}
       </span>
-      <span class="pauta-pick-pct">${pct}%</span>
+      ${hidePct?'':`<span class="pauta-pick-pct">${pct}%</span>`}
     </label>`;
   });
   const customName=pautaCellStr(e.tipoContenido)||'Formato personalizado';
@@ -8212,9 +8234,11 @@ function buildPautaPickCard(idx,m,cardOpts){
     :'<span class="pauta-tag pauta-tag-ok">Sugerido</span>';
   const altHint=cardOpts.compact
     ?'Elige otro formato del catálogo o crea uno nuevo:'
-    :(altList.length
+    :(m.matchInfo&&m.matchInfo.method==='dai-choose'
+      ?'El Excel dice solo <strong>DAI</strong>. Elige uno de los 3 formatos. <strong>DAI SEV</strong> queda marcado porque es la opción más segura (cualquier plataforma y horario):'
+      :(altList.length
       ?'Elige el formato del catálogo o crea uno nuevo. La opción marcada es la sugerencia automática:'
-      :'No se encontraron alternativas cercanas. Puedes crear un formato nuevo; el nombre es editable:');
+      :'No se encontraron alternativas cercanas. Puedes crear un formato nuevo; el nombre es editable:'));
   return`<div class="pauta-pick-card" data-pauta-idx="${idx}">
     ${cardOpts.compact?'':`<div class="pauta-pick-src"><strong>${escHtml(pautaCellStr(e.tipoContenido)||'(sin nombre)')}</strong> ${tag}</div>`}
     ${!cardOpts.compact&&meta?`<div class="pauta-pick-meta">${meta}</div>`:''}
@@ -8624,6 +8648,9 @@ async function importarPautaEditorial(input){
     PAUTA_MATCH_CTX=pautaDetectPackageContext(parsed);
     let matches=parsed.entries.map(entry=>{
       const r=matchFormatoEntry(entry);
+      if(r.matchInfo&&r.matchInfo.method==='dai-choose'){
+        return{entry,matchInfo:r.matchInfo,alternatives:r.alternatives||[],needsReview:true};
+      }
       // Si hay alias confiable, igual enriquecer alternativas con ranking por plataformas
       let alternatives=r.alternatives||[];
       if(r.matchInfo&&r.matchInfo.fmt){
