@@ -452,6 +452,10 @@ td.inv{color:var(--cy);font-weight:700}
 .btn-pri:hover{background:linear-gradient(135deg,#00247a,#004ab5)}
 .btn-sec{background:var(--dk3);color:var(--tx2);border:1px solid var(--bd2)}
 .btn-sec:hover{color:var(--tx);border-color:var(--cy)}
+.btn-excel{background:#217346;color:#fff}
+.btn-excel:hover{background:#185c37}
+.btn-pdf{background:#d32f2f;color:#fff}
+.btn-pdf:hover{background:#b71c1c}
 .btn-full{grid-column:1/-1}
 .btn-xl{font-size:13px;padding:11px}
 
@@ -805,8 +809,8 @@ html[data-theme="day"] .login-card img{filter:none}
       <button id="btnPlantillaEditorial" class="btn btn-sec btn-full admin-only" onclick="abrirPlantillaEditorialModal()">Descargar plantilla editorial</button>
     </div>
     <div class="btn-row">
-      <button class="btn btn-sec" onclick="exportarExcel()">Excel</button>
-      <button class="btn btn-sec" onclick="exportarPDF()">PDF</button>
+      <button class="btn btn-excel" onclick="exportarExcel()">Excel</button>
+      <button class="btn btn-pdf" onclick="exportarPDF()">PDF</button>
       <button class="btn btn-sec btn-full" onclick="exportarOTWeb()">Crear OT WEB</button>
     </div>
     <p id="appBuildTag" style="margin:6px 0 0;font-size:10px;color:var(--tx3);text-align:center">Actualizado · Corte Vertical $1.200.000</p>
