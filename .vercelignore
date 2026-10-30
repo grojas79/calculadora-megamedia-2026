@@ -1,0 +1,9 @@
+# Vercel publica solo la app: "Creador de Propuestas.html", api/ y assets/
+.claude
+.cursor
+CLAUDE.md
+data
+supabase
+Tarifario_Megamedia_Digital_2026*.html
+*.xlsx
+*.csv

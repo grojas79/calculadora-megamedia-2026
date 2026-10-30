@@ -46,5 +46,5 @@ pautaPlats:[
 
 ## Archivos
 
-`index.html`, `deploy_calculadora/index.html` y `Calculadora_Megamedia_2026_v21.html` deben quedar idénticos:
-editar `index.html` y copiarlo a los otros dos.
+La app es un solo archivo: `Creador de Propuestas.html` (no hay copias que sincronizar).
+Vercel publica desde la raíz del repo y `vercel.json` lo sirve en `/`.
