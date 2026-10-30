@@ -415,6 +415,8 @@ td.inv{color:var(--cy);font-weight:700}
 .sum-fmt-link{color:var(--cy);text-decoration:none;cursor:pointer;display:inline;word-break:break-word}
 .sum-fmt-link:hover{text-decoration:underline;color:var(--tx)}
 .fmt-highlight{animation:fmtPulse 2.2s ease-out}
+.campo-faltante{border-color:#e5484d!important;box-shadow:0 0 0 3px rgba(229,72,77,.35);animation:campoFaltante 1s ease-in-out 2}
+@keyframes campoFaltante{50%{box-shadow:0 0 0 6px rgba(229,72,77,.15)}}
 @keyframes fmtPulse{
   0%,100%{box-shadow:0 0 0 1px rgba(0,200,232,.15)}
   20%{box-shadow:0 0 0 3px rgba(0,200,232,.5)}
@@ -2148,14 +2150,34 @@ function isReactRow(r){
   if(!r||!r.f||r.infDetailRow||r.infTotalRow) return false;
   return isReactFmt(r.f,r.s);
 }
-// Todo React debe indicar su programa: devuelve true (y avisa) si alguno no lo tiene
-function faltaProgramaReact(rows){
-  const sin=[...new Set(rows.filter(r=>isReactRow(r)&&!getFmtMetaTag(r.f,r.f.id)).map(r=>fmtDisplayName(r.f,r.s)))];
-  if(!sin.length) return false;
-  showToast('Indica el Nombre del Programa en: '+sin.join(', '));
-  const el=document.getElementById('prog_'+rows.find(r=>isReactRow(r)&&!getFmtMetaTag(r.f,r.f.id)).f.id);
-  if(el){el.scrollIntoView({block:'center'});el.focus();}
-  return true;
+// Datos obligatorios: programa en React y programa/bloque horario en DAI Tanda Programa.
+// Si falta alguno avisa, lleva al primer campo pendiente, lo marca y lo deja listo para escribir.
+function validarObligatorios(rows){
+  const faltan=rows.filter(r=>!r.infDetailRow&&!r.infTotalRow&&(isReactRow(r)||r.f.daiSlot)&&!getFmtMetaTag(r.f,r.f.id));
+  const ids=[...new Set(faltan.map(r=>r.f.id))];
+  if(!ids.length) return true;
+  const nombres=ids.map(id=>{const r=faltan.find(x=>x.f.id===id);return fmtDisplayName(r.f,r.s);});
+  showToast('Falta el programa'+(ids.length>1?' en: ':' en ')+nombres.join(', '));
+  irACampoObligatorio(ids[0],'prog_'+ids[0]);
+  return false;
+}
+function irACampoObligatorio(fmtId,inputId){
+  const q=document.getElementById('fmtSearch');
+  if(q&&q.value.trim()) q.value='';
+  scrollToFmt(fmtId);
+  setTimeout(()=>{
+    const el=document.getElementById(inputId);
+    if(!el) return;
+    el.scrollIntoView({block:'center'});
+    el.focus({preventScroll:true});
+    el.select&&el.select();
+    el.classList.add('campo-faltante');
+    el.addEventListener('input',function quitar(){
+      if(!el.value.trim()) return;
+      el.classList.remove('campo-faltante');
+      el.removeEventListener('input',quitar);
+    });
+  },400);
 }
 function partitionComercialSections(comercialRows){
   const reactRows=(comercialRows||[]).filter(isReactRow);
@@ -5607,7 +5629,7 @@ async function exportarExcel(){
   if(!(await ensureExcelJS())) return;
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
-  if(faltaProgramaReact(rows)) return;
+  if(!validarObligatorios(rows)) return;
 
   const btn=document.querySelector('[onclick="exportarExcel()"]');
   if(btn){btn.textContent='Generando…';btn.disabled=true;}
@@ -6185,7 +6207,7 @@ async function exportarExcel(){
 async function exportarPDF(){
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
-  if(faltaProgramaReact(rows)) return;
+  if(!validarObligatorios(rows)) return;
 
   const btn=document.querySelector('[onclick="exportarPDF()"]');
   if(btn){btn.textContent='Generando…';btn.disabled=true;}

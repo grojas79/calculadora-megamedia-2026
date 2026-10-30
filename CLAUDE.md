@@ -69,7 +69,8 @@ pautaPlats:[
 - Todo formato cuyo nombre visible o id contiene "react" (`isReactRow`) va en una sección "React" propia,
   justo antes de Web, en la tabla de resultados, el Excel y el PDF, aunque tenga etapa o sea de Live Shopping.
 - Todo React muestra el campo "Nombre del Programa" y es obligatorio: Excel y PDF no se generan si falta
-  (`faltaProgramaReact`). Su Medio en Excel/PDF es "React [programa]" (ej. "React Detrás del Muro").
+  (`validarObligatorios`, que también exige el programa o bloque horario de DAI Tanda Programa).
+  Al faltar un dato, `irACampoObligatorio` abre el formato, lleva al campo, lo marca en rojo y deja el cursor listo. Su Medio en Excel/PDF es "React [programa]" (ej. "React Detrás del Muro").
 
 ### Alcance (Sainsbury en dos niveles)
 
