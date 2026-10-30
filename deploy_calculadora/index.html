@@ -76,8 +76,8 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
 .dot.on{background:var(--gr);box-shadow:0 0 6px var(--gr);animation:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-.layout{display:grid;grid-template-columns:1fr 380px;gap:16px;align-items:start}
-@media(max-width:920px){.layout{grid-template-columns:1fr}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;align-items:start}
+@media(max-width:920px){.layout{grid-template-columns:minmax(0,1fr)}
   .sidebar{position:relative;top:auto;max-height:none;overflow-y:visible;padding-right:0}}
 
 .card{background:var(--dk2);border:1px solid var(--bd);border-radius:var(--r);padding:16px;margin-bottom:14px}
@@ -90,6 +90,10 @@ html[data-theme="day"] .theme-switch input:not(:checked)+.theme-switch-track::be
 .field input,.field select{width:100%;background:var(--dk3);border:1px solid var(--bd2);
   border-radius:var(--r2);padding:7px 10px;color:var(--tx);font-size:13px;outline:none;transition:.15s}
 .field input:focus,.field select:focus{border-color:var(--cy)}
+/* Foco visible al navegar con teclado (los inputs usan outline:none para el clic) */
+:is(a,button,input,select,textarea,summary,[role="button"],[tabindex]):focus-visible{
+  outline:2px solid var(--cy)!important;outline-offset:2px}
+.theme-switch input:focus-visible+.theme-switch-track{outline:2px solid var(--cy);outline-offset:2px}
 .field input[readonly]{opacity:.9;cursor:default;color:var(--tx);font-weight:600}
 .field select option{background:var(--dk2)}
 input::placeholder,textarea::placeholder{
@@ -152,6 +156,13 @@ input::-moz-placeholder,textarea::-moz-placeholder{color:var(--ph);opacity:1;fon
 .cat-group.open .cat-label{border-bottom:1px solid var(--bd)}
 .cat-group-body{display:none;padding:8px 8px 4px}
 .cat-group.open .cat-group-body{display:block}
+.cat-group.used-only .fmt-item:not(.active),
+.cat-group.used-only .cat-subsection.no-active{display:none}
+.cat-more-btn{display:block;width:100%;margin:4px 0 6px;padding:8px 10px;border:1px dashed var(--bd2);border-radius:var(--r3);
+  background:transparent;color:var(--tx2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;
+  transition:border-color .15s,color .15s}
+.cat-more-btn:hover{border-color:var(--cy);color:var(--cy)}
+.cat-more-btn[hidden]{display:none}
 .cat-chev{display:inline-block;width:12px;font-size:10px;color:var(--tx3);transition:transform .15s;flex-shrink:0}
 .cat-group.open>.cat-label .cat-chev,.cat-subsection.open>.cat-sub-label .cat-chev,.mega-group.open>.mega-group-header .cat-chev{transform:rotate(90deg)}
 .cat-count{margin-left:auto;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;background:var(--bd2);color:var(--tx2)}
@@ -366,7 +377,8 @@ hr{border:none;border-top:1px solid var(--bd);margin:14px 0}
 .empty{text-align:center;padding:24px;color:var(--tx2);font-size:13px;
   background:var(--dk3);border-radius:var(--r);border:1px dashed var(--bd2)}
 
-.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px}
+.kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-bottom:14px}
+@media(max-width:560px){.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .kpi{background:var(--dk3);border:1px solid var(--bd2);border-radius:var(--r2);padding:11px 13px}
 .kpi-label{font-size:9.5px;color:var(--tx2);font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-bottom:3px}
 .kpi-val{font-size:17px;font-weight:700;color:var(--cy);line-height:1.2}
@@ -532,6 +544,10 @@ html[data-theme="day"] .login-card img{filter:none}
 .pauta-pick-src{font-size:13px;margin-bottom:4px}
 .pauta-pick-meta{font-size:11px;color:var(--tx2);margin-bottom:8px;line-height:1.45}
 .pauta-pick-hint{font-size:11.5px;color:var(--tx2);margin:0 0 8px}
+.pauta-pick-ref{padding:8px 10px;margin:0 0 10px;border-left:3px solid var(--am);border-radius:var(--r3);background:rgba(245,158,11,.07);font-size:12.5px;line-height:1.4}
+.pauta-pick-ref-lbl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--am);margin-bottom:2px}
+.pauta-pick-ref-plats{font-weight:600;color:var(--tx)}
+.pauta-pick-ref-imp{font-weight:400;color:var(--tx2);font-variant-numeric:tabular-nums}
 .pauta-pick-opts{display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto}
 .pauta-pick-opt{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border:1px solid var(--bd);border-radius:6px;cursor:pointer;font-size:12.5px;line-height:1.35;transition:border-color .15s,background .15s}
 .pauta-pick-opt:hover{border-color:var(--cy);background:rgba(105,174,236,.06)}
@@ -671,7 +687,7 @@ html[data-theme="day"] .login-card img{filter:none}
   <div class="fmt-nav-tools">
     <button type="button" onclick="expandUsedFmtGroups()">Mostrar grupos en uso</button>
     <button type="button" onclick="collapseAllFmtGroups()">Contraer Grupos</button>
-    <span style="font-size:10px;color:var(--tx3);margin-left:4px">Los grupos con formatos activos se abren solos</span>
+    <span style="font-size:10px;color:var(--tx3);margin-left:4px">Los grupos en uso muestran solo los formatos seleccionados</span>
   </div>
 
   <div style="position:relative;margin-bottom:12px">
@@ -834,7 +850,7 @@ html[data-theme="day"] .login-card img{filter:none}
 
 </div><!-- /layout -->
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="pauta-overlay" id="pautaOverlay" onclick="if(event.target===this)cerrarPautaModal()">
   <div class="pauta-modal">
     <div class="pauta-modal-hdr" id="pautaModalTitle">Importar Pauta editorial</div>
@@ -3567,12 +3583,14 @@ const LS_UI_SECTIONS=[
   {id:'paid',label:'Paid Media'}
 ];
 const FMT_NAV_KEY='mg_fmt_nav_v1';
-let fmtNavState={mega:{},cat:{},sub:{}};
+// all[catId]=true: el grupo muestra todos sus formatos aunque tenga seleccionados.
+// No se recupera al reconstruir la lista: cada vista nueva parte mostrando solo los seleccionados.
+let fmtNavState={mega:{},cat:{},sub:{},all:{}};
 function loadFmtNavState(){
   try{
     const d=JSON.parse(sessionStorage.getItem(FMT_NAV_KEY)||'{}');
-    fmtNavState={mega:d.mega||{},cat:d.cat||{},sub:d.sub||{}};
-  }catch(e){fmtNavState={mega:{},cat:{},sub:{}};}
+    fmtNavState={mega:d.mega||{},cat:d.cat||{},sub:d.sub||{},all:{}};
+  }catch(e){fmtNavState={mega:{},cat:{},sub:{},all:{}};}
 }
 function saveFmtNavState(){
   try{sessionStorage.setItem(FMT_NAV_KEY,JSON.stringify(fmtNavState));}catch(e){}
@@ -3668,6 +3686,37 @@ function updateCatNavBadges(){
       badge.title=active>0?(active+' activo'+(active===1?'':'s')):cat.fmts.length+' formatos';
     }
   });
+  applyUsedOnlyClasses();
+}
+// Grupos con formatos seleccionados muestran solo esos; el botón del grupo revela el resto
+function applyUsedOnlyClasses(){
+  CATS.forEach(cat=>{
+    const el=document.getElementById('cat_'+cat.id);
+    if(!el) return;
+    const active=countActiveInCat(cat);
+    const filtered=active>0&&!fmtNavState.all[cat.id];
+    el.classList.toggle('used-only',filtered);
+    if(cat.id==='liveshopping'){
+      LS_UI_SECTIONS.forEach(sec=>{
+        const sub=document.getElementById('catsub_'+cat.id+'_'+sec.id);
+        if(sub) sub.classList.toggle('no-active',!countActiveInSub(cat.id,sec.id));
+      });
+    }
+    const btn=document.getElementById('cat_more_'+cat.id);
+    if(btn){
+      const rest=cat.fmts.length-active;
+      btn.hidden=!active||!rest;
+      btn.textContent=filtered
+        ?'+ Ver '+rest+' formato'+(rest===1?'':'s')+' más de '+(CAT_LABELS_SHORT[cat.id]||cat.label)
+        :'Mostrar solo los seleccionados';
+    }
+  });
+}
+function toggleCatShowAll(id,evt){
+  if(evt){evt.preventDefault();evt.stopPropagation();}
+  fmtNavState.all[id]=!fmtNavState.all[id];
+  saveFmtNavState();
+  applyUsedOnlyClasses();
 }
 function toggleMegaGroup(id,evt){
   if(evt) evt.preventDefault();
@@ -3709,6 +3758,7 @@ function expandFmtNavParents(fmtId){
   applyFmtNavClasses();
 }
 function expandUsedFmtGroups(){
+  fmtNavState.all={};
   NAV_MEGA_GROUPS.forEach(mg=>{ if(countActiveInMega(mg)) fmtNavState.mega[mg.id]=true; });
   CATS.forEach(cat=>{
     if(countActiveInCat(cat)) fmtNavState.cat[cat.id]=true;
@@ -3863,7 +3913,7 @@ function filtrarFormatos(q){
         +g.items.map(({f,cat})=>{
       const s=STATE[f.id];
       return '<div class="fmt-item'+(s.active?' active':'')+'" id="sr_'+f.id+'" style="margin-bottom:6px">'
-        +'<div class="fmt-top" onclick="toggleFromSearch(&quot;'+f.id+'&quot;)">'
+        +'<div class="fmt-top" role="button" tabindex="0" onclick="toggleFromSearch(&quot;'+f.id+'&quot;)">'
         +'<div class="fmt-chk">'
         +'<svg viewBox="0 0 12 10" fill="none"><polyline points="1,5 4.5,9 11,1" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
         +'</div>'
@@ -3921,7 +3971,7 @@ const CAT_LABELS_SHORT={
 function renderFmtItem(f){
   const s=STATE[f.id];
   return`<div class="fmt-item${s.active?' active':''}" id="fi_${f.id}">
-    <div class="fmt-top" onclick="toggle('${f.id}')">
+    <div class="fmt-top" role="button" tabindex="0" onclick="toggle('${f.id}')">
       <div class="fmt-chk">
         <svg viewBox="0 0 12 10" fill="none">
           <polyline points="1,5 4.5,9 11,1" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -3959,7 +4009,7 @@ function renderCatBody(cat){
       const active=countActiveInSub(cat.id,sec.id);
       const open=subSectionOpen(cat.id,sec.id);
       return`<div class="cat-subsection${open?' open':''}" id="catsub_${cat.id}_${sec.id}">
-        <div class="cat-sub-label" onclick="toggleCatSubSection('${cat.id}','${sec.id}',event)">
+        <div class="cat-sub-label" role="button" tabindex="0" onclick="toggleCatSubSection('${cat.id}','${sec.id}',event)">
           <span class="cat-chev">▸</span>
           <span>${sec.label}</span>
           <span class="cat-count${active?' active':''}" title="${active?active+' activos':fmts.length+' formatos'}">${active||fmts.length}</span>
@@ -3975,12 +4025,14 @@ function renderCatGroup(cat){
   const open=catGroupOpen(cat);
   const label=CAT_LABELS_SHORT[cat.id]||cat.label;
   return`<div class="cat-group${open?' open':''}" id="cat_${cat.id}">
-    <div class="cat-label ${cat.cls}" onclick="toggleCatGroup('${cat.id}',event)">
+    <div class="cat-label ${cat.cls}" role="button" tabindex="0" onclick="toggleCatGroup('${cat.id}',event)">
       <span class="cat-chev">▸</span>
       <span>${label}</span>
       <span class="cat-count${active?' active':''}" id="cat_count_${cat.id}" title="${active?active+' activos':cat.fmts.length+' formatos'}">${active||cat.fmts.length}</span>
     </div>
-    <div class="cat-group-body">${renderCatBody(cat)}</div>
+    <div class="cat-group-body">${renderCatBody(cat)}
+      <button type="button" class="cat-more-btn" id="cat_more_${cat.id}" hidden onclick="toggleCatShowAll('${cat.id}',event)"></button>
+    </div>
   </div>`;
 }
 
@@ -4004,7 +4056,7 @@ function buildFmts(){
     const total=totalInMega(mg);
     const open=megaGroupOpen(mg);
     return`<div class="mega-group ${mg.cls}${open?' open':''}" id="mega_${mg.id}">
-      <div class="mega-group-header" onclick="toggleMegaGroup('${mg.id}',event)">
+      <div class="mega-group-header" role="button" tabindex="0" onclick="toggleMegaGroup('${mg.id}',event)">
         <span class="cat-chev">▸</span>
         <span class="mega-group-icon">${mg.icon}</span>
         <span class="mega-group-title">${mg.label}</span>
@@ -4021,6 +4073,9 @@ function toggle(id){
   if(STATE[id].active){
     const f=allFmts().find(x=>x.id===id);
     if(f&&f.id==='spots_licenciados') applyCatalogPautaPlats(f,STATE[id]);
+    // Primer formato del grupo: seguir mostrando el resto mientras el usuario navega
+    const cat=CATS.find(c=>c.fmts.some(x=>x.id===id));
+    if(cat&&countActiveInCat(cat)===1) fmtNavState.all[cat.id]=true;
     expandFmtNavParents(id);
   }
   const mainEl=document.getElementById('fi_'+id);
@@ -4316,7 +4371,8 @@ function render(){
   document.getElementById('emptyState').style.display='none';
   document.getElementById('resBlock').style.display='';
 
-  document.getElementById('resTitle').textContent=`Resultados — ${gv('cliente')||'—'} · ${gv('campania')||'—'}`;
+  const resCtx=[gv('cliente'),gv('campania')].filter(Boolean).join(' · ');
+  document.getElementById('resTitle').textContent=resCtx?`Resultados — ${resCtx}`:'Resultados proyectados';
 
   // KPIs
   const tBrutoKpi=rows.reduce((a,r)=>a+r.bruto,0);
@@ -5210,13 +5266,13 @@ function histItemHtml(h,isDraft){
   const unnamed=(h.cli==='—'||!h.cli)&&(h.cam==='—'||!h.cam);
   const name=isDraft&&unnamed?'Sin nombre':(escHtml(h.cli)+' · '+escHtml(h.cam));
   return `
-    <div class="hist-item${isDraft?' draft':''}" onclick="cargar(${h.id})">
+    <div class="hist-item${isDraft?' draft':''}" role="button" tabindex="0" onclick="cargar(${h.id})">
       <div class="hist-info">
         <div class="hist-name">${name}</div>
         <div class="hist-meta">${isDraft?'Sin finalizar · ':''}${escHtml(h.fecha)} · ${escHtml(h.moneda)}${(h.ejecutivo||h.emailEjec)?' · '+escHtml(h.ejecutivo||h.emailEjec):''}</div>
       </div>
       <div class="hist-neto">${h.moneda==='USD'?'US$'+f0(h.tN/USD_CLP):'$'+f0(h.tN)}</div>
-      <button class="hist-del" onclick="borrar(${h.id},event)">✕</button>
+      <button class="hist-del" onclick="borrar(${h.id},event)" aria-label="Borrar propuesta">✕</button>
     </div>`;
 }
 
@@ -8184,10 +8240,24 @@ function pautaEntryMetaLine(entry){
   const bits=[];
   if(entry.etapa) bits.push(escHtml(entry.etapa));
   if(entry.tematica) bits.push(escHtml(entry.tematica.length>90?entry.tematica.slice(0,87)+'…':entry.tematica));
-  const pl=pautaEntryPlatSummary(entry);
-  if(pl) bits.push(escHtml(pl));
-  if(entry.totalAlc>0) bits.push(f0(entry.totalAlc)+' imp.');
   return bits.join(' · ');
+}
+// Plataformas e impresiones que trae el Excel, para compararlas con las alternativas del catálogo
+function pautaEntryRefHtml(entry){
+  const plats=(entry.plats||[]).filter(p=>p&&p.plat);
+  const platTxt=plats.length
+    ?plats.map(p=>escHtml(p.plat)+(plats.length>1&&+p.alc>0?' <span class="pauta-pick-ref-imp">'+f0(+p.alc)+'</span>':'')).join(' · ')
+    :escHtml(entry.plataforma||'(sin plataformas)');
+  const qty=Math.max(1,+entry.qty||1);
+  const tot=[];
+  if(entry.totalAlc>0) tot.push(f0(entry.totalAlc)+' imp. por unidad');
+  else tot.push('sin impresiones en el Excel');
+  if(qty>1) tot.push('cantidad '+qty);
+  return`<div class="pauta-pick-ref">
+    <div class="pauta-pick-ref-lbl">Según el Excel</div>
+    <div class="pauta-pick-ref-plats">${platTxt}</div>
+    <div class="pauta-pick-opt-sub">${tot.join(' · ')}</div>
+  </div>`;
 }
 function buildPautaPickCard(idx,m,cardOpts){
   cardOpts=cardOpts||{};
@@ -8251,6 +8321,7 @@ function buildPautaPickCard(idx,m,cardOpts){
   return`<div class="pauta-pick-card" data-pauta-idx="${idx}">
     ${cardOpts.compact?'':`<div class="pauta-pick-src"><strong>${escHtml(pautaCellStr(e.tipoContenido)||'(sin nombre)')}</strong> ${tag}</div>`}
     ${!cardOpts.compact&&meta?`<div class="pauta-pick-meta">${meta}</div>`:''}
+    ${pautaEntryRefHtml(e)}
     <p class="pauta-pick-hint">${altHint}</p>
     <div class="pauta-pick-opts">${radios}</div>
   </div>`;
@@ -8703,11 +8774,11 @@ function abrirPlantillaEditorialModal(){
     'Marquen las filas de la campaña con <strong>CANT.</strong> (ej. 1) o editando plataformas/temática/impresiones. '+
     '<strong>ETAPA es opcional</strong>. Al final de la plantilla está <strong>DISPLAY Y PAID MEDIA</strong> (Live Shopping), también importable. '+
     'Si agregan o quitan redes en PLATAFORMA, eso se respeta al importar.</p>'+
-    '<div class="pauta-pick-card" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'mega\')">'+
+    '<div class="pauta-pick-card" role="button" tabindex="0" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'mega\')">'+
       '<div class="pauta-pick-opt-name">Digital Mega</div>'+
       '<div class="pauta-pick-opt-sub">Todos los formatos de Contenido Editorial, Vodcast, Live Shopping de contenido, Programas, Teleseries y Megadeportes.</div>'+
     '</div>'+
-    '<div class="pauta-pick-card" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'radios\')">'+
+    '<div class="pauta-pick-card" role="button" tabindex="0" style="cursor:pointer" onclick="descargarPlantillaEditorial(\'radios\')">'+
       '<div class="pauta-pick-opt-name">Digital Radios</div>'+
       '<div class="pauta-pick-opt-sub">Todos los formatos de RRSS Radios (Carolina, Infinita, Romántica y Disney).</div>'+
     '</div>'+
@@ -8947,6 +9018,15 @@ document.addEventListener('keydown',e=>{
   e.preventDefault();
   const sr=document.getElementById('fmtSearch');
   if(sr){ sr.focus(); sr.select(); }
+});
+
+// Enter / Espacio activan los div con role="button" (grupos, formatos, historial)
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'&&e.key!==' ') return;
+  const t=e.target;
+  if(!t||t.tagName==='BUTTON'||t.getAttribute('role')!=='button') return;
+  e.preventDefault();
+  t.click();
 });
 
 function onLeavePage(){ flushDraft(); }
