@@ -37,6 +37,10 @@ las **plataformas**, **alcances** e **impresiones** que vienen del Excel, no los
   `INVERSIÓN`; o si no, `INV. NETA FINAL`), CPM = inversión × 1.000 ÷ (impresiones × cantidad)
   (`derivePautaCpmFromInv`); si no hay ninguno, el CPM por defecto del catálogo (`f.precio`).
   Sin impresiones en el Excel se usan las impresiones por defecto del formato.
+- Temática / descripción: la columna suele llamarse `CALL TO ACTION /TEMÁTICA A TRATAR` (también
+  `TEMÁTICA` o `DESCRIPCIÓN`); `detectPautaHeaderMap` la reconoce por contener "temática" o "descripción".
+  Al importar, esa temática reemplaza la descripción del formato elegido solo en esa propuesta
+  (`s.descCustom` en `stampPautaEntryOnFmt`), sin tocar el catálogo.
 - El catálogo solo rellena lo que el Excel no trae (por ejemplo, repartir un total mergeado entre plataformas).
 
 Ejemplo (fila "Corte react digital", cantidad 4, total 208.000):
