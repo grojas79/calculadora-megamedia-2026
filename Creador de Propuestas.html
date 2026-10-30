@@ -5131,6 +5131,7 @@ async function exportarReporteEquipo(){
       ri++;
     });
 
+    excelCenterVertical(wb);
     const buffer=await wb.xlsx.writeBuffer();
     const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
@@ -5521,6 +5522,17 @@ async function ensureExcelJS(){
   return true;
 }
 
+/** Centra en vertical todas las celdas del libro; la alineación horizontal se mantiene */
+function excelCenterVertical(wb){
+  wb.eachSheet(ws=>{
+    ws.eachRow({includeEmpty:true},row=>{
+      row.eachCell({includeEmpty:true},cell=>{
+        cell.alignment={...(cell.alignment||{}),vertical:'middle'};
+      });
+    });
+  });
+}
+
 // ── Export Excel (ExcelJS → xlsx real con estilos) ───────────────────────
 async function exportarExcel(){
   if(!(await ensureExcelJS())) return;
@@ -5565,11 +5577,11 @@ async function exportarExcel(){
     const ws = wb.addWorksheet('PROPUESTA COMERCIAL',{views:[{showGridLines:false}]});
 
     // Col widths
-    // Anchos de columna (A–N): A/D/G más angostas para vista horizontal
-    const COL_W=[14,20,18,28,12,6,18,12,12,16,8,8,8,18];
+    // Anchos de columna (A–O): A/D/G más angostas para vista horizontal
+    const COL_W=[14,20,18,28,12,6,18,12,12,14,16,8,8,8,18];
     ws.columns=COL_W.map(width=>({width}));
 
-    const NCOLS=14;
+    const NCOLS=15;
 
     // Helper: fill + font + align a cell
     function sc(row,col,value,{bg,fg=C.black,bold=false,sz=9,italic=false,
@@ -5693,10 +5705,10 @@ async function exportarExcel(){
 
     // ── Row 7: header
     {const hdrs=['MEDIO','TIPO DE CONTENIDO','PRESENCIA DE MARCA','TEMÁTICA / DESCRIPCIÓN',
-                 'REFERENCIA','CANT.','PLATAFORMA DETALLE','ALCANCE NETO','IMPRESIONES','VALOR BRUTO','DTO %','CTR EST.','VTR EST.','INV. NETA FINAL'];
+                 'REFERENCIA','CANT.','PLATAFORMA DETALLE','ALCANCE NETO','IMPRESIONES','VALOR UNITARIO / CPM','VALOR BRUTO','DTO %','CTR EST.','VTR EST.','INV. NETA FINAL'];
       const r=ws.addRow([]); r.height=30;
       hdrs.forEach((h,i)=>{
-        const bgH=i===13?'FF1A3A6B':C.blue;
+        const bgH=i===NCOLS-1?'FF1A3A6B':C.blue;
         const c=sc(r,i+1,h,{bg:bgH,fg:C.white,bold:true,sz:9,ha:'center',wrap:true});
         border(c,bgH);
       });}
@@ -5763,10 +5775,11 @@ async function exportarExcel(){
           sc(r,8,row.infReach>0?row.infReach:'',{bg:bgS,fg:C.black,sz:9,ha:'right',nfmt:'#,##0'});
           sc(r,9,row.infReach>0?row.infReach:'',{bg,fg:C.black,sz:9,ha:'right',nfmt:'#,##0'});
           sc(r,10,'',{bg,fg:C.grayDark,sz:9,ha:'right'});
-          sc(r,11,'',{bg,fg:C.grayDark,sz:9,ha:'center'});
+          sc(r,11,'',{bg,fg:C.grayDark,sz:9,ha:'right'});
           sc(r,12,'',{bg,fg:C.grayDark,sz:9,ha:'center'});
           sc(r,13,'',{bg,fg:C.grayDark,sz:9,ha:'center'});
-          sc(r,14,'',{bg,fg:C.grayDark,sz:9,ha:'right'});
+          sc(r,14,'',{bg,fg:C.grayDark,sz:9,ha:'center'});
+          sc(r,15,'',{bg,fg:C.grayDark,sz:9,ha:'right'});
           for(let c=1;c<=NCOLS;c++) border(r.getCell(c));
           dataRowN++; idx++;
           return;
@@ -5782,11 +5795,12 @@ async function exportarExcel(){
           sc(r,7,row.s.influencers.length+' influencer'+(row.s.influencers.length!==1?'s':''),{bg:bgS,fg:C.black,sz:9,ha:'left',wrap:true});
           sc(r,8,row.alc>0?row.alc:'',{bg:bgS,fg:C.black,sz:9,ha:'right',nfmt:'#,##0'});
           sc(r,9,row.imp>0?row.imp:'',{bg,fg:C.black,sz:9,ha:'right',nfmt:'#,##0'});
-          sc(r,10,row.bruto,{bg,fg:'FF5A5A5A',sz:9,ha:'right',nfmt:'"$"#,##0'});
-          sc(r,11,row.s.dto>0?row.s.dto+' %':'',{bg,fg:row.s.dto>0?'FFCC6600':C.grayDark,sz:9,ha:'center'});
-          sc(r,12,'',{bg,fg:C.grayDark,sz:9,ha:'center'});
+          sc(r,10,'',{bg,fg:C.grayDark,sz:9,ha:'right'});
+          sc(r,11,row.bruto,{bg,fg:'FF5A5A5A',sz:9,ha:'right',nfmt:'"$"#,##0'});
+          sc(r,12,row.s.dto>0?row.s.dto+' %':'',{bg,fg:row.s.dto>0?'FFCC6600':C.grayDark,sz:9,ha:'center'});
           sc(r,13,'',{bg,fg:C.grayDark,sz:9,ha:'center'});
-          sc(r,14,row.neto,{bg,fg:'FF1A3A6B',bold:true,sz:10,ha:'right',nfmt:'"$"#,##0'});
+          sc(r,14,'',{bg,fg:C.grayDark,sz:9,ha:'center'});
+          sc(r,15,row.neto,{bg,fg:'FF1A3A6B',bold:true,sz:10,ha:'right',nfmt:'"$"#,##0'});
           for(let c=1;c<=NCOLS;c++) border(r.getCell(c));
           dataRowN++; idx++;
           return;
@@ -5831,12 +5845,15 @@ async function exportarExcel(){
           if(_id==='skin_video_cpm')return'50%';
           return'—';
         })();
-        sc(r,10,row.bruto,{bg,fg:'FF5A5A5A',sz:9,ha:'right',nfmt:'"$"#,##0'});
+        // Valor unitario (precio fijo) o CPM (formatos por impresiones)
+        sc(r,10,row.s.precio>0?row.s.precio:'',{bg,fg:C.black,sz:9,ha:'right',
+          nfmt:row.f.tipo==='cpm'?'"CPM $"#,##0':'"$"#,##0'});
+        sc(r,11,row.bruto,{bg,fg:'FF5A5A5A',sz:9,ha:'right',nfmt:'"$"#,##0'});
         const dtoUnitPct=(row.s.dto>0?row.s.dto+' %':'');
-        sc(r,11,dtoUnitPct,{bg,fg:row.s.dto>0?'FFCC6600':C.grayDark,sz:9,ha:'center'});
-        sc(r,12,ctrVal==='—'?'':ctrVal,{bg,fg:ctrVal!=='—'?'FF8B6914':C.grayDark,sz:9,ha:'center'});
-        sc(r,13,vtrVal==='—'?'':vtrVal,{bg,fg:vtrVal!=='—'?C.blue2:C.grayDark,sz:9,ha:'center'});
-        sc(r,14,row.neto,{bg,fg:'FF1A3A6B',bold:true,sz:10,ha:'right',nfmt:'"$"#,##0'});
+        sc(r,12,dtoUnitPct,{bg,fg:row.s.dto>0?'FFCC6600':C.grayDark,sz:9,ha:'center'});
+        sc(r,13,ctrVal==='—'?'':ctrVal,{bg,fg:ctrVal!=='—'?'FF8B6914':C.grayDark,sz:9,ha:'center'});
+        sc(r,14,vtrVal==='—'?'':vtrVal,{bg,fg:vtrVal!=='—'?C.blue2:C.grayDark,sz:9,ha:'center'});
+        sc(r,15,row.neto,{bg,fg:'FF1A3A6B',bold:true,sz:10,ha:'right',nfmt:'"$"#,##0'});
         for(let c=1;c<=NCOLS;c++) border(r.getCell(c));
 
         dataRowN++; idx++;
@@ -6075,6 +6092,7 @@ async function exportarExcel(){
     ws.views=[{state:'frozen',ySplit:7,activeCell:'A8',showGridLines:false}];
 
     // Download
+    excelCenterVertical(wb);
     const buffer=await wb.xlsx.writeBuffer();
     const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
@@ -8956,6 +8974,7 @@ async function descargarPlantillaEditorial(family){
         });
       });
     }
+    excelCenterVertical(wb);
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const a=document.createElement('a');
