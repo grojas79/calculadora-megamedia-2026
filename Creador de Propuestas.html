@@ -2140,10 +2140,29 @@ function isPautaCategorySectionLabel(s){
   }catch(_e){}
   return false;
 }
+// Contenidos React (por nombre visible o id): siempre agrupados, justo antes de Web
+function isReactFmt(f,s){
+  return !!f&&/react/i.test(fmtDisplayName(f,s)+' '+f.name+' '+f.id);
+}
+function isReactRow(r){
+  if(!r||!r.f||r.infDetailRow||r.infTotalRow) return false;
+  return isReactFmt(r.f,r.s);
+}
+// Todo React debe indicar su programa: devuelve true (y avisa) si alguno no lo tiene
+function faltaProgramaReact(rows){
+  const sin=[...new Set(rows.filter(r=>isReactRow(r)&&!getFmtMetaTag(r.f,r.f.id)).map(r=>fmtDisplayName(r.f,r.s)))];
+  if(!sin.length) return false;
+  showToast('Indica el Nombre del Programa en: '+sin.join(', '));
+  const el=document.getElementById('prog_'+rows.find(r=>isReactRow(r)&&!getFmtMetaTag(r.f,r.f.id)).f.id);
+  if(el){el.scrollIntoView({block:'center'});el.focus();}
+  return true;
+}
 function partitionComercialSections(comercialRows){
-  const webRows=(comercialRows||[]).filter(r=>esTipoWeb(r.f));
-  const other=(comercialRows||[]).filter(r=>!webRows.includes(r));
+  const reactRows=(comercialRows||[]).filter(isReactRow);
+  const webRows=(comercialRows||[]).filter(r=>!reactRows.includes(r)&&esTipoWeb(r.f));
+  const other=(comercialRows||[]).filter(r=>!reactRows.includes(r)&&!webRows.includes(r));
   const out=[];
+  if(reactRows.length) out.push({label:'React',rows:reactRows,kind:'cat'});
   if(webRows.length) out.push({label:'Web, Display & Señal en Vivo',rows:webRows,kind:'web'});
   if(other.length) out.push({label:'Formatos comerciales',rows:other,kind:'cat'});
   return out;
@@ -2193,16 +2212,16 @@ function partitionExportRows(rows){
     if(present.has(e)||metaEtapas.includes(e)) etapas.push(e);
   });
   etapas.forEach(etapa=>{
-    const etapaRows=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f)&&etapaOf(r)===etapa);
+    const etapaRows=rows.filter(r=>!isReactRow(r)&&isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f)&&etapaOf(r)===etapa);
     if(!etapaRows.length) return;
     etapaRows.forEach(r=>used.add(excelRowKey(r)));
     byEtapa.push({etapa,rows:etapaRows});
   });
-  const lsPack=rows.filter(r=>isLsDisplayPaidMediaFmt(r.f));
+  const lsPack=rows.filter(r=>!isReactRow(r)&&isLsDisplayPaidMediaFmt(r.f));
   lsPack.forEach(r=>used.add(excelRowKey(r)));
   const leftover=rows.filter(r=>!used.has(excelRowKey(r)));
-  const editorialSinEtapa=leftover.filter(r=>isPautaEditorialFmt(r.f));
-  const comercial=leftover.filter(r=>!isPautaEditorialFmt(r.f));
+  const editorialSinEtapa=leftover.filter(r=>!isReactRow(r)&&isPautaEditorialFmt(r.f));
+  const comercial=leftover.filter(r=>isReactRow(r)||!isPautaEditorialFmt(r.f));
   return{byEtapa,leftover,editorialSinEtapa,comercial,lsPack};
 }
 function appendExportByCategory(catRowsSource,appendWeb,appendCat){
@@ -2224,7 +2243,7 @@ function fmtCostoProdExtra(f,s){
 }
 function getFmtMetaTag(f,id){
   const s=STATE[id];
-  if(f.daiSlot||f.progType==='programa') return (s?.progNombre||document.getElementById('prog_'+id)?.value||'').trim();
+  if(f.daiSlot||f.progType==='programa'||isReactFmt(f,s)) return (s?.progNombre||document.getElementById('prog_'+id)?.value||'').trim();
   if(f.rostroField) return (s?.rostroNombre||document.getElementById('rostro_'+id)?.value||'').trim();
   return '';
 }
@@ -3545,9 +3564,9 @@ function fmtGrid(f,s){
       +' value="'+slotVal+'"'
       +' style="width:100%;background:var(--dk);border:1px solid var(--mg);border-radius:4px;padding:5px 7px;color:var(--tx);font-size:12px;outline:none"'
       +' oninput="updDaiSlot(\''+id+'\')"/></div>';
-  } else if(f.progType==='programa' && !id.startsWith('prog_corte_')){
+  } else if(isReactFmt(f,s)||(f.progType==='programa' && !id.startsWith('prog_corte_'))){
     progField='<div style="grid-column:1/-1">'
-      +'<label style="color:var(--mg)">📺 Nombre del Programa</label>'
+      +'<label style="color:var(--mg)">📺 Nombre del Programa'+(isReactFmt(f,s)?' <span style="font-weight:400;color:var(--or);font-size:10.5px">(obligatorio en React)</span>':'')+'</label>'
       +'<input type="text" id="prog_'+id+'" placeholder="Ej: El Muro, Mega Teleseries, etc."'
       +' value="'+(s&&s.progNombre?s.progNombre.replace(/"/g,'&quot;'):'')+'"'
       +' style="width:100%;background:var(--dk);border:1px solid var(--mg);border-radius:4px;padding:5px 7px;color:var(--tx);font-size:12px;outline:none"'
@@ -4522,7 +4541,7 @@ function render(){
   if(byEtapa.length&&editorialSinEtapa.length){
     appendResultRows('Contenido (sin etapa)',editorialSinEtapa);
   } else if(!byEtapa.length){
-    const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f));
+    const editorialOnly=editorialSinEtapa;
     if(editorialOnly.length){
       appendLayoutByCategory(editorialOnly,(mega,radio)=>{
         appendResultRows('Web — Mega / Meganoticias',mega);
@@ -5588,6 +5607,7 @@ async function exportarExcel(){
   if(!(await ensureExcelJS())) return;
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
+  if(faltaProgramaReact(rows)) return;
 
   const btn=document.querySelector('[onclick="exportarExcel()"]');
   if(btn){btn.textContent='Generando…';btn.disabled=true;}
@@ -5975,7 +5995,7 @@ async function exportarExcel(){
         }
         excelComercialAndLsPack(comercial,lsPack);
       } else {
-        const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f));
+        const editorialOnly=editorialSinEtapa;
         if(editorialOnly.length){
           appendExportByCategory(
             editorialOnly,
@@ -6165,6 +6185,7 @@ async function exportarExcel(){
 async function exportarPDF(){
   const rows=getRows();
   if(!rows.length){showToast('Sin formatos activos');return;}
+  if(faltaProgramaReact(rows)) return;
 
   const btn=document.querySelector('[onclick="exportarPDF()"]');
   if(btn){btn.textContent='Generando…';btn.disabled=true;}
@@ -6361,7 +6382,7 @@ async function exportarPDF(){
         }
         pdfComercialAndLsPack(comercial,lsPack);
       } else {
-        const editorialOnly=rows.filter(r=>isPautaEditorialFmt(r.f)&&!isLsDisplayPaidMediaFmt(r.f));
+        const editorialOnly=editorialSinEtapa;
         if(editorialOnly.length){
           appendExportByCategory(
             editorialOnly,
@@ -7156,6 +7177,10 @@ function exportSectionMedioFallback(sectionLabel){
 }
 function exportMedioForRow(row,sectionLabel){
   if(row.infDetailRow||row.infTotalRow) return '';
+  if(isReactRow(row)){
+    const prog=getFmtMetaTag(row.f,row.f.id);
+    return prog?'React '+prog:'React';
+  }
   if(row.pautaMedio) return row.pautaMedio;
   if(row.webPlatRadio) return 'Plataformas Radio — formato web';
   if(row.radioStation) return 'Radio '+radioCap(row.radioStation);
@@ -7167,7 +7192,8 @@ function exportMedioForRow(row,sectionLabel){
   if(fromFmt) return fromFmt;
   const cat=row.f&&CATS.find(c=>c.fmts.some(x=>x.id===row.f.id));
   if(cat&&cat.id==='web') return 'Web Mega / Meganoticias';
-  const sec=exportSectionMedioFallback(sectionLabel);
+  // En la sección React, el medio sale de la categoría original del formato
+  const sec=exportSectionMedioFallback(sectionLabel==='React'&&cat?excelSectionLabel(cat):sectionLabel);
   if(sec) return sec;
   return 'Mega';
 }

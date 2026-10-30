@@ -64,6 +64,13 @@ pautaPlats:[
 - Columnas que contienen "tipo" pero no son el formato (ej. `TIPO AUSPICIO`) no deben mapearse a `TIPO DE CONTENIDO`.
 - Ids que empiezan con `vod_` se tratan como Vodcast y `prog_corte_` oculta el campo "Nombre del Programa".
 
+### Sección React
+
+- Todo formato cuyo nombre visible o id contiene "react" (`isReactRow`) va en una sección "React" propia,
+  justo antes de Web, en la tabla de resultados, el Excel y el PDF, aunque tenga etapa o sea de Live Shopping.
+- Todo React muestra el campo "Nombre del Programa" y es obligatorio: Excel y PDF no se generan si falta
+  (`faltaProgramaReact`). Su Medio en Excel/PDF es "React [programa]" (ej. "React Detrás del Muro").
+
 ### Alcance (Sainsbury en dos niveles)
 
 - Alcance por salida = impresiones ÷ frecuencia (1,2 RRSS; 1,3 Web).
