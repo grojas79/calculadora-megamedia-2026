@@ -2143,6 +2143,15 @@ function isPautaCategorySectionLabel(s){
   return false;
 }
 // Contenidos React (por nombre visible o id): siempre agrupados, justo antes de Web
+function reactProgFromName(name){
+  const m=/^\s*react\s+(.+)$/i.exec(pautaCellStr(name));
+  if(!m||/^digital$/i.test(m[1].trim())) return '';
+  return m[1].trim();
+}
+// Presencia de marca: la del Excel importado (s.marcaCustom) o la del catálogo
+function fmtMarca(f,s){
+  return (s&&s.marcaCustom)||(f&&f.marca)||'';
+}
 function isReactFmt(f,s){
   return !!f&&/react/i.test(fmtDisplayName(f,s)+' '+f.name+' '+f.id);
 }
@@ -2160,6 +2169,17 @@ function validarObligatorios(rows){
   showToast('Falta el programa'+(ids.length>1?' en: ':' en ')+nombres.join(', '));
   irACampoObligatorio(ids[0],'prog_'+ids[0]);
   return false;
+}
+// Nueva instancia del mismo formato React para otro programa; lleva a su campo "Nombre del Programa"
+function agregarOtroReact(id){
+  const src=allFmts().find(x=>x.id===id);
+  if(!src) return;
+  const c=cloneCatalogFmtInstance(src);
+  STATE[c.id].active=true;
+  expandFmtNavParents(c.id);
+  buildFmts();
+  render();
+  irACampoObligatorio(c.id,'prog_'+c.id);
 }
 function irACampoObligatorio(fmtId,inputId){
   const q=document.getElementById('fmtSearch');
@@ -2179,12 +2199,34 @@ function irACampoObligatorio(fmtId,inputId){
     });
   },400);
 }
+// "React" + programa, sin repetir "React" si el programa ya lo trae
+function reactLabel(prog){
+  prog=String(prog||'').trim();
+  if(!prog) return 'React';
+  return /^react\b/i.test(prog)?prog:'React '+prog;
+}
+// Una sección por programa React: primero el React del programa y debajo sus derechos (corte, auspicio…)
+function reactSectionsByProgram(reactRows){
+  const groups=new Map();
+  reactRows.forEach(r=>{
+    const prog=getFmtMetaTag(r.f,r.f.id);
+    const k=normPauta(prog);
+    if(!groups.has(k)) groups.set(k,{label:reactLabel(prog),rows:[]});
+    groups.get(k).rows.push(r);
+  });
+  const esPrincipal=r=>/^react\b/i.test(fmtDisplayName(r.f,r.s))?0:1;
+  return [...groups.values()].map(g=>({
+    label:g.label,
+    rows:g.rows.map((r,i)=>({r,i})).sort((a,b)=>esPrincipal(a.r)-esPrincipal(b.r)||a.i-b.i).map(x=>x.r),
+    kind:'cat'
+  }));
+}
 function partitionComercialSections(comercialRows){
   const reactRows=(comercialRows||[]).filter(isReactRow);
   const webRows=(comercialRows||[]).filter(r=>!reactRows.includes(r)&&esTipoWeb(r.f));
   const other=(comercialRows||[]).filter(r=>!reactRows.includes(r)&&!webRows.includes(r));
   const out=[];
-  if(reactRows.length) out.push({label:'React',rows:reactRows,kind:'cat'});
+  out.push(...reactSectionsByProgram(reactRows));
   if(webRows.length) out.push({label:'Web, Display & Señal en Vivo',rows:webRows,kind:'web'});
   if(other.length) out.push({label:'Formatos comerciales',rows:other,kind:'cat'});
   return out;
@@ -4077,7 +4119,7 @@ function renderFmtItem(f){
           ${s.pautaEtapa?`<span class="fmt-tag" style="background:var(--bd2);color:var(--tx)">${escHtml(canonPautaEtapa(s.pautaEtapa)||s.pautaEtapa)}</span>`:''}
         </div>
         <div class="fmt-plat" id="plat_${f.id}">${displayPlat(f,s)}</div>
-        ${f.marca?`<div style="font-size:10px;color:var(--tx2);margin-bottom:3px;font-style:italic">${f.marca}</div>`:''}
+        ${fmtMarca(f,s)?`<div style="font-size:10px;color:var(--tx2);margin-bottom:3px;font-style:italic">${escHtml(fmtMarca(f,s))}</div>`:''}
         <div class="fmt-desc">${getDesc(f)}</div>
         ${f.ref?`<div style="margin-top:3px"><a href="${f.ref}" target="_blank" style="font-size:10px;color:var(--cy);text-decoration:none">Ver ejemplo →</a></div>`:''}
       </div>
@@ -4089,6 +4131,7 @@ function renderFmtItem(f){
       ${descBox(f)}
       <div id="price_${f.id}" class="fmt-price-preview"></div>
       <div class="fmt-alc">${fmtAlcBlock(f,s,'')}</div>
+      ${isReactFmt(f,s)?`<button type="button" class="btn btn-sec" style="width:100%;margin-top:8px;font-size:11px" onclick="agregarOtroReact('${f.id}')">+ Agregar otro “${escHtml(catalogRootFmt(f).name)}” para otro programa</button>`:''}
     </div>
   </div>`;
 }
@@ -5666,7 +5709,7 @@ async function exportarExcel(){
     const logoTKId = wb.addImage({base64:await loadAssetBase64Raw('assets/logo-tiktok.png'),extension:'png'});
     const logoYTId = wb.addImage({base64:await loadAssetBase64Raw('assets/logo-youtube.png'),extension:'png'});
 
-    const ws = wb.addWorksheet('PROPUESTA COMERCIAL',{views:[{showGridLines:false}]});
+    const ws = wb.addWorksheet('DIGITAL',{views:[{showGridLines:false}]});
 
     // Col widths
     // Anchos de columna (A–O): A/D/G más angostas para vista horizontal
@@ -5849,7 +5892,7 @@ async function exportarExcel(){
           rh=excelDataRowHeight([
             {text:medioPre,col:1,minH:15},
             {text:fmtDisplayName(row.f,row.s),col:2,minH:15},
-            {text:row.f.marca||'',col:3,minH:14},
+            {text:fmtMarca(row.f,row.s)||'',col:3,minH:14},
             {text:descFull,col:4,minH:15},
             {text:platVal,col:7,minH:14}
           ],COL_W);
@@ -5859,7 +5902,7 @@ async function exportarExcel(){
         if(row.infDetailRow){
           sc(r,1,'Influencers',{bg,fg:C.black,bold:true,sz:9,ha:'center'});
           sc(r,2,row.infName,{bg,fg:C.black,bold:true,sz:9,ha:'center'});
-          sc(r,3,row.f.marca||'A definir',{bg,fg:C.black,sz:9,ha:'center'});
+          sc(r,3,fmtMarca(row.f,row.s)||'A definir',{bg,fg:C.black,sz:9,ha:'center'});
           sc(r,4,'',{bg,fg:C.grayDark,sz:9,ha:'left',italic:true});
           sc(ws.getRow(dataRowN),5,'',{bg,fg:C.black,sz:9,ha:'center',italic:true});
           sc(r,6,1,{bg,fg:C.black,bold:true,sz:9,ha:'center'});
@@ -5880,7 +5923,7 @@ async function exportarExcel(){
         if(row.infTotalRow){
           sc(r,1,'Influencers',{bg,fg:C.black,bold:true,sz:9,ha:'center'});
           sc(r,2,'TOTAL INFLUENCERS',{bg,fg:'FF1A3A6B',bold:true,sz:10,ha:'center'});
-          sc(r,3,row.f.marca||'A definir',{bg,fg:C.black,sz:9,ha:'center'});
+          sc(r,3,fmtMarca(row.f,row.s)||'A definir',{bg,fg:C.black,sz:9,ha:'center'});
           sc(r,4,_desc,{bg,fg:C.black,sz:9,ha:'left',italic:true,wrap:true});
           sc(ws.getRow(dataRowN),5,'',{bg,fg:C.black,sz:9,ha:'center',italic:true});
           sc(r,6,1,{bg,fg:C.black,bold:true,sz:9,ha:'center'});
@@ -5901,7 +5944,7 @@ async function exportarExcel(){
         const medio = medioPre;
         sc(r,1,medio,{bg,fg:C.black,bold:true,sz:9,ha:'center'});
         sc(r,2,fmtDisplayName(row.f,row.s),{bg,fg:C.black,bold:true,sz:9,ha:'center'});
-        sc(r,3,row.f.marca||'',{bg,fg:C.black,sz:9,ha:'center'});
+        sc(r,3,fmtMarca(row.f,row.s)||'',{bg,fg:C.black,sz:9,ha:'center'});
         sc(r,4,descFull,{bg,fg:C.black,sz:9,ha:'left',italic:true,wrap:true});
         // Referencia con hyperlink
         {const refCell=ws.getRow(dataRowN).getCell(5);
@@ -6272,7 +6315,7 @@ async function exportarPDF(){
         cells=[
           td('Influencers',{bg,bold:true,align:'center'}),
           td(esc(row.infName),{bg,bold:true,align:'center'}),
-          td(esc(row.f.marca||'A definir'),{bg,align:'center'}),
+          td(esc(fmtMarca(row.f,row.s)||'A definir'),{bg,align:'center'}),
           td('',{bg}),
           td('',{bg,align:'center'}),
           td(1,{bg,bold:true,align:'center'}),
@@ -6290,7 +6333,7 @@ async function exportarPDF(){
         cells=[
           td('Influencers',{bg,bold:true,align:'center'}),
           td('TOTAL INFLUENCERS',{bg,fg:C.darkBlue,bold:true,align:'center',size:9}),
-          td(esc(row.f.marca||'A definir'),{bg,align:'center'}),
+          td(esc(fmtMarca(row.f,row.s)||'A definir'),{bg,align:'center'}),
           td(esc(_desc),{bg,align:'left',italic:true}),
           td('',{bg,align:'center'}),
           td(1,{bg,bold:true,align:'center'}),
@@ -6330,7 +6373,7 @@ async function exportarPDF(){
         cells=[
           td(esc(medioPre),{bg,bold:true,align:'center',va:'top'}),
           td(esc(fmtDisplayName(row.f,row.s)),{bg,bold:true,align:'center',va:'top'}),
-          td(esc(row.f.marca||''),{bg,align:'center',va:'top'}),
+          td(esc(fmtMarca(row.f,row.s)||''),{bg,align:'center',va:'top'}),
           td(esc(descFull),{bg,align:'left',italic:true,va:'top'}),
           td(refCell,{bg,align:'center'}),
           td(row.s.qty,{bg,bold:true,align:'center'}),
@@ -7199,11 +7242,8 @@ function exportSectionMedioFallback(sectionLabel){
 }
 function exportMedioForRow(row,sectionLabel){
   if(row.infDetailRow||row.infTotalRow) return '';
-  if(isReactRow(row)){
-    const prog=getFmtMetaTag(row.f,row.f.id);
-    if(!prog) return 'React';
-    return /^react\b/i.test(prog)?prog:'React '+prog;
-  }
+  // Dentro de la sección del programa, el Medio es el título de la sección (misma escritura para todo el grupo)
+  if(isReactRow(row)) return /^react\b/i.test(sectionLabel||'')?sectionLabel:reactLabel(getFmtMetaTag(row.f,row.f.id));
   if(row.pautaMedio) return row.pautaMedio;
   if(row.webPlatRadio) return 'Plataformas Radio — formato web';
   if(row.radioStation) return 'Radio '+radioCap(row.radioStation);
@@ -8568,18 +8608,22 @@ function cloneCatalogFmtInstance(src){
   saveCustomFormats();
   return cloned;
 }
+// En React el nombre del Excel separa instancias ("React Detrás del Muro" ≠ "React VCTEx2")
 function pautaInstanceKeyFromEntry(src,entry){
+  const name=pautaCellStr(entry.tipoContenido);
   return [
     normPauta(entry.tematica||src.desc||''),
     canonPautaOrigen(entry.medio)||'',
-    canonPautaEtapa(entry.etapa)||entry.etapa||''
+    canonPautaEtapa(entry.etapa)||entry.etapa||'',
+    isReactFmt(src,{nameOverride:name})?normPauta(name):''
   ].join('\0');
 }
 function pautaInstanceKeyFromState(f,s){
   return [
     normPauta(pautaTemaEffective(f,s)),
     canonPautaOrigen(s&&s.pautaMedio)||'',
-    canonPautaEtapa(s&&s.pautaEtapa)||(s&&s.pautaEtapa)||''
+    canonPautaEtapa(s&&s.pautaEtapa)||(s&&s.pautaEtapa)||'',
+    isReactFmt(f,s)?normPauta(fmtDisplayName(f,s)):''
   ].join('\0');
 }
 function findActivePautaInstance(srcFmt,entry){
@@ -8615,6 +8659,14 @@ function stampPautaEntryOnFmt(f,entry){
     const slot=pautaDaiSlotFromEntry(entry);
     if(slot) s.progNombre=slot;
   }
+  // React: el programa viene en el nombre del Excel ("React Detrás del Muro" → "Detrás del Muro")
+  if(isReactFmt(f,s)){
+    const prog=reactProgFromName(entry.tipoContenido);
+    if(prog) s.progNombre=prog;
+  }
+  // Derechos (presencia de marca) del Excel, solo en esta propuesta
+  const marca=String(entry.marca||'').trim();
+  s.marcaCustom=(marca&&normPauta(marca)!==normPauta(f.marca||''))?marca:null;
   applyPautaImpsFromEntry(f,s,entry);
   if(entry.marca&&f.customType&&!f.sourceFmtId) f.marca=entry.marca;
   if(entry.referencia&&f.customType&&!f.sourceFmtId) f.ref=entry.referencia;
