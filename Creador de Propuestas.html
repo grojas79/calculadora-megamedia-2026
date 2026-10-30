@@ -7201,7 +7201,8 @@ function exportMedioForRow(row,sectionLabel){
   if(row.infDetailRow||row.infTotalRow) return '';
   if(isReactRow(row)){
     const prog=getFmtMetaTag(row.f,row.f.id);
-    return prog?'React '+prog:'React';
+    if(!prog) return 'React';
+    return /^react\b/i.test(prog)?prog:'React '+prog;
   }
   if(row.pautaMedio) return row.pautaMedio;
   if(row.webPlatRadio) return 'Plataformas Radio — formato web';
@@ -7293,8 +7294,8 @@ function isPautaSectionRow(row,map){
 function isPautaPlatContinuation(cells,pending,map){
   if(!pending) return false;
   const platIdx=map&&map.platDetail!=null?map.platDetail:(map&&map.plat!=null?map.plat:7);
-  const platDetail=pautaCellAt(cells,platIdx);
-  if(!platDetail) return false;
+  const platDetail=cleanPautaPlatName(pautaCellAt(cells,platIdx));
+  if(!platDetail||isPautaPlatNoise(platDetail)) return false;
   const etapaCol=map&&map.etapa!=null?canonPautaEtapa(pautaCellAt(cells,map.etapa)):'';
   const pendingEtapa=canonPautaEtapa(pending.etapa)||pending.etapa||'';
   if(etapaCol&&pendingEtapa&&etapaCol!==pendingEtapa) return false;
@@ -7309,11 +7310,20 @@ function isPautaPlatContinuation(cells,pending,map){
   const isNewPlat=!pending.plats.some(p=>normPauta(p.plat)===normPauta(platDetail));
   return sameOrEmptyTema&&isNewPlat;
 }
+// Nombre de plataforma de la pauta sin ":" final ("Shorts Mega:" → "Shorts Mega")
+function cleanPautaPlatName(s){
+  return pautaCellStr(s).replace(/\s*:+\s*$/,'').trim();
+}
+// Etiquetas de totales u otras columnas que caen en la columna de plataforma (no son plataformas)
+function isPautaPlatNoise(s){
+  const n=normPauta(s);
+  return !n||/total|impacto|valor|inversion|monto|precio|bruto|neto|descuento|\bdto\b|\bcpm\b|alcance|impresion/.test(n);
+}
 function appendPautaPlat(pending,cells,map){
   const platIdx=map&&map.platDetail!=null?map.platDetail:(map&&map.plat!=null?map.plat:7);
   const alcIdx=map&&map.alc!=null?map.alc:8;
-  const plat=pautaCellAt(cells,platIdx);
-  if(!plat) return;
+  const plat=cleanPautaPlatName(pautaCellAt(cells,platIdx));
+  if(!plat||isPautaPlatNoise(plat)) return;
   const alc=parsePautaNum(pautaCellAt(cells,alcIdx));
   if(!pending.plats.some(p=>normPauta(p.plat)===normPauta(plat))){
     pending.plats.push({plat,alc});
@@ -7427,7 +7437,7 @@ function parsePautaRows(rawRows){
     if(tipo&&!isPautaNoiseCell(tipo)){
       const platIdx=colMap.platDetail!=null?colMap.platDetail:colMap.plat;
       const plats=[];
-      const p0=pautaCellAt(cells,platIdx);
+      const p0=cleanPautaPlatName(pautaCellAt(cells,platIdx));
       const a0=parsePautaNum(pautaCellAt(cells,colMap.alc));
       if(p0) plats.push({plat:p0,alc:a0});
       else if(a0>0) plats.push({plat:'',alc:a0});
