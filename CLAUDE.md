@@ -64,6 +64,14 @@ pautaPlats:[
 - Columnas que contienen "tipo" pero no son el formato (ej. `TIPO AUSPICIO`) no deben mapearse a `TIPO DE CONTENIDO`.
 - Ids que empiezan con `vod_` se tratan como Vodcast y `prog_corte_` oculta el campo "Nombre del Programa".
 
+### Alcance (Sainsbury en dos niveles)
+
+- Alcance por salida = impresiones ÷ frecuencia (1,2 RRSS; 1,3 Web).
+- Nivel 1: Sainsbury dentro de cada plataforma (todas las repeticiones y formatos) con el universo de la cuenta
+  (`PLAT_UNIVERSO`, followers; clave red|marca de `platUniversoKey`, Shorts = YouTube).
+- Nivel 2: Sainsbury entre plataformas con `U_SAINSBURY` (universo digital).
+- Plataformas sin universo propio (Facebook, web, radios, cuentas combinadas u otras marcas) usan `U_SAINSBURY`.
+
 ### DAI
 
 - Hay 3 formatos DAI en Web: DAI SEV (`dai_sev`, genérico, CPM 5.500), DAI Tanda Programa

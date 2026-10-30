@@ -2444,34 +2444,58 @@ function scalePautaPlatsToImp(plats,target){
   return scaled;
 }
 
+// Universo por cuenta (followers, en personas). Clave: red|marca (ver platUniversoKey)
+const PLAT_UNIVERSO={
+  'youtube|mega':10200000,   'youtube|meganoticias':3900000,
+  'tiktok|mega':4100000,     'tiktok|meganoticias':4400000,
+  'instagram|mega':3500000,  'instagram|meganoticias':5500000,
+};
+// Normaliza el nombre de plataforma a red|marca. Shorts cuenta como YouTube.
+// Cuentas combinadas ("Mega y Meganoticias") u otras marcas quedan sin universo propio.
+function platUniversoKey(name){
+  const n=String(name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  if(!n) return '';
+  const red=/instagram|\big\b/.test(n)?'instagram'
+    :/tiktok/.test(n)?'tiktok'
+    :/youtube|shorts/.test(n)?'youtube'
+    :/facebook|\bfb\b/.test(n)?'facebook':'';
+  if(!red) return n;
+  const noticias=/meganoticias/.test(n);
+  const mega=/\bmega\b(?!noticias)/.test(n.replace(/meganoticias/g,''));
+  if(/megadeportes|teleseries|\+|\by\b/.test(n)||(noticias&&mega)) return red+'|'+n;
+  return red+'|'+(noticias?'meganoticias':mega?'mega':'');
+}
+
 // Paso 1: alcance neto por plataforma / repetición (imp ÷ frecuencia)
-// Paso 2: Sainsbury sobre todos los alcances netos del formato (incl. qty y multi-plataforma)
-function splitPlatImpsRRSS(f,s){
+// Paso 2: Sainsbury dentro de cada plataforma (universo de la cuenta) y luego entre plataformas
+function splitPlatImpsRRSSDetail(f,s){
   const qty=Math.max(1,+s.qty||1);
+  const out=[];
   if(s.pautaPlats&&s.pautaPlats.length){
     // Usa s.imp (editable) como total; redistribuye por proporción de pautaPlats
     const scaled=scalePautaPlatsToImp(s.pautaPlats,+s.imp||0);
-    const imps=[];
     for(let q=0;q<qty;q++)
-      scaled.forEach(p=>{const v=+p.alc||0;if(v>0)imps.push(v);});
-    return imps;
+      scaled.forEach(p=>{const v=+p.alc||0;if(v>0)out.push({plat:p.plat,imp:v});});
+    return out;
   }
   const parts=(f.plat||'').split('·').map(p=>p.trim()).filter(p=>p&&p!=='—');
   const n=Math.max(1,parts.length);
   const impUnit=+s.imp||0;
-  const imps=[];
   for(let q=0;q<qty;q++)
-    for(let i=0;i<n;i++) imps.push(impUnit/n);
-  return imps;
+    for(let i=0;i<n;i++) out.push({plat:parts[i]||f.id,imp:impUnit/n});
+  return out;
+}
+function splitPlatImpsRRSS(f,s){
+  return splitPlatImpsRRSSDetail(f,s).map(p=>p.imp);
 }
 function calcRRSSFmtImp(f,s){
   return splitPlatImpsRRSS(f,s).reduce((a,v)=>a+v,0);
 }
+function rrssAlcParts(f,s){
+  return splitPlatImpsRRSSDetail(f,s).map(p=>({key:platUniversoKey(p.plat),alc:Math.round(p.imp/RRSS_FREQ)}));
+}
 function calcRRSSFmtAlc(f,s){
-  const imps=splitPlatImpsRRSS(f,s);
-  if(!imps.length) return 0;
-  const netAlcs=imps.map(imp=>Math.round(imp/RRSS_FREQ));
-  return calcAlcSainsburyFromValues(netAlcs);
+  return calcAlcSainsburyFromParts(rrssAlcParts(f,s));
 }
 
 // Paso 1 legacy (Web y casos puntuales)
@@ -2486,13 +2510,36 @@ function calcAlcNeto(f, imp, qty){
 function pctAlc(alc){ return U_SAINSBURY > 0 ? ((alc / U_SAINSBURY) * 100).toFixed(1) + '%' : '—'; }
 
 // Sainsbury sobre una lista de alcances por plataforma
-function calcAlcSainsburyFromValues(values){
-  const alcs=values.map(v=>+v||0).filter(a=>a>0);
+function calcAlcSainsburyFromValues(values,universo){
+  const U=universo||U_SAINSBURY;
+  const alcs=values.map(v=>Math.min(+v||0,U)).filter(a=>a>0);
   if(!alcs.length) return 0;
   if(alcs.length===1) return alcs[0];
   let producto=1;
-  alcs.forEach(a=>{producto*=(1-a/U_SAINSBURY);});
-  return Math.min(Math.round(U_SAINSBURY*(1-producto)),U_SAINSBURY);
+  alcs.forEach(a=>{producto*=(1-a/U);});
+  return Math.min(Math.round(U*(1-producto)),U);
+}
+// Sainsbury en dos niveles sobre [{key,alc}]:
+// 1) dentro de cada plataforma con el universo de la cuenta (PLAT_UNIVERSO; si no hay, el universo digital)
+// 2) entre plataformas con el universo digital
+function calcAlcSainsburyFromParts(parts){
+  const byPlat=new Map();
+  (parts||[]).forEach(p=>{
+    if(!(p.alc>0)) return;
+    const k=p.key||'';
+    if(!byPlat.has(k)) byPlat.set(k,[]);
+    byPlat.get(k).push(p.alc);
+  });
+  const platAlcs=[...byPlat].map(([k,alcs])=>calcAlcSainsburyFromValues(alcs,PLAT_UNIVERSO[k]));
+  return calcAlcSainsburyFromValues(platAlcs);
+}
+// Alcances por plataforma de una fila de resultados
+function rowAlcParts(r){
+  if(r.infDetailRow||!(r.alc>0)) return [];
+  if(r.webPlat) return [{key:'web|'+r.webPlat,alc:r.alc}];
+  if(r.radioStation) return [{key:'radio|'+r.radioStation,alc:r.alc}];
+  if(!r.infTotalRow&&esTipoRRSS(r.f)) return rrssAlcParts(r.f,r.s);
+  return [{key:'fmt|'+r.f.id,alc:r.alc}];
 }
 function pautaPlatsLabel(plats){
   return (plats||[]).map(p=>String(p.plat||'').trim()).filter(Boolean).join(' · ');
@@ -2532,11 +2579,10 @@ function fmtAlcFromState(f,s){
   return calcAlcNeto(f,s.imp,s.qty);
 }
 
-// Alcance total pauta: Sainsbury sobre el alcance neto de cada línea activa
+// Alcance total pauta: Sainsbury en dos niveles (por plataforma y entre plataformas)
 function calcAlcSainsbury(rows){
   if(!rows||!rows.length) return 0;
-  const netAlcs=rows.filter(r=>!r.infDetailRow&&r.alc>0).map(r=>r.alc);
-  return calcAlcSainsburyFromValues(netAlcs);
+  return calcAlcSainsburyFromParts(rows.flatMap(rowAlcParts));
 }
 
 // Variante por tipo (RRSS = todo lo que no es web)
@@ -2545,7 +2591,7 @@ function calcAlcSainsburyByTipo(rows, tipo){
     if(r.infDetailRow) return false;
     return tipo==='web'?esTipoWeb(r.f):!esTipoWeb(r.f);
   });
-  return calcAlcSainsburyFromValues(subset.map(r=>r.alc).filter(a=>a>0));
+  return calcAlcSainsbury(subset);
 }
 
 // ── Estado ────────────────────────────────────────────────────────────────
@@ -6076,7 +6122,7 @@ async function exportarExcel(){
     // ── Nota metodológica
     secTitle('NOTA METODOLÓGICA — CÁLCULO DE ALCANCE',C.grayDark,C.white,10);
     [`El alcance neto total (~${f0(tAlc)} usuarios únicos · ${pctAlc(tAlc)} del universo digital) se calcula mediante el modelo de alcance neto multiplataforma de Megamedia.`,
-     `Paso 1: alcance neto por plataforma y por repetición del formato (impresiones ÷ frecuencia 1.2 en RRSS; 1.3 en Web). Paso 2: Fórmula de Sainsbury sobre los alcances netos de cada plataforma/repetición dentro del formato, y sobre el total de la pauta entre todos los formatos activos (universo de referencia: ${f0(U_SAINSBURY)} personas mayores de 18 años con acceso a Internet en Chile).`,
+     `Paso 1: alcance neto por plataforma y por repetición del formato (impresiones ÷ frecuencia 1.2 en RRSS; 1.3 en Web). Paso 2: Fórmula de Sainsbury dentro de cada plataforma, sumando todas las repeticiones y formatos publicados en ella, con la cantidad de seguidores de la cuenta como universo. Paso 3: Fórmula de Sainsbury entre plataformas para el total de la pauta (universo de referencia: ${f0(U_SAINSBURY)} personas mayores de 18 años con acceso a Internet en Chile).`,
      'El alcance real puede variar según la fecha de publicación, el comportamiento algorítmico y el nivel de interacción orgánica de la audiencia.',
     ].forEach((line,i)=>{
       const r=ws.addRow([]); r.height=14;
@@ -6430,7 +6476,7 @@ async function exportarPDF(){
     // Nota metodológica
     secTitle('NOTA METODOLÓGICA — CÁLCULO DE ALCANCE',C.grayDark,C.white,10);
     ['El alcance neto total (~'+f0(tAlc)+' usuarios únicos · '+pctAlc(tAlc)+' del universo digital) se calcula mediante el modelo de alcance neto multiplataforma de Megamedia.',
-     'Paso 1: alcance neto por plataforma y por repetición del formato (impresiones ÷ frecuencia 1.2 en RRSS; 1.3 en Web). Paso 2: Fórmula de Sainsbury sobre los alcances netos de cada plataforma/repetición dentro del formato, y sobre el total de la pauta entre todos los formatos activos (universo de referencia: '+f0(U_SAINSBURY)+' personas mayores de 18 años con acceso a Internet en Chile).',
+     'Paso 1: alcance neto por plataforma y por repetición del formato (impresiones ÷ frecuencia 1.2 en RRSS; 1.3 en Web). Paso 2: Fórmula de Sainsbury dentro de cada plataforma, sumando todas las repeticiones y formatos publicados en ella, con la cantidad de seguidores de la cuenta como universo. Paso 3: Fórmula de Sainsbury entre plataformas para el total de la pauta (universo de referencia: '+f0(U_SAINSBURY)+' personas mayores de 18 años con acceso a Internet en Chile).',
      'El alcance real puede variar según la fecha de publicación, el comportamiento algorítmico y el nivel de interacción orgánica de la audiencia.',
     ].forEach((line,i)=>{
       blocks.push('<tr>'+td(esc(line),{cs:NCOLS,bg:i%2===0?C.sub1:C.sub2,align:'left',italic:i===2,size:8})+'</tr>');
