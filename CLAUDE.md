@@ -78,11 +78,30 @@ pautaPlats:[
   (`validarObligatorios`, que también exige el programa o bloque horario de DAI Tanda Programa).
   Al faltar un dato, `irACampoObligatorio` abre el formato, lleva al campo, lo marca en rojo y deja el cursor listo. Su Medio en Excel/PDF es "React [programa]" (ej. "React Detrás del Muro").
 
+### RRSS Radios
+
+- El libro puede traer la plantilla vacía ("Pauta editorial") y la pauta llenada en otra hoja ("Propuesta Radio"):
+  `parsePautaXLSX` usa la hoja visible con más formatos.
+- Con ORIGEN de radio ("Digital Romántica") los nombres cortos se parean por palabra clave (`pautaRadioFmtIdFromName`):
+  historia, posteo/carrusel, cápsula (vivencial → exterior), reel, tiktok, nota, enlace/simulcat; cliente o radio
+  según el nombre o la presencia de marca.
+- `formato_id` solo se usa si el nombre del Excel se parece al formato (`pautaFmtIdTrusted`): al copiar filas suele quedar desfasado.
+- Cada fila es una radio del formato (`applyPautaRadioEntry`): estación desde ORIGEN, impresiones de la fila y precio
+  desde `VALOR`/inversión. Filas de otra radio con la misma temática y etapa se suman como otra radio del mismo formato.
+- Igual que Mega, cada radio guarda sus plataformas con impresiones/impactos (`re.plats`, se ven con `radioEntryPlats`):
+  las del Excel (una celda combinada reparte el total en partes iguales) o las del catálogo, escaladas a las impresiones
+  de la radio. Redes y web llevan la radio en el nombre ("Instagram Romántica"), clave `instagram|romantica`.
+- El alcance de radios usa el mismo Sainsbury en dos niveles que RRSS (`radioEntryAlcParts`), con los followers
+  de cada cuenta de radio en `PLAT_UNIVERSO` (Instagram, TikTok y YouTube de cada radio).
+
 ### Alcance (Sainsbury en dos niveles)
 
 - Alcance por salida = impresiones ÷ frecuencia (1,2 RRSS; 1,3 Web).
 - Nivel 1: Sainsbury dentro de cada plataforma (todas las repeticiones y formatos) con el universo de la cuenta
   (`PLAT_UNIVERSO`, followers; clave red|marca de `platUniversoKey`, Shorts = YouTube).
+  Las impresiones pueden incluir patrocinio y superar a los followers (`calcAlcCuenta`): si el alcance sumado de las
+  piezas supera a los followers, la parte orgánica (hasta los followers) se cruza con el universo de la cuenta y el
+  excedente patrocinado, pieza a pieza (cada unidad de cada formato), con `U_SAINSBURY`. Los followers no topan el alcance.
 - Nivel 2: Sainsbury entre plataformas con `U_SAINSBURY` (universo digital).
 - Plataformas sin universo propio (Facebook, web, radios, cuentas combinadas u otras marcas) usan `U_SAINSBURY`.
 

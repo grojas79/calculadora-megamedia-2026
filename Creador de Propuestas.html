@@ -1989,7 +1989,7 @@ function pautaFmtByTemplateOrId(entry){
   const fmtId=String(entry&&entry.fmtId||'').trim();
   if(fmtId){
     const byId=allFmts().find(x=>x.id===fmtId);
-    if(byId) return byId;
+    if(byId&&pautaFmtIdTrusted(entry,byId)) return byId;
   }
   const n=normPauta(entry&&entry.tipoContenido);
   if(!n) return null;
@@ -2532,6 +2532,11 @@ const PLAT_UNIVERSO={
   'youtube|mega':10200000,   'youtube|meganoticias':3900000,
   'tiktok|mega':4100000,     'tiktok|meganoticias':4400000,
   'instagram|mega':3500000,  'instagram|meganoticias':5500000,
+  // Radios (métricas de redes Megamedia Radios)
+  'instagram|carolina':1100000, 'tiktok|carolina':409000,  'youtube|carolina':139000,
+  'instagram|romantica':204000, 'tiktok|romantica':21000,  'youtube|romantica':3310,
+  'instagram|infinita':241000,  'tiktok|infinita':110000,  'youtube|infinita':66700,
+  'instagram|disney':86000,     'tiktok|disney':234,
 };
 // Normaliza el nombre de plataforma a red|marca. Shorts cuenta como YouTube.
 // Cuentas combinadas ("Mega y Meganoticias") u otras marcas quedan sin universo propio.
@@ -2543,6 +2548,9 @@ function platUniversoKey(name){
     :/youtube|shorts/.test(n)?'youtube'
     :/facebook|\bfb\b/.test(n)?'facebook':'';
   if(!red) return n;
+  // Cuentas de radio: red|radio (sin followers en PLAT_UNIVERSO usan el universo digital)
+  const radio=/carolina|romantica|infinita|disney/.exec(n);
+  if(radio) return red+'|'+radio[0];
   const noticias=/meganoticias/.test(n);
   const mega=/\bmega\b(?!noticias)/.test(n.replace(/meganoticias/g,''));
   if(/megadeportes|teleseries|\+|\by\b/.test(n)||(noticias&&mega)) return red+'|'+n;
@@ -2602,8 +2610,21 @@ function calcAlcSainsburyFromValues(values,universo){
   alcs.forEach(a=>{producto*=(1-a/U);});
   return Math.min(Math.round(U*(1-producto)),U);
 }
+// Alcance de una cuenta sobre los alcances por pieza (una por unidad y formato).
+// Si el alcance sumado supera a los followers, el excedente es patrocinio: la parte orgánica (hasta los followers)
+// se cruza con el universo de la cuenta y la patrocinada, pieza a pieza, con el universo digital.
+function calcAlcCuenta(alcs,followers){
+  if(!followers) return calcAlcSainsburyFromValues(alcs);
+  const sum=alcs.reduce((a,v)=>a+(+v||0),0);
+  if(sum<=followers) return calcAlcSainsburyFromValues(alcs,followers);
+  const org=followers/sum;
+  const alcOrg=calcAlcSainsburyFromValues(alcs.map(a=>a*org),followers);
+  const alcPaid=calcAlcSainsburyFromValues(alcs.map(a=>a*(1-org)));
+  return Math.round(calcAlcSainsburyFromValues([alcOrg,alcPaid]));
+}
 // Sainsbury en dos niveles sobre [{key,alc}]:
-// 1) dentro de cada plataforma con el universo de la cuenta (PLAT_UNIVERSO; si no hay, el universo digital)
+// 1) dentro de cada plataforma con el universo de la cuenta (PLAT_UNIVERSO; si no hay, el universo digital).
+//    Las impresiones pueden incluir patrocinio y superar a los followers (ver calcAlcCuenta).
 // 2) entre plataformas con el universo digital
 function calcAlcSainsburyFromParts(parts){
   const byPlat=new Map();
@@ -2613,14 +2634,14 @@ function calcAlcSainsburyFromParts(parts){
     if(!byPlat.has(k)) byPlat.set(k,[]);
     byPlat.get(k).push(p.alc);
   });
-  const platAlcs=[...byPlat].map(([k,alcs])=>calcAlcSainsburyFromValues(alcs,PLAT_UNIVERSO[k]));
+  const platAlcs=[...byPlat].map(([k,alcs])=>calcAlcCuenta(alcs,PLAT_UNIVERSO[k]));
   return calcAlcSainsburyFromValues(platAlcs);
 }
 // Alcances por plataforma de una fila de resultados
 function rowAlcParts(r){
   if(r.infDetailRow||!(r.alc>0)) return [];
   if(r.webPlat) return [{key:'web|'+r.webPlat,alc:r.alc}];
-  if(r.radioStation) return [{key:'radio|'+r.radioStation,alc:r.alc}];
+  if(r.radioStation) return r.radioEntry?radioEntryAlcParts(r.f,r.radioEntry):[{key:'radio|'+r.radioStation,alc:r.alc}];
   if(!r.infTotalRow&&esTipoRRSS(r.f)) return rrssAlcParts(r.f,r.s);
   return [{key:'fmt|'+r.f.id,alc:r.alc}];
 }
@@ -2652,6 +2673,7 @@ function calcPautaPlatsMetrics(f,s){
   };
 }
 function fmtAlcFromState(f,s){
+  if(f.radioType==='radio') return calcRadioFmtAlcPreview(f,s);
   if(s.pautaPlats&&s.pautaPlats.length){
     const m=calcPautaPlatsMetrics(f,s);
     if(m) return m.alc;
@@ -2772,16 +2794,45 @@ function migrateRadioEntries(s,f){
       dto:Math.max(0,+re.dto||0),
       dtoControl:re.dtoControl==='final'?'final':'pct',
       finalOverride:re.dtoControl==='final'&&re.finalOverride!=null?Math.round(+re.finalOverride||0):null,
-      imp:+re.imp||((f.imps&&f.imps[r]!=null)?f.imps[r]:(f.imp||0))
+      imp:+re.imp||((f.imps&&f.imps[r]!=null)?f.imps[r]:(f.imp||0)),
+      plats:Array.isArray(re.plats)&&re.plats.length?re.plats.map(p=>({plat:String(p.plat||''),alc:+p.alc||0})):null
     };
   });
+}
+// Redes y web llevan la radio en el nombre ("Instagram Romántica"), como "Instagram Mega" en Mega
+function radioPlatName(name,st){
+  const n=normPauta(name);
+  if(/carolina|romantica|infinita|disney/.test(n)) return name;
+  return /instagram|tiktok|facebook|youtube|shorts|\bweb\b|\big\b/.test(n)?name+' '+radioCap(st):name;
+}
+// Plataformas de una radio con impresiones por unidad (como pautaPlats en Mega):
+// las del Excel o las del catálogo en partes iguales, escaladas a las impresiones de la radio
+function radioEntryPlats(f,re){
+  const st=re.radio||RADIO_DEFAULT;
+  const base=re.plats&&re.plats.length
+    ?re.plats
+    :String(f.plat||'').split('·').map(p=>p.trim()).filter(p=>p&&p!=='—').map(p=>({plat:p,alc:0}));
+  if(!base.length) return [{plat:'Radio '+radioCap(st),alc:+re.imp||0}];
+  return scalePautaPlatsToImp(base.map(p=>({plat:radioPlatName(p.plat,st),alc:+p.alc||0})),+re.imp||0);
+}
+// Alcance por salida = impresiones ÷ frecuencia, por plataforma y repetición (igual que RRSS Mega)
+function radioEntryAlcParts(f,re){
+  const qty=Math.max(1,+re.qty||1);
+  const plats=radioEntryPlats(f,re);
+  const out=[];
+  for(let q=0;q<qty;q++)
+    plats.forEach(p=>{if(p.alc>0) out.push({key:platUniversoKey(p.plat),alc:Math.round(p.alc/RRSS_FREQ)});});
+  return out;
+}
+function radioEntryPlatsLabel(f,re){
+  return radioEntryPlats(f,re).map(p=>p.plat+' '+f0(p.alc)).join(' · ');
 }
 function radioEntryTotals(f,re){
   const qty=+re.qty||1;
   const imp=(+re.imp||0)*qty;
   const bruto=entryMediaBruto(f.tipo,re);
   const {neto,desc}=unitNetoFromTarget(re,bruto);
-  return{bruto,desc,neto,imp,alc:calcAlcNeto(f,imp,qty)};
+  return{bruto,desc,neto,imp,alc:calcAlcSainsburyFromParts(radioEntryAlcParts(f,re))};
 }
 function calcRadioFmtTotals(f,s){
   migrateRadioEntries(s,f);
@@ -2794,12 +2845,7 @@ function calcRadioFmtTotals(f,s){
 }
 function calcRadioFmtAlcPreview(f,s){
   migrateRadioEntries(s,f);
-  const alcs=s.radioEntries.map(re=>radioEntryTotals(f,re).alc);
-  if(!alcs.length) return 0;
-  if(alcs.length===1) return alcs[0];
-  let producto=1;
-  alcs.forEach(a=>{producto*=(1-a/U_SAINSBURY);});
-  return Math.min(Math.round(U_SAINSBURY*(1-producto)),U_SAINSBURY);
+  return calcAlcSainsburyFromParts(s.radioEntries.flatMap(re=>radioEntryAlcParts(f,re)));
 }
 function displayRadioStations(s){
   if(!s||!s.radioEntries||!s.radioEntries.length) return '';
@@ -3179,7 +3225,8 @@ function renderRadioGrid(f,s){
         +'<input type="text" data-m="1" value="'+fmtMiles(+re.imp||0)+'" '+oi+'imp\',parseMiles(this.value))" style="'+inp+'"/></div>'
       +'</div>'
       +'<div class="rad-entry-mini" id="rmini_'+id+'_'+idx+'">'+dtoHtml
-        +' · Alcance: <strong>'+f0(tot.alc)+'</strong> usuarios</div>'
+        +' · Alcance: <strong>'+f0(tot.alc)+'</strong> usuarios'
+        +'<div style="color:var(--tx3);font-size:10.5px;margin-top:2px">Impresiones por plataforma: '+escHtml(radioEntryPlatsLabel(f,re))+'</div></div>'
     +'</div>';
   }).join('');
   return '<div class="rad-entry-wrap" id="rad_entry_wrap_'+id+'">'
@@ -3215,6 +3262,8 @@ function updRadioStation(id,idx,value){
   re.radio=r;
   if(f.precios&&f.precios[r]!=null) re.precio=f.precios[r];
   if(f.imps&&f.imps[r]!=null) re.imp=f.imps[r];
+  // Las plataformas siguen, pero con la nueva radio en el nombre
+  if(re.plats) re.plats=re.plats.map(p=>({plat:p.plat.replace(/\s*\b(carolina|rom[aá]ntica|infinita|disney)\b/ig,'').trim()||p.plat,alc:p.alc}));
   refreshRadioUI(id);
   updRadioFmt(id);
 }
@@ -3248,7 +3297,8 @@ function updRadioEntryField(id,idx,field,value){
     mini.innerHTML=(re.dto>0
       ? '<span>Bruto: <s style="color:var(--tx3)">$'+f0(tot.bruto)+'</s> · Neto: <strong>$'+f0(tot.neto)+'</strong></span>'
       : '<span>Inversión: <strong>$'+f0(tot.neto)+'</strong></span>')
-      +' · Alcance: <strong>'+f0(tot.alc)+'</strong> usuarios';
+      +' · Alcance: <strong>'+f0(tot.alc)+'</strong> usuarios'
+      +'<div style="color:var(--tx3);font-size:10.5px;margin-top:2px">Impresiones por plataforma: '+escHtml(radioEntryPlatsLabel(f,re))+'</div>';
   }
   updRadioFmt(id);
 }
@@ -4273,11 +4323,12 @@ function updInv(id){
 
 // Texto de plataforma con prefijo de la radio elegida (cuando aplica)
 function displayPlat(f, s){
-  if(s&&s.pautaPlats&&s.pautaPlats.length) return pautaPlatsLabel(s.pautaPlats);
   if(f && f.radioType==='radio'){
-    const stations=displayRadioStations(s);
-    return (stations?stations+' · ':'')+(f.plat||'');
+    if(s&&s.radioEntries&&s.radioEntries.length)
+      return pautaPlatsLabel(s.radioEntries.flatMap(re=>radioEntryPlats(f,re)));
+    return f.plat||'';
   }
+  if(s&&s.pautaPlats&&s.pautaPlats.length) return pautaPlatsLabel(s.pautaPlats);
   if(esTipoWeb(f)){
     const selected=displayWebPlats(s);
     return selected||(f.plat||'');
@@ -4343,13 +4394,15 @@ function getRows(){
         const bruto=entryMediaBruto(f.tipo,re);
         const {neto,desc}=unitNetoFromTarget(re,bruto);
         const dto=+re.dto||0;
-        const alc=calcAlcNeto(f,imp,qty);
+        const alc=radioEntryTotals(f,re).alc;
         const cpm=imp>0?(neto/imp)*1000:0;
         out.push({
           f,s:{...s,precio,qty,dto,imp:+re.imp||0,radio:re.radio},
           bruto,desc,neto,imp,alc,cpm,
           radioStation:re.radio,
-          radioIdx:reIdx
+          radioIdx:reIdx,
+          radioEntry:re,
+          pautaPlats:radioEntryPlats(f,re)
         });
       });
       return;
@@ -7155,7 +7208,7 @@ function pautaFmtPlatLabel(f){
 }
 function pautaPlatPartsFromText(s){
   return String(s||'')
-    .split(/\s+\bo\s+|[·•|,;/]+/i)
+    .split(/\s+\bo\s+|[·•|,;/+]+/i)
     .map(x=>String(x||'').trim())
     .filter(Boolean);
 }
@@ -7432,7 +7485,8 @@ function consolidatePautaEntries(entries){
       out.push({...e,plats:e.plats.slice()});
     }
   });
-  out.forEach(e=>{e.totalAlc=e.plats.reduce((a,p)=>a+(+p.alc||0),0);});
+  // Celda combinada ("Instagram+Tiktok"): las plataformas quedan sin impresiones y el total es el de la fila
+  out.forEach(e=>{const sum=e.plats.reduce((a,p)=>a+(+p.alc||0),0); if(sum>0||!(+e.totalAlc>0)) e.totalAlc=sum;});
   return out;
 }
 function parsePautaRows(rawRows){
@@ -7540,9 +7594,20 @@ function parsePautaCSV(text){
 async function parsePautaXLSX(buffer){
   const wb=new ExcelJS.Workbook();
   await wb.xlsx.load(buffer);
-  const ws=wb.getWorksheet('Pauta editorial')||wb.worksheets.find(s=>s.state!=='hidden'&&s.name!=='_catalogo')||wb.worksheets[0];
+  // La pauta llenada puede estar en otra hoja (ej. "Propuesta Radio" junto a la plantilla vacía "Pauta editorial"):
+  // se usa la hoja visible con más formatos; ante empate, "Pauta editorial"
+  const sheets=wb.worksheets.filter(s=>s.state!=='hidden'&&s.name!=='_catalogo');
+  if(!sheets.length&&wb.worksheets[0]) sheets.push(wb.worksheets[0]);
+  sheets.sort((a,b)=>(b.name==='Pauta editorial')-(a.name==='Pauta editorial'));
+  let best=null;
+  sheets.forEach(ws=>{
+    const parsed=parsePautaRows(pautaSheetRows(ws));
+    if(!best||parsed.entries.length>best.entries.length) best=parsed;
+  });
+  return best||parsePautaRows([]);
+}
+function pautaSheetRows(ws){
   const rows=[];
-  if(!ws) return parsePautaRows([]);
   ws.eachRow(row=>{
     const cells=[];
     for(let i=1;i<=16;i++){
@@ -7557,7 +7622,7 @@ async function parsePautaXLSX(buffer){
     }
     if(cells.some(c=>c)) rows.push(cells);
   });
-  return parsePautaRows(rows);
+  return rows;
 }
 function matchScore(a,b){
   const wa=pautaMeaningfulTokens(a);
@@ -7925,7 +7990,7 @@ function pautaResolveMatch(entry){
 }
 function pautaIsConfidentMatch(matchInfo,alternatives){
   if(!matchInfo||matchInfo.tooWeak||matchInfo.ambiguous) return false;
-  if(matchInfo.method==='exact'||matchInfo.method==='id'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro'||matchInfo.method==='name-family'||matchInfo.method==='info-vertical-dual'||matchInfo.method==='dai') return true;
+  if(matchInfo.method==='exact'||matchInfo.method==='id'||matchInfo.method==='alias'||matchInfo.method==='grafica-feed'||matchInfo.method==='nota-web'||matchInfo.method==='capsula-mn'||matchInfo.method==='backstage'||matchInfo.method==='dinamica-rostro'||matchInfo.method==='name-family'||matchInfo.method==='info-vertical-dual'||matchInfo.method==='dai'||matchInfo.method==='radio') return true;
   if(matchInfo.method==='name+plat+alc') return true;
   if(matchInfo.method==='capsulas-plat-name'&&matchInfo.score>=.85) return true;
   if(matchInfo.method==='plat-full'&&matchInfo.score>=.85) return true;
@@ -8066,6 +8131,11 @@ function pautaAliasMatch(n,entry){
     const f=allFmts().find(x=>x.id===id);
     if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
     return{fmt:f,score:1,method:'alias'};
+  }
+  // Radios primero: si no, "carrusel" o "historias" caen en formatos de Mega
+  if(pautaOrigenFamilia(entry)==='radios'){
+    const rad=resolveRadioFmtMatch(entry,n);
+    if(rad) return rad;
   }
   if(PAUTA_ALIASES[n]){
     const hit=resolveAliasId(PAUTA_ALIASES[n]);
@@ -8325,12 +8395,45 @@ function resolveGraficaFeedMatch(entry,n){
   const best=alternatives.find(a=>a.fmt.id===selectedId)||{fmt:f,score:.95,method:'grafica-feed'};
   return{fmt:best.fmt,score:best.score,method:'grafica-feed',breakdown:best.breakdown};
 }
+// RRSS Radios: la pauta de radio usa nombres cortos ("Historias (Radios)", "Posteo/carrusel", "Cápsula vivencial"),
+// así que se parean por palabra clave. Cliente o radio según el nombre o la presencia de marca.
+function pautaRadioFmtIdFromName(entry,n){
+  if(!n) return '';
+  const marca=normPauta(entry&&entry.marca);
+  const prod=/cliente/.test(n)?'cliente'
+    :/producid[oa] por radio/.test(n)?'radio'
+    :/grafica o video de la marca|material de la marca/.test(marca)?'cliente':'radio';
+  if(/simulcat|enlace/.test(n)) return /exterior|externo|terreno/.test(n)?'rad_simulcat_ext':'rad_simulcat_radio';
+  if(/\bnota\b/.test(n)) return 'rad_nota_web_'+prod;
+  if(/capsula|\bpack\b/.test(n)) return /vivencial|exterior|calle/.test(n)?'rad_pack_vivencial':'rad_pack_capsula';
+  if(/historia|stories|story/.test(n)) return 'rad_historia_'+prod;
+  if(/\breel/.test(n)) return 'rad_reel_'+prod;
+  if(/tiktok/.test(n)) return 'rad_tiktok_'+prod;
+  if(/\bpost|carrusel|imagen|feed/.test(n)) return 'rad_post_carrusel';
+  return '';
+}
+function resolveRadioFmtMatch(entry,n){
+  const id=pautaRadioFmtIdFromName(entry,n);
+  const f=id&&allFmts().find(x=>x.id===id);
+  if(!f||!pautaFmtAllowedInCtx(f,entry)) return null;
+  const r=scorePautaEntryVsFormat(entry,f);
+  return{fmt:f,score:Math.max(r.score,.95),method:'radio',breakdown:r.breakdown};
+}
+// La columna formato_id suele quedar desfasada al copiar filas: solo se usa si el nombre del Excel se parece al formato
+function pautaFmtIdTrusted(entry,f){
+  if(!f) return false;
+  const strip=s=>normPauta(s).replace(/\b(radios?|digital|patrocinad[oa]s?)\b/g,' ').replace(/\s+/g,' ').trim();
+  const n=strip(entry&&entry.tipoContenido);
+  if(!n) return true;
+  if([f.name,pautaFmtTemplateName(f)].some(x=>{const fn=strip(x);return fn===n||matchScore(n,fn)>=.3;})) return true;
+  return f.radioType==='radio'&&pautaRadioFmtIdFromName(entry,normPauta(entry.tipoContenido))===f.id;
+}
 function matchFormatoEntry(entry){
   const n=normPauta(entry.tipoContenido);
   const fmtId=(entry.fmtId||'').trim();
   if(fmtId){
     const byId=allFmts().find(x=>x.id===fmtId);
-    if(byId&&pautaFmtImportAllowed(byId,entry)){
+    if(byId&&pautaFmtIdTrusted(entry,byId)&&pautaFmtImportAllowed(byId,entry)){
       return{matchInfo:{fmt:byId,score:1,method:'id'},alternatives:[{fmt:byId,score:1,method:'id'}],needsReview:false};
     }
   }
@@ -8613,7 +8716,8 @@ function pautaInstanceKeyFromEntry(src,entry){
   const name=pautaCellStr(entry.tipoContenido);
   return [
     normPauta(entry.tematica||src.desc||''),
-    canonPautaOrigen(entry.medio)||'',
+    // En radios el ORIGEN es la estación: va como otra radio del mismo formato, no como instancia aparte
+    src.radioType==='radio'?'':(canonPautaOrigen(entry.medio)||''),
     canonPautaEtapa(entry.etapa)||entry.etapa||'',
     isReactFmt(src,{nameOverride:name})?normPauta(name):''
   ].join('\0');
@@ -8621,7 +8725,7 @@ function pautaInstanceKeyFromEntry(src,entry){
 function pautaInstanceKeyFromState(f,s){
   return [
     normPauta(pautaTemaEffective(f,s)),
-    canonPautaOrigen(s&&s.pautaMedio)||'',
+    f.radioType==='radio'?'':(canonPautaOrigen(s&&s.pautaMedio)||''),
     canonPautaEtapa(s&&s.pautaEtapa)||(s&&s.pautaEtapa)||'',
     isReactFmt(f,s)?normPauta(fmtDisplayName(f,s)):''
   ].join('\0');
@@ -8642,6 +8746,7 @@ function stampPautaEntryOnFmt(f,entry){
   if(!f||!f.id) return;
   if(!STATE[f.id]) initFmtState(f);
   const s=STATE[f.id];
+  const wasActive=!!s.active;
   s.active=true;
   if(entry.qty) s.qty=entry.qty;
   else if(!s.qty) s.qty=1;
@@ -8668,8 +8773,34 @@ function stampPautaEntryOnFmt(f,entry){
   const marca=String(entry.marca||'').trim();
   s.marcaCustom=(marca&&normPauta(marca)!==normPauta(f.marca||''))?marca:null;
   applyPautaImpsFromEntry(f,s,entry);
+  if(f.radioType==='radio') applyPautaRadioEntry(f,s,entry,wasActive);
   if(entry.marca&&f.customType&&!f.sourceFmtId) f.marca=entry.marca;
   if(entry.referencia&&f.customType&&!f.sourceFmtId) f.ref=entry.referencia;
+}
+// Estación de la fila: ORIGEN ("Digital Romántica") o, si no viene, las plataformas
+function pautaRadioStationFromEntry(entry){
+  const txt=normPauta([entry&&entry.medio,entry&&entry.plataforma,...((entry&&entry.plats)||[]).map(p=>p.plat)].join(' '));
+  return RADIO_STATIONS.find(st=>new RegExp('\\b'+st.toLowerCase()+'\\b').test(txt))||RADIO_DEFAULT;
+}
+function pautaEntryInvTotal(e){
+  const rows=Object.values(e&&e.invByPlat||{});
+  const b=rows.reduce((a,v)=>a+(+v.b||0),0);
+  return b>0?b:rows.reduce((a,v)=>a+(+v.n||0),0);
+}
+// Cada fila del Excel es una radio del formato, con las impresiones y el valor del Excel (si no, los del tarifario)
+function applyPautaRadioEntry(f,s,entry,wasActive){
+  const st=pautaRadioStationFromEntry(entry);
+  const re=newRadioEntry(f,st);
+  re.qty=Math.max(1,+entry.qty||1);
+  if(entry.totalAlc>0) re.imp=entry.totalAlc;
+  // Plataformas del Excel con sus impresiones/impactos; una celda combinada ("Instagram+Tiktok") reparte el total en partes iguales
+  const plats=(entry.plats||[]).filter(p=>cleanPautaPlatName(p.plat));
+  if(plats.length) re.plats=plats.map(p=>({plat:cleanPautaPlatName(p.plat),alc:+p.alc||0}));
+  const inv=pautaEntryInvTotal(entry);
+  if(inv>0) re.precio=Math.round(inv/re.qty);
+  const prev=wasActive&&s.radioEntries?s.radioEntries.filter(x=>x.radio!==st):[];
+  s.radioEntries=prev.concat(re);
+  s.radio=s.radioEntries[0].radio;
 }
 function applyCatalogPautaPlats(f,s){
   if(!f||!s||!f.pautaPlats||!f.pautaPlats.length) return false;
@@ -8732,6 +8863,8 @@ function pautaWebPlatsFromEntry(f,entry,impTarget){
   });
 }
 function applyPautaImpsFromEntry(f,s,entry){
+  // Radios: plataformas e impresiones van en cada radio (applyPautaRadioEntry)
+  if(f.radioType==='radio'){ s.pautaPlats=null; return; }
   // Web/Display se calcula con s.webPlats (plataforma web + impresiones por línea), no con pautaPlats
   if(esTipoWeb(f)){
     const impTarget=Math.max(0,+(entry.totalAlc||0))||pautaFmtDefaultImp(f);
