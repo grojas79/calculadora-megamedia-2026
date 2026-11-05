@@ -80,6 +80,9 @@ pautaPlats:[
 
 ### RRSS Radios
 
+- Orden de salida (tabla de resultados, Excel y PDF): primero todo Mega (etapas, sin etapa, React), luego una
+  sección propia con los formatos de radio (`isRadioExportRow`, `partitionExportRows().radios`, aunque tengan etapa)
+  y al final Web.
 - El libro puede traer la plantilla vacía ("Pauta editorial") y la pauta llenada en otra hoja ("Propuesta Radio"):
   `parsePautaXLSX` usa la hoja visible con más formatos.
 - Con ORIGEN de radio ("Digital Romántica") los nombres cortos se parean por palabra clave (`pautaRadioFmtIdFromName`):

@@ -2221,18 +2221,23 @@ function reactSectionsByProgram(reactRows){
     kind:'cat'
   }));
 }
-function partitionComercialSections(comercialRows){
+// Orden: React (Mega), luego formatos de radio y al final Web
+function partitionComercialSections(comercialRows,radioRows){
   const reactRows=(comercialRows||[]).filter(isReactRow);
   const webRows=(comercialRows||[]).filter(r=>!reactRows.includes(r)&&esTipoWeb(r.f));
   const other=(comercialRows||[]).filter(r=>!reactRows.includes(r)&&!webRows.includes(r));
   const out=[];
   out.push(...reactSectionsByProgram(reactRows));
+  if(radioRows&&radioRows.length){
+    const cat=CATS.find(c=>c.id==='radios');
+    out.push({label:cat?excelSectionLabel(cat):'RRSS Radios',rows:radioRows,kind:'cat'});
+  }
   if(webRows.length) out.push({label:'Web, Display & Señal en Vivo',rows:webRows,kind:'web'});
   if(other.length) out.push({label:'Formatos comerciales',rows:other,kind:'cat'});
   return out;
 }
-function iterateComercialExportSections(comercial,handlers){
-  partitionComercialSections(comercial).forEach(sec=>{
+function iterateComercialExportSections(comercial,handlers,radios){
+  partitionComercialSections(comercial,radios).forEach(sec=>{
     if(sec.kind==='web'){handlers.onWeb&&handlers.onWeb(sec);return;}
     handlers.onDefault&&handlers.onDefault(sec);
   });
@@ -2265,10 +2270,19 @@ function excelRowKey(r){
     r.infTotalRow?'t':''
   ].join('|');
 }
+function isRadioExportRow(r){
+  return !!(r&&r.f&&!isReactRow(r)&&CATS.some(c=>PAUTA_RADIOS_CAT_IDS.includes(c.id)&&c.fmts.some(x=>x.id===r.f.id)));
+}
 function partitionExportRows(rows){
   const byEtapa=[];
   const used=new Set();
   const etapaOf=r=>canonPautaEtapa(STATE[r.f.id]?.pautaEtapa||r.pautaEtapa||'');
+  // Formatos de radio en su propia sección, después de Mega y antes de Web (ordenados por etapa)
+  const etapaIdx=r=>{const i=ETAPAS_CANONICAS.indexOf(etapaOf(r));return i<0?ETAPAS_CANONICAS.length:i;};
+  const radios=rows.filter(isRadioExportRow).map((r,i)=>({r,i}))
+    .sort((a,b)=>etapaIdx(a.r)-etapaIdx(b.r)||a.i-b.i).map(x=>x.r);
+  radios.forEach(r=>used.add(excelRowKey(r)));
+  rows=rows.filter(r=>!isRadioExportRow(r));
   const present=new Set(rows.filter(r=>isPautaEditorialFmt(r.f)&&etapaOf(r)).map(etapaOf));
   const metaEtapas=(PAUTA_IMPORT_META.etapas||[]).map(canonPautaEtapa).filter(Boolean);
   const etapas=[];
@@ -2286,7 +2300,7 @@ function partitionExportRows(rows){
   const leftover=rows.filter(r=>!used.has(excelRowKey(r)));
   const editorialSinEtapa=leftover.filter(r=>!isReactRow(r)&&isPautaEditorialFmt(r.f));
   const comercial=leftover.filter(r=>isReactRow(r)||!isPautaEditorialFmt(r.f));
-  return{byEtapa,leftover,editorialSinEtapa,comercial,lsPack};
+  return{byEtapa,leftover,editorialSinEtapa,comercial,lsPack,radios};
 }
 function appendExportByCategory(catRowsSource,appendWeb,appendCat){
   catsInExportOrder().forEach(cat=>{
@@ -4654,7 +4668,7 @@ function render(){
       </tr>`;
     });
   }
-  const {byEtapa,editorialSinEtapa,comercial,lsPack}=partitionExportRows(rows);
+  const {byEtapa,editorialSinEtapa,comercial,lsPack,radios}=partitionExportRows(rows);
   byEtapa.forEach(({etapa,rows:etapaRows})=>appendResultRows(etapa,etapaRows));
   if(byEtapa.length&&editorialSinEtapa.length){
     appendResultRows('Contenido (sin etapa)',editorialSinEtapa);
@@ -4674,7 +4688,7 @@ function render(){
       if(radio.length) appendResultRows('Web — Plataformas de Radio (formatos web)',radio);
     },
     onDefault(sec){ appendResultRows(sec.label,sec.rows); }
-  });
+  },radios);
   iterateLsPackExportSections(lsPack,{
     onMainHeader(sec){ appendResultRows(sec.label,[],{headerOnly:true}); },
     onLsSub(sec){ appendResultRows(sec.label,sec.rows,{subHeader:true}); }
@@ -6047,7 +6061,7 @@ async function exportarExcel(){
         dataRowN++; idx++;
       });
     }
-    function excelComercialAndLsPack(comercialRows,lsPackRows){
+    function excelComercialAndLsPack(comercialRows,lsPackRows,radioRows){
       iterateComercialExportSections(comercialRows,{
         onWeb(sec){
           {const r=ws.addRow([]); r.height=22;
@@ -6066,7 +6080,7 @@ async function exportarExcel(){
             dataRowN++;}
           excelAppendRows(sec.label,sec.rows,{skipSectionHeader:true});
         }
-      });
+      },radioRows);
       iterateLsPackExportSections(lsPackRows,{
         onMainHeader(sec){
           {const r=ws.addRow([]); r.height=22;
@@ -6086,7 +6100,7 @@ async function exportarExcel(){
       });
     }
     {
-      const{byEtapa,editorialSinEtapa,comercial,lsPack}=partitionExportRows(rows);
+      const{byEtapa,editorialSinEtapa,comercial,lsPack,radios}=partitionExportRows(rows);
       byEtapa.forEach(({etapa,rows:etapaRows})=>{
         {const r=ws.addRow([]); r.height=22;
           merge(ws,dataRowN,1,dataRowN,NCOLS);
@@ -6111,7 +6125,7 @@ async function exportarExcel(){
             (label,catRows)=>excelAppendRows(label,catRows)
           );
         }
-        excelComercialAndLsPack(comercial,lsPack);
+        excelComercialAndLsPack(comercial,lsPack,radios);
       } else {
         const editorialOnly=editorialSinEtapa;
         if(editorialOnly.length){
@@ -6124,7 +6138,7 @@ async function exportarExcel(){
             (label,catRows)=>excelAppendRows(label,catRows)
           );
         }
-        excelComercialAndLsPack(comercial,lsPack);
+        excelComercialAndLsPack(comercial,lsPack,radios);
       }
     }
 
@@ -6450,7 +6464,7 @@ async function exportarPDF(){
       if(!opts.skipHeader) sectionHeader(label,opts.headerStyle);
       catRows.forEach(r=>dataRow(r,label));
     }
-    function pdfComercialAndLsPack(comercialRows,lsPackRows){
+    function pdfComercialAndLsPack(comercialRows,lsPackRows,radioRows){
       iterateComercialExportSections(comercialRows,{
         onWeb(sec){
           sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
@@ -6461,7 +6475,7 @@ async function exportarPDF(){
           sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});
           appendSection(sec.label,sec.rows,{skipHeader:true});
         }
-      });
+      },radioRows);
       iterateLsPackExportSections(lsPackRows,{
         onMainHeader(sec){sectionHeader(sec.label,{bg:'#1A3A6B',fg:C.white,align:'center',bold:true,size:9});},
         onLsSub(sec){
@@ -6481,7 +6495,7 @@ async function exportarPDF(){
 
     // Filas de datos por secciones (misma lógica que Excel)
     {
-      const{byEtapa,editorialSinEtapa,comercial,lsPack}=partitionExportRows(rows);
+      const{byEtapa,editorialSinEtapa,comercial,lsPack,radios}=partitionExportRows(rows);
       byEtapa.forEach(({etapa,rows:etapaRows})=>{
         sectionHeader(etapa,{bg:'#000000',fg:C.white,align:'center',bold:true,size:9});
         appendSection(etapa,etapaRows,{skipHeader:true});
@@ -6498,7 +6512,7 @@ async function exportarPDF(){
             (label,catRows)=>appendSection(label,catRows)
           );
         }
-        pdfComercialAndLsPack(comercial,lsPack);
+        pdfComercialAndLsPack(comercial,lsPack,radios);
       } else {
         const editorialOnly=editorialSinEtapa;
         if(editorialOnly.length){
@@ -6511,7 +6525,7 @@ async function exportarPDF(){
             (label,catRows)=>appendSection(label,catRows)
           );
         }
-        pdfComercialAndLsPack(comercial,lsPack);
+        pdfComercialAndLsPack(comercial,lsPack,radios);
       }
     }
 
