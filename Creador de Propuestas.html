@@ -2152,6 +2152,23 @@ function reactProgFromName(name){
 function fmtMarca(f,s){
   return (s&&s.marcaCustom)||(f&&f.marca)||'';
 }
+// Referencias / ejemplos: las del Excel importado (s.refCustom, una por línea) o la del catálogo
+function splitRefs(raw){
+  const out=[];
+  String(raw||'').split(/\r?\n/).forEach(line=>{
+    line.split(/\s+(?=(?:https?:\/\/|www\.))/i).forEach(p=>{
+      const r=p.trim();
+      if(r&&!out.includes(r)) out.push(r);
+    });
+  });
+  return out;
+}
+function fmtRefs(f,s){
+  const custom=splitRefs(s&&s.refCustom);
+  return custom.length?custom:splitRefs(f&&f.ref);
+}
+function refIsUrl(r){ return /^(https?:\/\/|www\.)/i.test(String(r||'').trim()); }
+function refHref(r){ r=String(r||'').trim(); return /^www\./i.test(r)?'https://'+r:r; }
 function isReactFmt(f,s){
   return !!f&&/react/i.test(fmtDisplayName(f,s)+' '+f.name+' '+f.id);
 }
@@ -4185,7 +4202,7 @@ function renderFmtItem(f){
         <div class="fmt-plat" id="plat_${f.id}">${displayPlat(f,s)}</div>
         ${fmtMarca(f,s)?`<div style="font-size:10px;color:var(--tx2);margin-bottom:3px;font-style:italic">${escHtml(fmtMarca(f,s))}</div>`:''}
         <div class="fmt-desc">${getDesc(f)}</div>
-        ${f.ref?`<div style="margin-top:3px"><a href="${f.ref}" target="_blank" style="font-size:10px;color:var(--cy);text-decoration:none">Ver ejemplo →</a></div>`:''}
+        ${fmtRefs(f,s).length?`<div style="margin-top:3px">${fmtRefs(f,s).map((r,i,a)=>refIsUrl(r)?`<a href="${escHtml(refHref(r))}" target="_blank" onclick="event.stopPropagation()" style="font-size:10px;color:var(--cy);text-decoration:none;margin-right:8px">Ver ejemplo${a.length>1?' '+(i+1):''} →</a>`:`<span style="font-size:10px;color:var(--tx2);font-style:italic;margin-right:8px">${escHtml(r)}</span>`).join('')}</div>`:''}
       </div>
     </div>
     <div class="fmt-body">
@@ -5961,6 +5978,7 @@ async function exportarExcel(){
             {text:fmtDisplayName(row.f,row.s),col:2,minH:15},
             {text:fmtMarca(row.f,row.s)||'',col:3,minH:14},
             {text:descFull,col:4,minH:15},
+            {text:(()=>{const rf=fmtRefs(row.f,row.s);return rf.length>1||(rf.length&&!refIsUrl(rf[0]))?rf.join('\n'):'';})(),col:5,minH:14},
             {text:platVal,col:7,minH:14}
           ],COL_W);
         }
@@ -6015,10 +6033,16 @@ async function exportarExcel(){
         sc(r,4,descFull,{bg,fg:C.black,sz:9,ha:'left',italic:true,wrap:true});
         // Referencia con hyperlink
         {const refCell=ws.getRow(dataRowN).getCell(5);
-         if(row.f.ref){
-           refCell.value={text:'Ver ejemplo →',hyperlink:row.f.ref};
-           refCell.font={name:'Arial',color:{argb:C.lightBlue},size:9,underline:true,italic:true};
-           refCell.alignment={horizontal:'center',vertical:'middle'};
+         const refs=fmtRefs(row.f,row.s);
+         const urls=refs.filter(refIsUrl);
+         if(refs.length){
+           // Excel admite un solo link por celda: el primero queda como hipervínculo y, si hay varias, todas van en el texto
+           const label=refs.length===1&&urls.length===1?'Ver ejemplo →':refs.join('\n');
+           refCell.value=urls.length?{text:label,hyperlink:refHref(urls[0])}:label;
+           refCell.font=urls.length
+             ?{name:'Arial',color:{argb:C.lightBlue},size:9,underline:true,italic:true}
+             :{name:'Arial',color:{argb:C.black},size:9,italic:true};
+           refCell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
            if(bg) refCell.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};
          } else {
            sc(ws.getRow(dataRowN),5,'',{bg,fg:C.black,sz:9,ha:'center',italic:true});
@@ -6433,9 +6457,10 @@ async function exportarPDF(){
           if(_id==='skin_video_cpm')return'50%';
           return'—';
         })();
-        const refCell=row.f.ref
-          ? `<a href="${esc(row.f.ref)}" style="color:${C.lightBlue};text-decoration:underline;font-style:italic">Ver ejemplo →</a>`
-          : '';
+        const _refs=fmtRefs(row.f,row.s);
+        const refCell=_refs.map((r,i)=>refIsUrl(r)
+          ? `<a href="${esc(refHref(r))}" style="color:${C.lightBlue};text-decoration:underline;font-style:italic">Ver ejemplo${_refs.length>1?' '+(i+1):''} →</a>`
+          : `<span style="font-style:italic">${esc(r)}</span>`).join('<br>');
         const platFg=(row.webPlatRadio||row.radioStation)?C.dto:C.black;
         cells=[
           td(esc(medioPre),{bg,bold:true,align:'center',va:'top'}),
@@ -8790,6 +8815,12 @@ function stampPautaEntryOnFmt(f,entry){
   if(f.radioType==='radio') applyPautaRadioEntry(f,s,entry,wasActive);
   if(entry.marca&&f.customType&&!f.sourceFmtId) f.marca=entry.marca;
   if(entry.referencia&&f.customType&&!f.sourceFmtId) f.ref=entry.referencia;
+  // Referencia / ejemplo del Excel, solo en esta propuesta. Radios: cada fila (otra radio) suma su ejemplo
+  const refs=splitRefs(entry.referencia);
+  if(refs.length){
+    const prev=(wasActive&&f.radioType==='radio')?splitRefs(s.refCustom):[];
+    s.refCustom=splitRefs(prev.concat(refs).join('\n')).join('\n');
+  } else if(!wasActive||f.radioType!=='radio') s.refCustom=null;
 }
 // Estación de la fila: ORIGEN ("Digital Romántica") o, si no viene, las plataformas
 function pautaRadioStationFromEntry(entry){

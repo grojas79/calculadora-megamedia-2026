@@ -41,6 +41,9 @@ las **plataformas**, **alcances** e **impresiones** que vienen del Excel, no los
   `TEMÁTICA` o `DESCRIPCIÓN`); `detectPautaHeaderMap` la reconoce por contener "temática" o "descripción".
   Al importar, esa temática reemplaza la descripción del formato elegido solo en esa propuesta
   (`s.descCustom` en `stampPautaEntryOnFmt`), sin tocar el catálogo.
+- Referencia / ejemplo (`REFERENCIA`, `EJEMPLO/REFERENCIA`): se guarda por propuesta en `s.refCustom` (una por línea)
+  aunque el formato sea del catálogo, y sale siempre en la tarjeta, el Excel (columna REFERENCIA, hipervínculo) y el PDF
+  (`fmtRefs`). En radios, las filas de cada radio suman su ejemplo. Sin referencia en el Excel se usa `f.ref` del catálogo.
 - El catálogo solo rellena lo que el Excel no trae (por ejemplo, repartir un total mergeado entre plataformas).
 
 Ejemplo (fila "Corte react digital", cantidad 4, total 208.000):
