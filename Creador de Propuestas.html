@@ -2158,6 +2158,8 @@ function splitRefs(raw){
   String(raw||'').split(/\r?\n/).forEach(line=>{
     line.split(/\s+(?=(?:https?:\/\/|www\.))/i).forEach(p=>{
       const r=p.trim();
+      // "NA", "N/A", "-", "No aplica": sin referencia
+      if(/^(n\/?a|-+|no aplica|sin referencia)$/i.test(r)) return;
       if(r&&!out.includes(r)) out.push(r);
     });
   });
@@ -7355,13 +7357,17 @@ function exportMedioForRow(row,sectionLabel){
 function detectPautaHeaderMap(cells){
   const map={};
   let tipoGeneric=null;
+  let formatoCol=null;
   let alcTotal=null;
   let hits=0;
   cells.forEach((c,i)=>{
     const n=normPauta(c);
     if(!n||n.length>40) return;
     if(n==='origen'||n==='medio') map.origen=i;
+    // Plan de medios de Radios: RADIO = origen (celda combinada para todas las filas) y FORMATO = tipo de contenido
+    else if(n==='radio'||n==='radios'||n==='emisora'){ map.origen=i; map.origenCarry=true; }
     else if(/formato[\s_]*id|^id formato/.test(n)) map.fmtId=i;
+    else if(n==='formato'||n==='formatos'){ if(formatoCol==null) formatoCol=i; }
     else if(/\bcpm\b/.test(n)&&!n.includes('tipo')) map.cpm=i;
     else if(/inversion|^inv\b|bruto|^valor|^monto/.test(n)&&!/tipo|dto|descuento|%/.test(n)){
       if(/neta|neto|final/.test(n)){ if(map.invNeta==null) map.invNeta=i; }
@@ -7374,9 +7380,9 @@ function detectPautaHeaderMap(cells){
       else if(tipoGeneric==null) tipoGeneric=i;
     }
     else if(n.includes('presencia')||(n.includes('marca')&&!n.includes('tematica'))) map.marca=i;
-    else if(n.includes('tematica')||n.includes('descripcion')) map.tematica=i;
+    else if(n.includes('tematica')||n.includes('descripcion')||/^tema\b/.test(n)) map.tematica=i;
     else if(n.includes('referencia')) map.ref=i;
-    else if(n.startsWith('cant')) map.cant=i;
+    else if(n.startsWith('cant')||/^total derechos?$/.test(n)) map.cant=i;
     else if(n.includes('plataforma')){
       if(map.plat==null) map.plat=i;
       else map.platDetail=i;
@@ -7388,10 +7394,10 @@ function detectPautaHeaderMap(cells){
     else return;
     hits++;
   });
-  if(map.tipo==null) map.tipo=tipoGeneric;
+  if(map.tipo==null) map.tipo=formatoCol!=null?formatoCol:tipoGeneric;
   if(map.tipo==null||hits<3) return null;
   if(map.alc==null&&alcTotal!=null) map.alc=alcTotal;
-  const used=new Set(Object.values(map).filter(v=>v!=null));
+  const used=new Set(Object.values(map).filter(v=>typeof v==='number'));
   const def=(key,idx)=>{ if(map[key]==null&&!used.has(idx)){ map[key]=idx; used.add(idx); } };
   def('origen',0);
   def('marca',2);
@@ -7534,15 +7540,19 @@ function parsePautaRows(rawRows){
   let pending=null;
   let headerFound=false;
   let colMap=null;
+  let lastOrigen='';
   rawRows.forEach((row,idx)=>{
     const cells=row.map(c=>pautaCellStr(c));
     while(cells.length<12) cells.push('');
     const c0=cells[0],c1=cells[1];
-    if(normPauta(c0)==='cliente'){
+    // "CLIENTE" o "MARCA | CAMPAÑA" (plan de medios de Radios, desde la columna B) con los valores en la fila siguiente
+    const ci=cells.findIndex(c=>c);
+    const nCi=ci>=0?normPauta(cells[ci]):'';
+    if(!headerFound&&(nCi==='cliente'||(nCi==='marca'&&normPauta(cells[ci+1])==='campana'))){
       const next=rawRows[idx+1];
       if(next){
-        result.cliente=String(next[0]||'').trim();
-        result.campania=String(next[1]||'').trim();
+        result.cliente=String(next[ci]||'').trim();
+        result.campania=String(next[ci+1]||'').trim();
       }
       return;
     }
@@ -7551,6 +7561,7 @@ function parsePautaRows(rawRows){
       headerFound=true;
       colMap=maybeMap;
       pending=null;
+      lastOrigen='';
       return;
     }
     if(!headerFound) return;
@@ -7574,7 +7585,11 @@ function parsePautaRows(rawRows){
       const a0=parsePautaNum(pautaCellAt(cells,colMap.alc));
       if(p0) plats.push({plat:p0,alc:a0});
       else if(a0>0) plats.push({plat:'',alc:a0});
-      const origenRaw=pautaCellAt(cells,colMap.origen);
+      let origenRaw=pautaCellAt(cells,colMap.origen);
+      if(colMap.origenCarry){
+        if(origenRaw) lastOrigen=origenRaw;
+        else origenRaw=lastOrigen;
+      }
       const origen=canonPautaOrigen(origenRaw);
       const etapaCol=colMap.etapa!=null?canonPautaEtapa(pautaCellAt(cells,colMap.etapa)):'';
       const etapa=etapaCol||canonPautaEtapa(currentEtapa)||currentEtapa||'';
@@ -8491,8 +8506,9 @@ function matchFormatoEntry(entry){
       :alias.method==='nota-web'
       ?notaWebAlternatives(entry,alias.fmt.id)
       :[alias];
-    const conflict=pautaPlatConflicts(entry,alias.fmt);
-    const hardAlias=alias.method==='alias'||alias.method==='dai'||alias.method==='backstage'||alias.method==='dinamica-rostro';
+    // En radios el nombre por palabra clave manda y las plataformas se toman igual del Excel
+    const conflict=alias.method!=='radio'&&pautaPlatConflicts(entry,alias.fmt);
+    const hardAlias=alias.method==='alias'||alias.method==='dai'||alias.method==='backstage'||alias.method==='dinamica-rostro'||alias.method==='radio';
     const needsReview=conflict||(!hardAlias&&pautaEntryPlatLines(entry).length>0&&pautaPlatMatchAnalysis(entry,alias.fmt).score===0);
     let alternatives=alts;
     if(needsReview){

@@ -86,6 +86,11 @@ pautaPlats:[
 - Orden de salida (tabla de resultados, Excel y PDF): primero todo Mega (etapas, sin etapa, React), luego una
   sección propia con los formatos de radio (`isRadioExportRow`, `partitionExportRows().radios`, aunque tengan etapa)
   y al final Web.
+- Plan de medios del área editorial de Radios (hoja "PLAN DE MEDIOS", encabezado desde la columna B):
+  `MARCA | CAMPAÑA` arriba dan cliente y campaña; columnas `RADIO` (= ORIGEN, celda combinada que se arrastra a las
+  filas siguientes, `origenCarry`), `FORMATO` (= tipo de contenido, si no hay `TIPO DE CONTENIDO`), `TEMA A TRATAR`
+  (= temática), `TOTAL DERECHOS` (= cantidad), `IMPRESIONES/ IMPACTOS` y `VALOR NETO`. Referencia "NA" se ignora.
+  El pareo por palabra clave de radio no pide confirmación aunque la plataforma no calce con el catálogo.
 - El libro puede traer la plantilla vacía ("Pauta editorial") y la pauta llenada en otra hoja ("Propuesta Radio"):
   `parsePautaXLSX` usa la hoja visible con más formatos.
 - Con ORIGEN de radio ("Digital Romántica") los nombres cortos se parean por palabra clave (`pautaRadioFmtIdFromName`):
